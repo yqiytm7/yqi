@@ -576,12 +576,13 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  try{ performance.mark("yq-openws"); }catch(e){}
   WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
   showGate('<h1>Opening ' + esc(WSNAME) + '…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
   Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
     var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
-  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); else goDirect(); }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); else goDirect(); }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
@@ -605,11 +606,13 @@ function boot(){
     showGate('<h1>Setup needed</h1><div class="sub">This file does not have the Firebase settings yet. Open the file in a text editor, find <b>FIREBASE_CONFIG</b> near the top, and paste the values from Firebase console → Project settings → Your apps.</div>'); return;
   }
   showGate('<h1>YQI</h1><div class="sub">Starting…</div>');
+  try{ if(!lsGet("yqi_cc2") && window.indexedDB){ indexedDB.deleteDatabase("firestore/[DEFAULT]/" + FIREBASE_CONFIG.projectId + "/main"); lsSet("yqi_cc2", "1"); } }catch(e){}
   Promise.all(SDK.slice(0, 1).map(loadJs)).then(function(){ return Promise.all(SDK.slice(1).map(loadJs)); }).then(function(){
     firebase.initializeApp(FIREBASE_CONFIG);
     AUTH = firebase.auth(); FS = firebase.firestore();
     try{ FS.settings({ignoreUndefinedProperties: true, merge: true}); }catch(e){}
-    try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){}
+    // no offline copy of the database: it grew big with photos and made every start slow. Photos are cached separately.
+    if(/[?&]offline=1/.test(location.search)){ try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
     AUTH.onAuthStateChanged(function(u){
       if(started){ if(!u) location.reload(); return; }
       if(!u) return loginScreen();
