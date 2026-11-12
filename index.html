@@ -95,7 +95,10 @@ function listMyWs(){
 function afterLogin(u){
   EMAIL = String(u.email || "").toLowerCase();
   showGate('<h1>Loading…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
-  listMyWs().then(function(r){
+  var lc = null; try{ lc = JSON.parse(ssGet("yqi_lc") || "null"); }catch(e){}
+  var fresh = listMyWs().then(function(r){ if(!r.first) ssSet("yqi_lc", JSON.stringify({email: EMAIL, owner: OWNER, list: r.list, at: Date.now()})); return r; });
+  var lp = (lc && lc.email === EMAIL && lc.list && lc.list.length && Date.now() - lc.at < 6 * 3600e3) ? Promise.resolve({list: lc.list, cached: 1}).then(function(r){ OWNER = !!lc.owner; return r; }) : fresh;
+  lp.then(function(r){
     if(r.first) return firstSetup();
     var list = r.list, want = lsGet(LSK), pick = list.filter(function(w){ return w.id === want; })[0];
     if(!list.length){
@@ -383,7 +386,7 @@ function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssS
 function openCustName(n){
   var w = CLIST.filter(function(x){ return x.name === n; })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
-  var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
+  var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ ssSet("yqi_lc", ""); openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
 }
 function setHC(c){ HCUST = c || ""; HPLAN = ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
 function bindHome(){
@@ -458,7 +461,7 @@ function uploadInsp(f){
         var plansN = {}; out.forEach(function(r){ plansN[r.cust + "|" + r.row.p] = 1; });
         HMSG = '<span class="hok">Saved ' + Object.keys(cnt).reduce(function(a, k){ return a + cnt[k]; }, 0) + ' articles in ' + Object.keys(plansN).length + ' shipping plans from ' + esc(f.name) + '</span>: ' + Object.keys(cnt).map(function(n){ return esc(n) + ' ' + cnt[n] + (byName[n.toLowerCase()] && byName[n.toLowerCase()].isNew ? ' (new customer added)' : ''); }).join(", ") +
           (err ? ' · <span class="hbad">' + err + ' could not be saved (no edit access)</span>' : '') + (Object.keys(skip).length ? ' · <span class="hbad">skipped, customer not shared with you: ' + Object.keys(skip).map(esc).join(", ") + '</span>' : '') + (bad ? ' · ' + bad + ' rows without a shipping plan skipped' : '') + (noCust ? ' · ' + noCust + ' rows without a customer skipped' : '') + '. The same article uploaded again replaces the old result.';
-        HDATA = null; renderHome(); loadHomeTry(0);
+        ssSet("yqi_lc", ""); HDATA = null; renderHome(); loadHomeTry(0);
       });
     });
   }).catch(function(e){ HMSG = '<span class="hbad">' + esc(e.message || e) + '</span>'; renderHome(); });
@@ -589,8 +592,8 @@ function pill(){
   p.innerHTML = '<b>' + esc(WSNAME) + '</b><span>' + (ROLE === "viewer" ? "view only" : ROLE) + '</span><a id="yqSw">' + (HASALL ? (WS === "_all" ? "customers" : "home") : "switch") + '</a>' + (OWNER ? '<a id="yqAm">admin</a>' : '') + '<a id="yqSo">sign out</a>';
   document.body.appendChild(p);
   $("yqSw").onclick = function(){ if(WS === "_all"){ showHome(true); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
-  if($("yqAm")) $("yqAm").onclick = function(){ lsSet(LSK, ""); lsSet("yqi_admin", "1"); location.reload(); };
-  $("yqSo").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); AUTH.signOut().then(function(){ location.reload(); }); };
+  if($("yqAm")) $("yqAm").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_lc", ""); lsSet("yqi_admin", "1"); location.reload(); };
+  $("yqSo").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); ssSet("yqi_lc", ""); AUTH.signOut().then(function(){ location.reload(); }); };
 }
 var started = false;
 function runApp(){
