@@ -261,18 +261,19 @@ function pickIsRoot(){
 var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper") || "30";
 function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
 function ymd(d){ return d.toISOString().slice(0, 10); }
+function snap1(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(q){ if(ok) return; ok = true; res(q); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res({docs: []}); } }); }catch(e){ res({docs: []}); } }); }
 function loadHome(){
   var custs = CLIST.slice(), rows = [];
-  var ps = custs.map(function(w){ return FS.collection("ws").doc(w.id).collection("ext").get().then(function(q){ q.docs.forEach(function(d){ var x = dec(d.data()) || {}; if(!x.date) return; rows.push({cust: w.name, ws: w.id, date: String(x.date).slice(0, 10), k: rkind(x.result), first: /1st/i.test(x.result || ""), res: x.result || "", po: x.po || "", lot: x.lot || "", art: x.art || x.prog || "", qty: +x.qty || 0}); }); }).catch(function(){}); });
-  ps.push((ISROOT ? ISROOT.collection("is_ext").get() : Promise.resolve({docs: []})).then(function(q){ var have = {}; custs.forEach(function(w){ have[String(w.name).toLowerCase()] = 1; });
+  var ps = custs.map(function(w){ return snap1(FS.collection("ws").doc(w.id).collection("ext")).then(function(q){ q.docs.forEach(function(d){ var x = dec(d.data()) || {}; if(!x.date) return; rows.push({cust: w.name, ws: w.id, date: String(x.date).slice(0, 10), k: rkind(x.result), first: /1st/i.test(x.result || ""), res: x.result || "", po: x.po || "", lot: x.lot || "", art: x.art || x.prog || "", qty: +x.qty || 0}); }); }).catch(function(){}); });
+  ps.push((ISROOT ? snap1(ISROOT.collection("is_ext")) : Promise.resolve({docs: []})).then(function(q){ var have = {}; custs.forEach(function(w){ have[String(w.name).toLowerCase()] = 1; });
     q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: rkind(x.result), first: rkind(x.result) === "pass", res: x.result || "", po: x.ytm || "", lot: "", art: x.unit || "", qty: +x.sample || 0}); }); }).catch(function(){}));
-  return Promise.all(ps).then(function(){ HDATA = rows; });
+  return Promise.all(ps).then(function(){ if(!HDATA || rows.length >= HDATA.length) HDATA = rows; });
 }
 var HLOAD = 0;
 function loadHomeTry(n){
   var my = ++HLOAD, done = false;
-  loadHome().then(function(){ if(my !== HLOAD) return; done = true; renderHome(); });
-  setTimeout(function(){ if(!done && my === HLOAD && n < 5) loadHomeTry(n + 1); }, 6000 + n * 3000);
+  loadHome().then(function(){ done = true; if(HOMEON) renderHome(); });
+  setTimeout(function(){ if(!done && !HDATA && my === HLOAD && n < 4) loadHomeTry(n + 1); }, 8000 + n * 4000);
 }
 function homeCss(){
   if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
