@@ -268,6 +268,12 @@ function loadHome(){
     q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: rkind(x.result), first: rkind(x.result) === "pass", res: x.result || "", po: x.ytm || "", lot: "", art: x.unit || "", qty: +x.sample || 0}); }); }).catch(function(){}));
   return Promise.all(ps).then(function(){ HDATA = rows; });
 }
+var HLOAD = 0;
+function loadHomeTry(n){
+  var my = ++HLOAD, done = false;
+  loadHome().then(function(){ if(my !== HLOAD) return; done = true; renderHome(); });
+  setTimeout(function(){ if(!done && my === HLOAD && n < 5) loadHomeTry(n + 1); }, 6000 + n * 3000);
+}
 function homeCss(){
   if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
   st.textContent = "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:radial-gradient(1200px 500px at 85% -10%,#e3f0cf,transparent),#f3f6ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17}" +
@@ -337,7 +343,7 @@ function showHome(on){
   if(!h){ h = document.createElement("div"); h.id = "yqHome"; document.body.appendChild(h); }
   HOMEON = !!on; h.style.display = on ? "block" : "none";
   var c = $("yqCust"); if(c && on) c.style.display = "none";
-  if(on){ renderHome(); if(!HDATA) loadHome().then(renderHome); }
+  if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
 }
 function startHome(){
   showHome(true);
