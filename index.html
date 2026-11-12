@@ -49,10 +49,14 @@ css.textContent = "#yqiGate{position:fixed;inset:0;z-index:2147483000;background
   "#yqiGate table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}#yqiGate td{border-bottom:1px solid #edf1e7;padding:6px 4px;vertical-align:middle}#yqiGate td select{padding:5px}#yqiGate .x{background:#fbe9e7;color:#b3261e;padding:5px 9px;margin:0;font-size:12px}" +
   "#yqiPill{position:fixed;right:8px;top:3px;padding:3px 10px!important;font-size:11px!important;z-index:2147482000;background:rgba(12,26,20,.92);color:#fff;border-radius:999px;padding:6px 10px;font:700 12px Manrope,system-ui,sans-serif;display:flex;gap:8px;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}" +
   "#yqiPill a{color:#CBEA7A;cursor:pointer;text-decoration:none}#yqiPill span{opacity:.85;font-weight:600}" +
+  "#yqiGate.ld{background:#f3f6ee;flex-direction:column;gap:14px}#yqiGate .sp{width:34px;height:34px;border-radius:50%;border:3px solid #d6e6c3;border-top-color:#3D6B22;animation:yqsp .8s linear infinite}#yqiGate .lt{font:700 14px Manrope,system-ui,sans-serif;color:#3D6B22}@keyframes yqsp{to{transform:rotate(360deg)}}" +
   ".stu-card.up{display:none!important}";
 document.head.appendChild(css);
 var gate = document.createElement("div"); gate.id = "yqiGate";
-function showGate(html){ if(!gate.parentNode) (document.body || document.documentElement).appendChild(gate); gate.style.display = "flex"; gate.innerHTML = '<div class="bx">' + html + '<div class="foot">YQI · Yunus Quality Intelligence · Developed by Hamza Khan</div></div>'; }
+function showGate(html){ if(!gate.parentNode) (document.body || document.documentElement).appendChild(gate); gate.style.display = "flex";
+  var lm = /^<h1>(YQI<\/h1>|Loading…<\/h1>|Opening[^<]*<\/h1>)/.exec(html);
+  if(lm){ gate.className = "ld"; gate.innerHTML = '<div class="sp"></div><div class="lt">' + (/^Opening/.test(lm[1]) ? esc(lm[1].replace(/<\/h1>$/, "")) : "Loading…") + '</div><div id="yqMsg" class="msg" style="max-width:420px;text-align:center"></div>'; return; }
+  gate.className = ""; gate.innerHTML = '<div class="bx">' + html + '<div class="foot">YQI · Yunus Quality Intelligence · Developed by Hamza Khan</div></div>'; }
 function hideGate(){ gate.style.display = "none"; }
 function msg(t, bad){ var m = $("yqMsg"); if(m){ m.textContent = t || ""; m.className = "msg " + (bad ? "bad" : "ok"); } }
 function errTxt(e){ var c = e && e.code || "", M = {"auth/invalid-credential": "Wrong email or password.", "auth/wrong-password": "Wrong email or password.", "auth/user-not-found": "No account with this email. Create one first.", "auth/email-already-in-use": "This email already has an account. Sign in instead.", "auth/weak-password": "Password must be at least 6 characters.", "auth/invalid-email": "This email address is not valid.", "auth/too-many-requests": "Too many tries. Wait a few minutes and try again.", "permission-denied": "You do not have access to this. Ask the YQI owner."}; return M[c] || (e && e.message) || String(e); }
@@ -258,15 +262,29 @@ function pickIsRoot(){
 }
 
 // ---------- Home: all customers overview (opens from the "All customers" workspace) ----------
-var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper") || "30";
+var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper2") || "all";
 function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
 function ymd(d){ return d.toISOString().slice(0, 10); }
 function snap1(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(q){ if(ok) return; ok = true; res(q); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res({docs: []}); } }); }catch(e){ res({docs: []}); } }); }
+// ----- data: every customer's articles (built-in list + uploads) grouped into shipping plans -----
+var KIND = function(s){ s = String(s || ""); return /fail|await/i.test(s) ? "fl" : /1st/i.test(s) ? "p1" : /re-?insp/i.test(s) ? "re" : /reject/i.test(s) ? "rej" : /not insp|not offer/i.test(s) ? "ni" : /pass|ok|accept/i.test(s) ? "p1" : "ni"; };
+function snapDoc(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(d){ if(ok) return; ok = true; res(d); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res(null); } }); }catch(e){ res(null); } }); }
 function loadHome(){
   var custs = CLIST.slice(), rows = [];
-  var ps = custs.map(function(w){ return snap1(FS.collection("ws").doc(w.id).collection("ext")).then(function(q){ q.docs.forEach(function(d){ var x = dec(d.data()) || {}; if(!x.date) return; rows.push({cust: w.name, ws: w.id, date: String(x.date).slice(0, 10), k: rkind(x.result), first: /1st/i.test(x.result || ""), res: x.result || "", po: x.po || "", lot: x.lot || "", art: x.art || "", prog: x.prog || "General", qty: +x.qty || 0}); }); }).catch(function(){}); });
+  var ps = custs.map(function(w){
+    var r = FS.collection("ws").doc(w.id);
+    return Promise.all([snapDoc(r.collection("seed").doc("ROWS")), snap1(r.collection("insp")), snap1(r.collection("shadeov"))]).then(function(a){
+      var m = {}, base = a[0] && a[0].exists ? (dec(a[0].data().v) || []) : [];
+      base.forEach(function(x){ if(x && x.k) m[x.k] = x; });
+      (a[1].docs || []).map(function(d){ return dec(d.data()) || {}; }).sort(function(x, y){ return (x.ts || 0) - (y.ts || 0); }).forEach(function(d){ (d.rows || []).forEach(function(x){ if(x && x.k) m[x.k] = x; }); });
+      var ov = {}; (a[2].docs || []).map(function(d){ return d.data() || {}; }).sort(function(x, y){ return (x.ts || 0) - (y.ts || 0); }).forEach(function(d){ if(d.key) ov[d.key] = Object.assign({}, ov[d.key], d); });
+      Object.keys(m).forEach(function(k){ var x = m[k], o = ov["rp:" + k], s = x.s || ""; if(o && o.rp && /fail|await/i.test(s)) s = "Passed - Re-inspection";
+        rows.push({cust: w.name, ws: w.id, date: String(x.d || "").slice(0, 10), k: KIND(s), s: s, p: x.p || "—", n: x.n || "", c: x.c || "", z: x.z || "", l: x.l || "", q: +x.q || 0, pg: x.pg || ""}); });
+    }).catch(function(){});
+  });
   ps.push((ISROOT ? snap1(ISROOT.collection("is_ext")) : Promise.resolve({docs: []})).then(function(q){ var have = {}; custs.forEach(function(w){ have[String(w.name).toLowerCase()] = 1; });
-    q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: rkind(x.result), first: rkind(x.result) === "pass", res: x.result || "", po: x.ytm || "", lot: "", art: "", prog: x.unit || "—", qty: +x.sample || 0}); }); }).catch(function(){}));
+    q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; var k = rkind(x.result);
+      rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: k === "pass" ? "p1" : k === "fail" ? "fl" : "ni", s: x.result || "", p: x.ytm || x.po || "—", n: x.unit || "", c: "", z: "", l: "", q: +x.sample || 0, pg: x.unit || ""}); }); }).catch(function(){}));
   return Promise.all(ps).then(function(){ if(!HDATA || rows.length >= HDATA.length) HDATA = rows; });
 }
 var HLOAD = 0;
@@ -275,97 +293,118 @@ function loadHomeTry(n){
   loadHome().then(function(){ done = true; if(HOMEON) renderHome(); });
   setTimeout(function(){ if(!done && !HDATA && my === HLOAD && n < 4) loadHomeTry(n + 1); }, 8000 + n * 4000);
 }
+function plans(R){
+  var m = {};
+  R.forEach(function(r){ var key = r.cust + "|" + r.p, q = m[key] = m[key] || {cust: r.cust, ws: r.ws, p: r.p, n: 0, p1: 0, re: 0, bad: 0, ni: 0, d: "", rows: []}; q.n++; q.rows.push(r);
+    if(r.k === "p1") q.p1++; else if(r.k === "re") q.re++; else if(r.k === "ni") q.ni++; else q.bad++; if(r.date > q.d) q.d = r.date; });
+  var l = Object.keys(m).map(function(k){ var q = m[k]; q.st = (q.re || q.bad) ? "fail" : q.ni ? (q.p1 ? "part" : "wait") : "pass"; return q; });
+  return l;
+}
 function homeCss(){
   if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
   st.textContent = "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:radial-gradient(1200px 500px at 85% -10%,#e3f0cf,transparent),#f3f6ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17}" +
-  "#yqHome .hw{max-width:1180px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
-  "#yqHome .per{margin-left:auto;display:flex;gap:6px}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px inherit;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}" +
+  "#yqHome .hw{max-width:1240px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
+  "#yqHome .per{margin-left:auto;display:flex;gap:6px}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px Manrope,system-ui,sans-serif;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}" +
   "#yqHome .kp{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}#yqHome .k{background:#fff;border:1px solid #e1e8d8;border-radius:14px;padding:14px}#yqHome .k b{display:block;font:800 26px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:600}#yqHome .k i{font-style:normal;font-size:12px;color:#62705a}" +
-  "#yqHome .g2{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif}" +
-  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
-  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:60px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}" +
-  "#yqHome .tiles{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;cursor:pointer;text-align:left;font:inherit;color:inherit}#yqHome .tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 20px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 18px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:13px}#yqHome .tl select{margin-left:auto;font:700 14px inherit;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;max-width:200px}" +
-  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .md{margin-left:10px;padding:10px 14px}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{margin-bottom:16px;font-size:13px;line-height:1.5}#yqHome td .op{color:#7DB82E}" +
-  "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
-  "@media(max-width:860px){#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .g2,#yqHome .tiles{grid-template-columns:1fr}#yqHome .per{margin-left:0}#yqHome h1{font-size:22px}#yqHome .hide-m{display:none}#yqHome .tl{flex-wrap:wrap}#yqHome .tl select{margin-left:0;max-width:none;width:100%}}";
+  "#yqHome .g2{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;margin-bottom:16px;overflow-x:auto}#yqHome .g2 .cd{margin-bottom:0}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif}" +
+  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8;white-space:nowrap}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td,#yqHome tr.on td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
+  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:60px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}#yqHome .hw8{color:#a66b00;font-weight:800}" +
+  "#yqHome .tiles{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap}#yqHome button.tl{cursor:pointer}#yqHome button.tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 17px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 17px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:12.5px}#yqHome .tl select{font:700 14px Manrope,system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;min-width:150px;flex:1}" +
+  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .ub.lt{background:#eef4e6;color:#2F5A1A}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}" +
+  "#yqHome .pl{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}#yqHome .pl.pass{background:#e4f3d8;color:#2f7d1f}#yqHome .pl.fail{background:#fbe3e0;color:#b3261e}#yqHome .pl.part,#yqHome .pl.wait{background:#fff1d6;color:#8a5a00}" +
+  "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px;flex-wrap:wrap}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
+  "@media(max-width:980px){#yqHome .tiles{grid-template-columns:1fr}#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .g2{grid-template-columns:1fr}#yqHome .per{margin-left:0}#yqHome h1{font-size:22px}}@media(max-width:700px){#yqHome .hide-m{display:none}}";
   document.head.appendChild(st);
 }
-var HCUST = ssGet("yqi_hcust") || "", HMSG = "";
+var HCUST = ssGet("yqi_hcust") || "", HMSG = "", HPLAN = "";
 function pc(a, b){ return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; }
 function dmy(d){ return d ? d.slice(8, 10) + "-" + d.slice(5, 7) + "-" + d.slice(2, 4) : "—"; }
 function hTable(head, rows){ return '<table><tr>' + head.map(function(h){ return '<th' + (h[1] ? ' class="hide-m"' : '') + '>' + h[0] + '</th>'; }).join("") + '</tr>' + rows.join("") + '</table>'; }
+function barc(a, b){ return b ? '<div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(a / b * 100) + '%"></i></div>' + pc(a, b) + '</div>' : '—'; }
+var PST = {pass: "Passed 1st go", fail: "Failed 1st go", part: "Partly inspected", wait: "Not inspected"};
 function renderHome(){
   var h = $("yqHome"); if(!h) return;
-  var today = ymd(new Date()), from = "0000";
+  var sc = h.scrollTop, today = ymd(new Date()), from = "0000";
   if(HPER === "30"){ var d = new Date(); d.setDate(d.getDate() - 29); from = ymd(d); }
   else if(HPER === "m"){ from = today.slice(0, 8) + "01"; }
   var dt = new Date().toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short", year: "numeric"});
   var names = {}; CLIST.forEach(function(w){ names[w.name] = w.id; }); (HDATA || []).forEach(function(r){ if(!(r.cust in names)) names[r.cust] = r.ws; });
   var nk = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
   if(HCUST && !(HCUST in names) && HDATA) HCUST = "";
-  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · external inspections · ' + esc(dt) + '</div></div><div class="per">' +
+  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · shipping plans and inspections · ' + esc(dt) + '</div></div><div class="per">' +
     [["m", "This month"], ["30", "Last 30 days"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("") + '</div></div>';
-  x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST && names[HCUST] ? '<button class="ub md" id="yqFull" data-ws="' + esc(names[HCUST]) + '">More detail ›</button>' : '') + '</div>' +
-    '<div class="tl"><div class="ic">⇪</div><div><b>Upload inspections</b><span>Excel or CSV with a Customer column. Rows go to each customer automatically.</span></div><div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>';
+  x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:120px"><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' : '') + '</div>' +
+    '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b>Inspection Summary</b><span>Daily floor and external data, reports and presentations</span></div><span class="op">Open ›</span></button>' +
+    '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b>Upload inspections</b><span>Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>';
   if(HMSG) x += '<div class="cd msgb">' + HMSG + '</div>';
   if(!HDATA){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
-  var R = HDATA.filter(function(r){ return r.date >= from && r.date <= today && (!HCUST || r.cust === HCUST); });
-  var t = {n: R.length, p: 0, f: 0, a: 0, p1: 0};
-  R.forEach(function(r){ if(r.k === "pass"){ t.p++; if(r.first) t.p1++; } else if(r.k === "fail") t.f++; else t.a++; });
-  var cs = {}; R.forEach(function(r){ var c = cs[r.cust] = cs[r.cust] || {n: 0, p: 0, f: 0, a: 0, last: ""}; c.n++; c[r.k === "pass" ? "p" : r.k === "fail" ? "f" : "a"]++; if(r.date > c.last) c.last = r.date; });
-  if(!HCUST) nk.forEach(function(n){ if(!cs[n]) cs[n] = {n: 0, p: 0, f: 0, a: 0, last: ""}; });
-  x += '<div class="kp"><div class="k"><span>External inspections</span><b>' + t.n + '</b><i>' + (HCUST ? esc(HCUST) : Object.keys(cs).filter(function(k){ return cs[k].n; }).length + ' customers') + '</i></div>' +
-    '<div class="k"><span>Passed</span><b class="hok">' + t.p + '</b><i>' + t.p1 + ' first go</i></div>' +
-    '<div class="k"><span>Failed</span><b class="hbad">' + t.f + '</b><i>' + (t.a ? t.a + ' other / aborted' : 'awaiting re-inspection') + '</i></div>' +
-    '<div class="k"><span>Pass rate</span><b>' + pc(t.p, t.n) + '</b><i>passed ÷ all inspections</i></div>' +
-    '<div class="k"><span>First-go pass</span><b>' + pc(t.p1, t.n) + '</b><i>passed on 1st inspection</i></div></div>';
+  var R = HDATA.filter(function(r){ return (!HCUST || r.cust === HCUST) && (from === "0000" || (r.date >= from && r.date <= today)); });
+  var P = plans(R), off = R.filter(function(r){ return r.k !== "ni"; }), a1 = off.filter(function(r){ return r.k === "p1"; }).length;
+  var pp = P.filter(function(q){ return q.st === "pass"; }).length, pf = P.filter(function(q){ return q.st === "fail"; }).length, po = P.length - pp - pf;
+  x += '<div class="kp"><div class="k"><span>Shipping plans</span><b>' + P.length + '</b><i>' + (po ? po + ' not fully inspected' : (HCUST ? esc(HCUST) : (function(){ var c = {}; P.forEach(function(q){ c[q.cust] = 1; }); return Object.keys(c).length + ' customers'; })())) + '</i></div>' +
+    '<div class="k"><span>Plans passed 1st go</span><b class="hok">' + pp + '</b><i>' + pc(pp, pp + pf) + ' of inspected plans</i></div>' +
+    '<div class="k"><span>Plans failed 1st go</span><b class="hbad">' + pf + '</b><i>one failed article fails the plan</i></div>' +
+    '<div class="k"><span>Articles inspected</span><b>' + off.length + '</b><i>' + (R.length - off.length) + ' not inspected</i></div>' +
+    '<div class="k"><span>Article 1st-go pass</span><b>' + pc(a1, off.length) + '</b><i>' + a1 + ' of ' + off.length + ' passed 1st go</i></div></div>';
   var left;
   if(!HCUST){
-    var ck = Object.keys(cs).sort(function(a, b){ return cs[b].n - cs[a].n || (a < b ? -1 : 1); });
-    left = '<h3>Customers</h3>' + hTable([["Customer"], ["Inspections"], ["Pass"], ["Fail"], ["Pass rate", 1], ["Last", 1]], ck.map(function(k){ var c = cs[k], r = c.n ? c.p / c.n : 0; return '<tr class="cl" data-c="' + esc(k) + '"><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.n + '</td><td class="hok">' + c.p + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m">' + (c.n ? '<div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(r * 100) + '%"></i></div>' + pc(c.p, c.n) + '</div>' : '—') + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; }));
+    var cs = {}; nk.forEach(function(n){ cs[n] = {pl: 0, pp: 0, pf: 0, off: 0, a1: 0, last: ""}; });
+    P.forEach(function(q){ var c = cs[q.cust]; c.pl++; if(q.st === "pass") c.pp++; if(q.st === "fail") c.pf++; if(q.d > c.last) c.last = q.d; });
+    off.forEach(function(r){ var c = cs[r.cust]; c.off++; if(r.k === "p1") c.a1++; });
+    var ck = Object.keys(cs).sort(function(a, b){ return cs[b].off - cs[a].off || (a < b ? -1 : 1); });
+    left = '<h3>Customers</h3>' + hTable([["Customer"], ["Plans"], ["Passed 1st go"], ["Failed 1st go"], ["Articles", 1], ["Article 1st go", 1], ["Last", 1]], ck.map(function(k){ var c = cs[k]; return '<tr class="cl" data-c="' + esc(k) + '"><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.pl + '</td><td class="hok">' + c.pp + '</td><td class="' + (c.pf ? 'hbad' : '') + '">' + c.pf + '</td><td class="hide-m">' + c.off + '</td><td class="hide-m">' + barc(c.a1, c.off) + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; }));
   } else {
-    var pg = {}; R.forEach(function(r){ var k = r.prog || "—", c = pg[k] = pg[k] || {n: 0, p: 0, f: 0}; c.n++; if(r.k === "pass") c.p++; else if(r.k === "fail") c.f++; });
-    var pk = Object.keys(pg).sort(function(a, b){ return pg[b].n - pg[a].n; });
-    left = '<h3>' + esc(HCUST) + ' by program</h3>' + (pk.length ? hTable([["Program"], ["Inspections"], ["Pass"], ["Fail"], ["Pass rate", 1]], pk.map(function(k){ var c = pg[k], r = c.p / c.n; return '<tr><td><b>' + esc(k) + '</b></td><td>' + c.n + '</td><td class="hok">' + c.p + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m"><div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(r * 100) + '%"></i></div>' + pc(c.p, c.n) + '</div></td></tr>'; })) : '<div class="em">No inspections in this period. Upload a file or pick "All time".</div>') +
-      '<div style="margin-top:10px"><a class="tp" id="yqAllC">‹ All customers</a></div>';
+    var PL = P.slice().sort(function(a, b){ return a.d < b.d ? 1 : a.d > b.d ? -1 : (a.p < b.p ? -1 : 1); });
+    left = '<h3>' + esc(HCUST) + ' · shipping plans (' + PL.length + ')</h3>' + (PL.length ? hTable([["Shipping plan"], ["Articles"], ["1st go"], ["Re-insp.", 1], ["Failed", 1], ["Result"], ["Last", 1]], PL.map(function(q){ return '<tr class="cl' + (HPLAN === q.p ? ' on' : '') + '" data-p="' + esc(q.p) + '"><td><b>' + esc(q.p) + '</b> <span class="op">' + (HPLAN === q.p ? '▾' : '›') + '</span></td><td>' + q.n + '</td><td class="hok">' + q.p1 + '</td><td class="hide-m">' + q.re + '</td><td class="hide-m ' + (q.bad ? 'hbad' : '') + '">' + q.bad + '</td><td><span class="pl ' + q.st + '">' + PST[q.st] + '</span></td><td class="hide-m">' + dmy(q.d) + '</td></tr>'; })) : '<div class="em">No shipping plans in this period. Pick "All time" or upload a file.</div>');
   }
   var days = [], st = new Date(); st.setDate(st.getDate() - 29); if(from > ymd(st)) st = new Date(from + "T00:00:00");
   for(var d0 = new Date(st); ymd(d0) <= today; d0.setDate(d0.getDate() + 1)) days.push(ymd(d0));
-  var by = {}; R.forEach(function(r){ var b = by[r.date] = by[r.date] || {p: 0, f: 0}; if(r.k === "pass") b.p++; else b.f++; });
+  var by = {}; off.forEach(function(r){ var b = by[r.date] = by[r.date] || {p: 0, f: 0}; if(r.k === "p1") b.p++; else b.f++; });
   var mx = 1; days.forEach(function(d){ var b = by[d]; if(b) mx = Math.max(mx, b.p + b.f); });
-  var W = 520, H = 190, bw = W / Math.max(days.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Daily external inspections">';
+  var W = 520, H = 190, bw = W / Math.max(days.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Articles inspected per day, last 30 days">';
   days.forEach(function(d, i){ var b = by[d] || {p: 0, f: 0}, hp = b.p / mx * H, hf = b.f / mx * H, xx = i * bw + 1.5, w = Math.max(bw - 3, 1);
-    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + d + ': ' + b.p + ' passed</title></rect>';
-    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + d + ': ' + b.f + ' failed</title></rect>';
+    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + d + ': ' + b.p + ' passed 1st go</title></rect>';
+    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + d + ': ' + b.f + ' not passed 1st go</title></rect>';
     if(i % 5 === 0 || i === days.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (H + 14) + '" text-anchor="' + (i === days.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
   sv += '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="#dfe6d6"/></svg>';
-  x += '<div class="g2"><div class="cd">' + left + '</div><div class="cd"><h3>Daily inspections</h3>' + (R.length ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed</span><span><i style="background:#d9534f"></i>Failed</span><span>Most in a day: ' + mx + '</span></div>' : '<div class="em">No external inspections in this period.</div>') + '</div></div>';
-  var list = R.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.k === "pass") - (b.k === "pass"); });
-  var fl = HCUST ? list.slice(0, 150) : list.filter(function(r){ return r.k !== "pass"; }).slice(0, 15);
-  x += '<div class="cd"><h3>' + (HCUST ? 'All inspections · ' + esc(HCUST) + ' (' + R.length + ')' : 'Failed inspections') + '</h3>' + (fl.length ? hTable([["Date"], ["Customer", 1], ["Program", 1], ["PO / YTM"], ["Lot", 1], ["Article", 1], ["Qty", 1], ["Result"]], fl.map(function(r){ return '<tr><td>' + dmy(r.date) + '</td><td class="hide-m"><b>' + esc(r.cust) + '</b></td><td class="hide-m">' + esc(r.prog) + '</td><td>' + esc(r.po) + '</td><td class="hide-m">' + esc(r.lot) + '</td><td class="hide-m">' + esc(r.art) + '</td><td class="hide-m">' + (r.qty || "") + '</td><td class="' + (r.k === "pass" ? "hok" : "hbad") + '">' + esc(r.res) + '</td></tr>'; })) : '<div class="em">' + (HCUST ? 'No inspections in this period.' : 'No failed inspections in this period.') + '</div>') + '</div>';
-  h.innerHTML = x + '</div>'; bindHome();
+  var any30 = days.some(function(d){ return by[d]; });
+  x += '<div class="g2"><div class="cd">' + left + '</div><div class="cd"><h3>Articles inspected · last 30 days</h3>' + (any30 ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed 1st go</span><span><i style="background:#d9534f"></i>Failed 1st go</span><span>Most in a day: ' + mx + '</span></div>' : '<div class="em">No inspections in the last 30 days.</div>') + '</div></div>';
+  if(HCUST && HPLAN){
+    var q = P.filter(function(z){ return z.p === HPLAN; })[0];
+    if(q) x += '<div class="cd" id="yqPD"><h3>Shipping plan ' + esc(q.p) + ' · ' + q.n + ' articles <span class="pl ' + q.st + '">' + PST[q.st] + '</span></h3>' + hTable([["Article"], ["Colour", 1], ["Size", 1], ["Lot", 1], ["Qty", 1], ["Date", 1], ["Result"]], q.rows.slice().sort(function(a, b){ return (a.k === "p1") - (b.k === "p1") || (a.n < b.n ? -1 : 1); }).map(function(r){ return '<tr><td>' + esc(r.n) + '</td><td class="hide-m">' + esc(r.c) + '</td><td class="hide-m">' + esc(r.z) + '</td><td class="hide-m">' + esc(r.l) + '</td><td class="hide-m">' + (r.q || "") + '</td><td class="hide-m">' + dmy(r.date) + '</td><td class="' + (r.k === "p1" ? "hok" : r.k === "ni" ? "hw8" : "hbad") + '">' + esc(r.s) + '</td></tr>'; })) + '</div>';
+  }
+  if(!HCUST){
+    var fl = P.filter(function(q){ return q.st === "fail"; }).sort(function(a, b){ return a.d < b.d ? 1 : -1; }).slice(0, 15);
+    x += '<div class="cd"><h3>Shipping plans that failed 1st go</h3>' + (fl.length ? hTable([["Last date"], ["Customer"], ["Shipping plan"], ["Articles", 1], ["Failed / re-insp."], ["Articles that failed", 1]], fl.map(function(q){ var bad = q.rows.filter(function(r){ return r.k !== "p1" && r.k !== "ni"; }); return '<tr class="cl" data-c="' + esc(q.cust) + '" data-p="' + esc(q.p) + '"><td>' + dmy(q.d) + '</td><td><b>' + esc(q.cust) + '</b></td><td>' + esc(q.p) + '</td><td class="hide-m">' + q.n + '</td><td class="hbad">' + bad.length + '</td><td class="hide-m">' + esc(bad.slice(0, 3).map(function(r){ return r.n + (r.c ? " " + r.c : ""); }).join(", ") + (bad.length > 3 ? " …" : "")) + '</td></tr>'; })) : '<div class="em">No shipping plan failed 1st go in this period.</div>') + '</div>';
+  }
+  h.innerHTML = x + '</div>'; bindHome(); h.scrollTop = sc;
 }
-function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
-function setHC(c){ HCUST = c || ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
+function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCustName(n){
+  var w = CLIST.filter(function(x){ return x.name === n; })[0]; if(w) return openCust(w.id);
+  if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
+  var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
+}
+function setHC(c){ HCUST = c || ""; HPLAN = ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
 function bindHome(){
   var h = $("yqHome"); if(!h) return;
-  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; lsSet("yqi_hper", HPER); renderHome(); }; });
-  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ setHC(r.dataset.c); }; });
+  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; lsSet("yqi_hper2", HPER); renderHome(); }; });
+  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ if(r.dataset.c && r.dataset.c !== HCUST){ setHC(r.dataset.c); if(r.dataset.p){ HPLAN = r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({block: "start"}); } return; } if(r.dataset.p){ HPLAN = HPLAN === r.dataset.p ? "" : r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({behavior: "smooth", block: "start"}); } }; });
   var cs = $("yqCs"); if(cs) cs.onchange = function(){ setHC(cs.value); };
-  if($("yqAllC")) $("yqAllC").onclick = function(){ setHC(""); };
-  if($("yqFull")) $("yqFull").onclick = function(){ openCust(this.dataset.ws); };
+  if($("yqFull")) $("yqFull").onclick = function(){ openCustName(HCUST); };
+  var ti = $("yqTi"); if(ti) ti.onclick = function(){ showHome(false); var b = document.querySelector('[data-v="insp"]'); if(b) b.click(); };
   if($("yqUpB")) $("yqUpB").onclick = function(){ if(ROLE === "viewer"){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
   if($("yqUpF")) $("yqUpF").onchange = function(){ var f = this.files[0]; this.value = ""; if(f) uploadInsp(f); };
-  if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Date,Program,PO,Lot,Article,Qty,Result,Remarks\n" + (HCUST || "Bedsure") + "," + ymd(new Date()) + ",T180,202611PKEU002,A65770,Duvet Cover Set,6,Pass,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
+  if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Shipping plan,Date,Program,Article,Colour,Size,Lot,Qty,Result,Reason,Remarks\n" + (HCUST || "Bedsure") + ",202611PKEU009," + ymd(new Date()) + ",Washed Zip,Duvet Cover Set-Washed Cotton-Zip,Simply Taupe,200x200CM,A65094,48,Passed - 1st Go,,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
 }
-// ----- upload: one file, rows sorted into each customer's workspace automatically -----
+// ----- upload: one file, rows go into each customer's article list automatically -----
 function normKey(s){ return String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, ""); }
-var COLS = {cust: ["customer", "buyer", "client", "brand", "customername"], date: ["date", "inspectiondate", "inspdate", "day"], prog: ["program", "programme", "prog", "style", "range"], po: ["po", "pono", "ponumber", "pocontainer", "container", "order", "ordernumber", "ytm", "ytmno"], lot: ["lot", "lotno", "lotnumber", "sku", "item", "itemno"], art: ["article", "articlename", "description", "product", "productname"], qty: ["qty", "quantity", "pcs", "cartons", "ctns", "sample", "samplesize"], result: ["result", "status", "inspectionresult", "outcome", "passfail"], remark: ["remarks", "remark", "defects", "defectsremarks", "comment", "comments", "notes"], factory: ["factory", "unit", "plant"]};
+var COLS = {cust: ["customer", "buyer", "client", "brand", "customername"], p: ["shippingplan", "plan", "shipmentplan", "po", "pono", "ponumber", "pocontainer", "container", "order", "ordernumber"], date: ["date", "inspectiondate", "inspdate", "1stinspectiondate", "firstinspectiondate", "day"], pg: ["program", "programme", "prog", "range"], n: ["article", "articlename", "productname", "product", "description", "item", "itemname", "style"], c: ["colour", "color", "colorname", "colourname", "shade"], z: ["size"], l: ["lot", "lotno", "lotnumber"], q: ["qty", "qtys", "quantity", "pcs", "orderqty"], s: ["result", "status", "inspectionstatus", "inspectionresult", "outcome", "passfail"], r: ["reason", "failreason", "defects", "defect"], m: ["remarks", "remark", "comment", "comments", "notes"], ms: ["msku", "sku", "skuno"]};
 function pickCols(hdr){ var m = {}; hdr.forEach(function(hc, i){ var k = normKey(hc); Object.keys(COLS).forEach(function(f){ if(m[f] == null && COLS[f].indexOf(k) >= 0) m[f] = i; }); }); return m; }
 function toYmd(v){
   if(v == null || v === "") return "";
   if(v instanceof Date && !isNaN(v)) return ymd(new Date(v.getTime() - v.getTimezoneOffset() * 60000));
-  if(typeof v === "number" && v > 20000 && v < 80000){ var d = new Date(Math.round((v - 25569) * 864e5)); return ymd(d); }
+  if(typeof v === "number" && v > 20000 && v < 80000) return ymd(new Date(Math.round((v - 25569) * 864e5)));
   var s = String(v).trim(), m;
   if((m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(s))) return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
   if((m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/.exec(s))){ var y = m[3].length === 2 ? "20" + m[3] : m[3], a = +m[1], b = +m[2], dd = a, mm = b; if(b > 12 && a <= 12){ dd = b; mm = a; } return y + "-" + ("0" + mm).slice(-2) + "-" + ("0" + dd).slice(-2); }
@@ -373,8 +412,12 @@ function toYmd(v){
   if((m = /^(\d{1,2})[-\s\/]?([a-z]{3})[a-z]*[-\s\/,]*(\d{2,4})/i.exec(s)) && MO[m[2].toLowerCase()]) return (m[3].length === 2 ? "20" + m[3] : m[3]) + "-" + ("0" + MO[m[2].toLowerCase()]).slice(-2) + "-" + ("0" + m[1]).slice(-2);
   var t = Date.parse(s); return isNaN(t) ? "" : ymd(new Date(t));
 }
-function yqiResult(r){ var s = String(r || "").trim(), k = rkind(s); if(/^Passed - (1st Go|Re-inspection)$/.test(s) || /^Failed/.test(s)) return s; if(k === "pass") return /re-?insp|2nd|second/i.test(s) ? "Passed - Re-inspection" : "Passed - 1st Go"; if(k === "fail") return "Failed 1st inspection - awaiting re-inspection"; if(k === "abort") return "Aborted"; return s || "Not recorded"; }
-function hashId(s){ var h1 = 5381, h2 = 52711; for(var i = 0; i < s.length; i++){ var c = s.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 33) ^ c; } return "u" + (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36); }
+function yqiStatus(v){ var s = String(v || "").trim();
+  if(/^(Passed - 1st Go|Passed - Re-inspection|Rejected - Quality Issue|Not Inspected|Failed 1st inspection - awaiting re-inspection)$/.test(s)) return s;
+  if(/not insp|not offer|pending|short/i.test(s)) return "Not Inspected"; if(/reject/i.test(s)) return "Rejected - Quality Issue";
+  if(/fail|ng\b|not ok/i.test(s)) return "Failed 1st inspection - awaiting re-inspection";
+  if(/pass|ok|accept|approved/i.test(s)) return /re-?insp|2nd|second/i.test(s) ? "Passed - Re-inspection" : "Passed - 1st Go";
+  return s ? "Not Inspected" : "Passed - 1st Go"; }
 function parseCsv(t){ var rows = [], row = [], cell = "", q = false; for(var i = 0; i < t.length; i++){ var c = t[i]; if(q){ if(c === '"'){ if(t[i + 1] === '"'){ cell += '"'; i++; } else q = false; } else cell += c; } else if(c === '"') q = true; else if(c === "," || c === "\t" || c === ";"){ row.push(cell); cell = ""; } else if(c === "\n" || c === "\r"){ if(c === "\r" && t[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; } else cell += c; } if(cell || row.length){ row.push(cell); rows.push(row); } return rows; }
 function readRows(f){
   if(/\.csv$/i.test(f.name)) return f.text().then(function(t){ return [parseCsv(t.replace(/^﻿/, ""))]; });
@@ -387,35 +430,34 @@ function uploadInsp(f){
     var out = [], noCust = 0, bad = 0;
     sheets.forEach(function(rows){
       var hi = -1, cols = null;
-      for(var i = 0; i < Math.min(rows.length, 15); i++){ var m = pickCols(rows[i] || []); if(m.date != null && (m.result != null || m.po != null)){ hi = i; cols = m; break; } }
+      for(var i = 0; i < Math.min(rows.length, 15); i++){ var m = pickCols(rows[i] || []); if(m.p != null && (m.s != null || m.n != null)){ hi = i; cols = m; break; } }
       if(hi < 0) return;
       rows.slice(hi + 1).forEach(function(r){
         if(!r || !r.some(function(c){ return String(c).trim(); })) return;
-        var g = function(k){ return cols[k] == null ? "" : r[cols[k]]; };
-        var cust = String(g("cust") || "").trim() || HCUST, date = toYmd(g("date"));
-        if(!cust){ noCust++; return; } if(!date){ bad++; return; }
-        out.push({cust: cust, date: date, prog: String(g("prog") || "General").trim(), po: String(g("po") || "").trim(), lot: String(g("lot") || "").trim(), art: String(g("art") || "").trim(), qty: +String(g("qty")).replace(/[^0-9.]/g, "") || 0, result: yqiResult(g("result")), remark: String(g("remark") || "").trim(), factory: String(g("factory") || "").trim()});
+        var g = function(k){ return cols[k] == null ? "" : String(r[cols[k]] == null ? "" : r[cols[k]]).trim(); };
+        var cust = g("cust") || HCUST, p = g("p"), date = toYmd(cols.date == null ? "" : r[cols.date]);
+        if(!cust){ noCust++; return; } if(!p){ bad++; return; }
+        var o = {p: p, n: g("n"), c: g("c"), z: g("z"), l: g("l"), q: +g("q").replace(/[^0-9.]/g, "") || 0, s: yqiStatus(g("s")), d: date, r: g("r"), m: g("m"), ms: g("ms")}; if(g("pg")) o.pg = g("pg");
+        o.k = [o.p, o.ms, o.l, o.z, o.c].join("|"); if(o.k === o.p + "||||") o.k = o.p + "|" + o.n + "|" + out.length;
+        out.push({cust: cust, row: o});
       });
     });
-    if(!out.length) throw new Error(noCust ? "The file has no Customer column. Add one, or pick a customer first and upload again." : "No inspection rows found. The file needs at least Date and Result (or PO) columns — use the template.");
+    if(!out.length) throw new Error(noCust ? "The file has no Customer column. Add one, or pick a customer first and upload again." : "No rows found. The file needs a Shipping plan (or PO) column and a Result or Article column. Use the template.");
     var byName = {}; CLIST.forEach(function(w){ byName[w.name.toLowerCase()] = w; });
     var need = {}; out.forEach(function(r){ if(!byName[r.cust.toLowerCase()]) need[r.cust] = 1; });
-    var mk = Object.keys(need).map(function(n){
-      if(!OWNER) return Promise.resolve(null);
+    return Promise.all(Object.keys(need).map(function(n){
+      if(!OWNER) return null;
       var id = slug(n), ref = FS.collection("ws").doc(id);
-      return ref.get().then(function(d){ if(d.exists && String(d.data().name || "").toLowerCase() !== n.toLowerCase()){ id = id + "-" + Date.now().toString(36).slice(-4); ref = FS.collection("ws").doc(id); } return ref.set({name: n, members: {}}, {merge: true}); }).then(function(){ var w = {id: id, name: n, role: "owner", isNew: 1}; CLIST.push(w); byName[n.toLowerCase()] = w; return w; });
-    });
-    return Promise.all(mk).then(function(){
-      var cnt = {}, skip = {}, jobs = [];
-      out.forEach(function(r){ var w = byName[r.cust.toLowerCase()]; if(!w){ skip[r.cust] = (skip[r.cust] || 0) + 1; return; }
-        var id = hashId([w.id, r.date, r.po, r.lot, r.art, r.prog].join("|").toLowerCase());
-        var doc = {date: r.date, prog: r.prog, po: r.po, lot: r.lot, art: r.art, qty: r.qty, result: r.result, remark: r.remark, factory: r.factory, ytm: "", ts: Date.now(), src: "upload", by: EMAIL};
-        jobs.push({w: w, id: id, doc: doc}); });
-      var k = 0, done = 0, err = 0;
-      function wk(){ if(k >= jobs.length) return Promise.resolve(); var j = jobs[k++]; return FS.collection("ws").doc(j.w.id).collection("ext").doc(j.id).set(j.doc).then(function(){ done++; cnt[j.w.name] = (cnt[j.w.name] || 0) + 1; if(done % 20 === 0){ HMSG = 'Saving… ' + done + ' of ' + jobs.length; var m = document.querySelector("#yqHome .msgb"); if(m) m.innerHTML = HMSG; } }, function(){ err++; }).then(wk); }
-      return Promise.all([wk(), wk(), wk(), wk(), wk(), wk()]).then(function(){
-        HMSG = '<span class="hok">Saved ' + done + ' inspections from ' + esc(f.name) + '</span>: ' + Object.keys(cnt).map(function(n){ return esc(n) + ' ' + cnt[n] + (byName[n.toLowerCase()] && byName[n.toLowerCase()].isNew ? ' (new customer added)' : ''); }).join(", ") +
-          (err ? ' · <span class="hbad">' + err + ' could not be saved (no edit access)</span>' : '') + (Object.keys(skip).length ? ' · <span class="hbad">skipped (customer not shared with you): ' + Object.keys(skip).map(esc).join(", ") + '</span>' : '') + (bad ? ' · ' + bad + ' rows without a valid date skipped' : '') + (noCust ? ' · ' + noCust + ' rows without a customer name skipped' : '') + '. Same rows uploaded again are updated, not doubled.';
+      return ref.get().then(function(d){ if(d.exists && String(d.data().name || "").toLowerCase() !== n.toLowerCase()){ id = id + "-" + Date.now().toString(36).slice(-4); ref = FS.collection("ws").doc(id); } return ref.set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}); }).then(function(){ var w = {id: id, name: n, role: "owner", isNew: 1}; CLIST.push(w); byName[n.toLowerCase()] = w; });
+    })).then(function(){
+      var grp = {}, skip = {};
+      out.forEach(function(r){ var w = byName[r.cust.toLowerCase()]; if(!w){ skip[r.cust] = 1; return; } (grp[w.id] = grp[w.id] || {w: w, rows: []}).rows.push(r.row); });
+      var jobs = [], cnt = {}, err = 0, t0 = Date.now();
+      Object.keys(grp).forEach(function(id){ var g = grp[id]; for(var i = 0; i < g.rows.length; i += 250) jobs.push({w: g.w, rows: g.rows.slice(i, i + 250), ts: t0 + i}); });
+      return Promise.all(jobs.map(function(j){ return FS.collection("ws").doc(j.w.id).collection("insp").add(enc({rows: j.rows, ts: j.ts, src: "upload", file: f.name, by: EMAIL})).then(function(){ cnt[j.w.name] = (cnt[j.w.name] || 0) + j.rows.length; }, function(){ err += j.rows.length; }); })).then(function(){
+        var plansN = {}; out.forEach(function(r){ plansN[r.cust + "|" + r.row.p] = 1; });
+        HMSG = '<span class="hok">Saved ' + Object.keys(cnt).reduce(function(a, k){ return a + cnt[k]; }, 0) + ' articles in ' + Object.keys(plansN).length + ' shipping plans from ' + esc(f.name) + '</span>: ' + Object.keys(cnt).map(function(n){ return esc(n) + ' ' + cnt[n] + (byName[n.toLowerCase()] && byName[n.toLowerCase()].isNew ? ' (new customer added)' : ''); }).join(", ") +
+          (err ? ' · <span class="hbad">' + err + ' could not be saved (no edit access)</span>' : '') + (Object.keys(skip).length ? ' · <span class="hbad">skipped, customer not shared with you: ' + Object.keys(skip).map(esc).join(", ") + '</span>' : '') + (bad ? ' · ' + bad + ' rows without a shipping plan skipped' : '') + (noCust ? ' · ' + noCust + ' rows without a customer skipped' : '') + '. The same article uploaded again replaces the old result.';
         HDATA = null; renderHome(); loadHomeTry(0);
       });
     });
@@ -450,17 +492,36 @@ function wsRoot(){ return FS.collection("ws").doc(WS); }
 function b64ToBytes(s){ var bin = atob(s), a = new Uint8Array(bin.length); for(var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
 function bytesToB64(u){ var s = "", k = 0x8000; for(var i = 0; i < u.length; i += k) s += String.fromCharCode.apply(null, u.subarray(i, i + k)); return btoa(s); }
 function hex32(){ var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function(x){ return ("0" + x.toString(16)).slice(-2); }).join(""); }
+var BCACHE = null; try{ if(window.caches) BCACHE = caches.open("yqi-files-v1").catch(function(){ return null; }); }catch(e){}
+function cKey(id){ return location.origin + "/__yqi_file/" + WS + "/" + id; }
 function getBlob(id){
   if(BLOBP[id]) return BLOBP[id];
   var r = wsRoot();
-  BLOBP[id] = r.collection("blob").doc(id).get().then(function(d){
+  BLOBP[id] = (BCACHE ? BCACHE.then(function(c){ return c ? c.match(cKey(id)) : null; }).catch(function(){ return null; }) : Promise.resolve(null)).then(function(hit){
+    if(hit) return hit.blob();
+    return fetchBlob(r, id).then(function(b){ if(BCACHE) BCACHE.then(function(c){ if(c) c.put(cKey(id), new Response(b, {headers: {"content-type": b.type}})).catch(function(){}); }); return b; });
+  });
+  BLOBP[id].catch(function(){ delete BLOBP[id]; });
+  return BLOBP[id];
+}
+function fetchBlob(r, id){
+  return r.collection("blob").doc(id).get().then(function(d){
     if(!d.exists) throw new Error("This file is not in the company storage yet.");
     var m = d.data(), ps = [];
     for(var i = 0; i < (m.n || 1); i++) ps.push(r.collection("blobc").doc(id + "_" + i).get());
     return Promise.all(ps).then(function(a){ return new Blob([b64ToBytes(a.map(function(x){ return x.exists ? x.data().d : ""; }).join(""))], {type: m.ct || "application/octet-stream"}); });
   });
-  BLOBP[id].catch(function(){ delete BLOBP[id]; });
-  return BLOBP[id];
+}
+// load pictures only when they come on screen, 4 at a time
+var LQ = [], LRUN = 0, IO = null;
+function lqPump(){ while(LRUN < 4 && LQ.length){ var j = LQ.shift(); LRUN++; blobUrl(j.id).then(function(u){ j.im.src = u; }, function(){ j.im.alt = j.im.alt || "file missing"; }).then(function(){ LRUN--; lqPump(); }); } }
+function lqAdd(im, id){ if(BLOBU[id]){ im.src = BLOBU[id]; return; } LQ.push({im: im, id: id}); lqPump(); }
+function lazyImg(im, id){
+  if(BLOBU[id]){ im.src = BLOBU[id]; return; }
+  var W = im.ownerDocument.defaultView;
+  if(!W.IntersectionObserver){ lqAdd(im, id); return; }
+  if(!W.__yqIO) W.__yqIO = new W.IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ W.__yqIO.unobserve(e.target); var t = e.target; if(t.__yb) lqAdd(t, t.__yb); } }); }, {rootMargin: "400px"});
+  W.__yqIO.observe(im);
 }
 function blobUrl(id){ return BLOBU[id] ? Promise.resolve(BLOBU[id]) : getBlob(id).then(function(b){ return BLOBU[id] || (BLOBU[id] = URL.createObjectURL(b)); }); }
 function blobId(s){ var m = /^(?:https?:\/\/[^\/]+)?\/_blob\/([0-9a-f]{32})/.exec(String(s || "")); return m ? m[1] : null; }
@@ -497,7 +558,7 @@ function hookWin(w){
       (root.querySelectorAll ? root.querySelectorAll("img[src*='/_blob/'],source[src*='/_blob/'],video[src*='/_blob/']") : []).forEach(function(im){
         var id = blobId(im.getAttribute("src")); if(!id) return; im.__yb = id; im.setAttribute("data-u", "/_blob/" + id);
         if(BLOBU[id]){ im.src = BLOBU[id]; return; } im.removeAttribute("src");
-        blobUrl(id).then(function(u){ im.src = u; }).catch(function(){ im.alt = im.alt || "file missing"; });
+        if(im.tagName === "IMG") lazyImg(im, id); else blobUrl(id).then(function(u){ im.src = u; }).catch(function(){});
       });
       (root.querySelectorAll ? root.querySelectorAll("iframe") : []).forEach(function(f){ try{ var fw = f.contentWindow; if(fw && fw.document){ hookWin(fw); } f.addEventListener("load", function(){ try{ hookWin(f.contentWindow); }catch(e){} }); }catch(e){} });
     }catch(e){}
@@ -517,10 +578,9 @@ function installClaude(){
 function openWs(w){
   WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
   showGate('<h1>Opening ' + esc(WSNAME) + '…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
-  FS.collection("ws").doc(WS).collection("seed").get().then(function(q){
-    var sd = {}; q.docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
+  Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
+    var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
-    return pickIsRoot();
   }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); else goDirect(); }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
