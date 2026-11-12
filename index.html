@@ -260,6 +260,7 @@ function startCustUi(){
 function pickIsRoot(){
   var all = FS.collection("ws").doc("_all");
   ISCUST = lsGet("yqi_iscust") || "";
+  if(OWNER && WS !== "_all" && ssGet("yqi_lc")){ ISROOT = all; return Promise.resolve(); }
   if(OWNER) return all.get().then(function(d){ if(!d.exists) return all.set({name: "All customers (Inspection Summary)", members: {}}); }).then(function(){ ISROOT = all; return FS.collection("ws").get(); }).then(function(q){ q.docs.forEach(function(d){ if(d.id !== "_all"){ var n = (d.data() || {}).name; if(n) CUSTS[n] = 1; } }); }).catch(function(){ ISROOT = ISROOT || null; });
   return all.get().then(function(d){ ISROOT = d.exists ? all : null; }).catch(function(){ ISROOT = null; });
 }
