@@ -285,7 +285,7 @@ function homeCss(){
   "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
   "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:60px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}" +
   "#yqHome .tiles{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;cursor:pointer;text-align:left;font:inherit;color:inherit}#yqHome .tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 20px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 18px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:13px}#yqHome .tl select{margin-left:auto;font:700 14px inherit;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;max-width:200px}" +
-  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{margin-bottom:16px;font-size:13px;line-height:1.5}#yqHome td .op{color:#7DB82E}" +
+  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .md{margin-left:10px;padding:10px 14px}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{margin-bottom:16px;font-size:13px;line-height:1.5}#yqHome td .op{color:#7DB82E}" +
   "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
   "@media(max-width:860px){#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .g2,#yqHome .tiles{grid-template-columns:1fr}#yqHome .per{margin-left:0}#yqHome h1{font-size:22px}#yqHome .hide-m{display:none}#yqHome .tl{flex-wrap:wrap}#yqHome .tl select{margin-left:0;max-width:none;width:100%}}";
   document.head.appendChild(st);
@@ -305,7 +305,7 @@ function renderHome(){
   if(HCUST && !(HCUST in names) && HDATA) HCUST = "";
   var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · external inspections · ' + esc(dt) + '</div></div><div class="per">' +
     [["m", "This month"], ["30", "Last 30 days"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("") + '</div></div>';
-  x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select></div>' +
+  x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST && names[HCUST] ? '<button class="ub md" id="yqFull" data-ws="' + esc(names[HCUST]) + '">More detail ›</button>' : '') + '</div>' +
     '<div class="tl"><div class="ic">⇪</div><div><b>Upload inspections</b><span>Excel or CSV with a Customer column. Rows go to each customer automatically.</span></div><div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>';
   if(HMSG) x += '<div class="cd msgb">' + HMSG + '</div>';
   if(!HDATA){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
@@ -343,10 +343,9 @@ function renderHome(){
   var list = R.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.k === "pass") - (b.k === "pass"); });
   var fl = HCUST ? list.slice(0, 150) : list.filter(function(r){ return r.k !== "pass"; }).slice(0, 15);
   x += '<div class="cd"><h3>' + (HCUST ? 'All inspections · ' + esc(HCUST) + ' (' + R.length + ')' : 'Failed inspections') + '</h3>' + (fl.length ? hTable([["Date"], ["Customer", 1], ["Program", 1], ["PO / YTM"], ["Lot", 1], ["Article", 1], ["Qty", 1], ["Result"]], fl.map(function(r){ return '<tr><td>' + dmy(r.date) + '</td><td class="hide-m"><b>' + esc(r.cust) + '</b></td><td class="hide-m">' + esc(r.prog) + '</td><td>' + esc(r.po) + '</td><td class="hide-m">' + esc(r.lot) + '</td><td class="hide-m">' + esc(r.art) + '</td><td class="hide-m">' + (r.qty || "") + '</td><td class="' + (r.k === "pass" ? "hok" : "hbad") + '">' + esc(r.res) + '</td></tr>'; })) : '<div class="em">' + (HCUST ? 'No inspections in this period.' : 'No failed inspections in this period.') + '</div>') + '</div>';
-  if(HCUST && names[HCUST]) x += '<div style="text-align:right;margin-top:10px"><a class="tp" id="yqFull" data-ws="' + esc(names[HCUST]) + '">Open full ' + esc(HCUST) + ' workspace (orders, programs, reports) ›</a></div>';
   h.innerHTML = x + '</div>'; bindHome();
 }
-function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
+function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
 function setHC(c){ HCUST = c || ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
 function bindHome(){
   var h = $("yqHome"); if(!h) return;
@@ -428,6 +427,10 @@ function showHome(on){
   HOMEON = !!on; h.style.display = on ? "block" : "none";
   var c = $("yqCust"); if(c && on) c.style.display = "none";
   if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
+}
+function goDirect(){
+  if(ssGet("yqi_direct") !== "bed") return; ssSet("yqi_direct", "");
+  var n = 0; (function f(){ var b = document.querySelector('[data-v="bed"]'); if(b && document.body.classList.contains("onland")){ b.click(); return; } if(++n < 60) setTimeout(f, 150); })();
 }
 function startHome(){
   showHome(true);
@@ -511,7 +514,7 @@ function openWs(w){
     var sd = {}; q.docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
     return pickIsRoot();
-  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); else goDirect(); }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
