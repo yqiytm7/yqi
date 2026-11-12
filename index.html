@@ -14,7 +14,7 @@ var FIREBASE_CONFIG = {
 };
 // ===========================================================================================================
 var FBV = "10.12.2", SDK = ["app", "auth", "firestore"].map(function(n){ return "https://www.gstatic.com/firebasejs/" + FBV + "/firebase-" + n + "-compat.js"; });
-var WS = null, WSNAME = "", ROLE = "", EMAIL = "", OWNER = false, FS = null, AUTH = null, LSK = "yqi_ws";
+var WS = null, WSNAME = "", ROLE = "", EMAIL = "", OWNER = false, FS = null, AUTH = null, LSK = "yqi_ws", CLIST = [], HASALL = false;
 
 // ---------- small helpers ----------
 function $(id){ return document.getElementById(id); }
@@ -96,6 +96,11 @@ function afterLogin(u){
       if(OWNER) return adminScreen();
       return showGate('<h1>No access yet</h1><div class="sub">Your account <b>' + esc(EMAIL) + '</b> is ready, but no customer workspace is shared with you. Ask the YQI owner to add this email.</div><div class="row"><button id="yqRe">Check again</button><button class="g" id="yqO">Sign out</button></div>'), $("yqRe").onclick = function(){ afterLogin(u); }, $("yqO").onclick = function(){ AUTH.signOut(); };
     }
+    CLIST = list.filter(function(w){ return w.id !== "_all"; });
+    var allW = list.filter(function(w){ return w.id === "_all"; })[0];
+    if(OWNER && !allW) allW = {id: "_all", name: "All customers", role: "owner"};
+    HASALL = !!allW;
+    if(allW && (!want || want === "_all" || !pick)) return openWs({id: "_all", name: "All customers", role: allW.role});
     if(pick) return openWs(pick);
     if(list.length === 1 && !OWNER) return openWs(list[0]);
     chooseWs(list);
@@ -235,7 +240,7 @@ function custUi(){
   if(ISCUST && names.indexOf(ISCUST) < 0) names.push(ISCUST);
   w.querySelector("select").innerHTML = '<option value="">All customers</option>' + names.map(function(n){ return '<option' + (n === ISCUST ? " selected" : "") + '>' + esc(n) + '</option>'; }).join("");
   w.querySelector("em").textContent = ISCUST ? "external data only" : "";
-  w.style.display = b.classList.contains("oninsp") ? "flex" : "none";
+  w.style.display = b.classList.contains("oninsp") && !HOMEON ? "flex" : "none";
 }
 function startCustUi(){
   var st = document.createElement("style");
@@ -248,6 +253,93 @@ function pickIsRoot(){
   ISCUST = lsGet("yqi_iscust") || "";
   if(OWNER) return all.get().then(function(d){ if(!d.exists) return all.set({name: "All customers (Inspection Summary)", members: {}}); }).then(function(){ ISROOT = all; return FS.collection("ws").get(); }).then(function(q){ q.docs.forEach(function(d){ if(d.id !== "_all"){ var n = (d.data() || {}).name; if(n) CUSTS[n] = 1; } }); }).catch(function(){ ISROOT = ISROOT || null; });
   return all.get().then(function(d){ ISROOT = d.exists ? all : null; }).catch(function(){ ISROOT = null; });
+}
+
+// ---------- Home: all customers overview (opens from the "All customers" workspace) ----------
+var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper") || "30";
+function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
+function ymd(d){ return d.toISOString().slice(0, 10); }
+function loadHome(){
+  var custs = CLIST.slice(), rows = [];
+  var ps = custs.map(function(w){ return FS.collection("ws").doc(w.id).collection("ext").get().then(function(q){ q.docs.forEach(function(d){ var x = dec(d.data()) || {}; if(!x.date) return; rows.push({cust: w.name, ws: w.id, date: String(x.date).slice(0, 10), k: rkind(x.result), first: /1st/i.test(x.result || ""), res: x.result || "", po: x.po || "", lot: x.lot || "", art: x.art || x.prog || "", qty: +x.qty || 0}); }); }).catch(function(){}); });
+  ps.push((ISROOT ? ISROOT.collection("is_ext").get() : Promise.resolve({docs: []})).then(function(q){ var have = {}; custs.forEach(function(w){ have[String(w.name).toLowerCase()] = 1; });
+    q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: rkind(x.result), first: rkind(x.result) === "pass", res: x.result || "", po: x.ytm || "", lot: "", art: x.unit || "", qty: +x.sample || 0}); }); }).catch(function(){}));
+  return Promise.all(ps).then(function(){ HDATA = rows; });
+}
+function homeCss(){
+  if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
+  st.textContent = "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:radial-gradient(1200px 500px at 85% -10%,#e3f0cf,transparent),#f3f6ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17}" +
+  "#yqHome .hw{max-width:1180px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
+  "#yqHome .per{margin-left:auto;display:flex;gap:6px}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px inherit;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}" +
+  "#yqHome .kp{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}#yqHome .k{background:#fff;border:1px solid #e1e8d8;border-radius:14px;padding:14px}#yqHome .k b{display:block;font:800 26px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:600}#yqHome .k i{font-style:normal;font-size:12px;color:#62705a}" +
+  "#yqHome .g2{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif}" +
+  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
+  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:60px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}" +
+  "#yqHome .tiles{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;cursor:pointer;text-align:left;font:inherit;color:inherit}#yqHome .tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 20px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 18px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:13px}#yqHome .tl select{margin-left:auto;font:700 14px inherit;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;max-width:200px}" +
+  "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
+  "@media(max-width:860px){#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .g2,#yqHome .tiles{grid-template-columns:1fr}#yqHome .per{margin-left:0}#yqHome h1{font-size:22px}#yqHome .hide-m{display:none}#yqHome .tl{flex-wrap:wrap}#yqHome .tl select{margin-left:0;max-width:none;width:100%}}";
+  document.head.appendChild(st);
+}
+function renderHome(){
+  var h = $("yqHome"); if(!h) return;
+  var today = ymd(new Date()), from = "0000";
+  if(HPER === "30"){ var d = new Date(); d.setDate(d.getDate() - 29); from = ymd(d); }
+  else if(HPER === "m"){ from = today.slice(0, 8) + "01"; }
+  var dt = new Date().toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short", year: "numeric"});
+  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">All customers · external inspections · ' + esc(dt) + '</div></div><div class="per">' +
+    [["m", "This month"], ["30", "Last 30 days"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("") + '</div></div>';
+  var nm = CLIST.map(function(w){ return '<option value="' + esc(w.id) + '">' + esc(w.name) + '</option>'; }).join("");
+  x += '<div class="tiles"><div class="tl" id="yqTc"><div class="ic">C</div><div><b>Customer data</b><span>Open one customer: programs, orders, inspections, reports</span></div><select id="yqCs"><option value="">Select customer…</option>' + nm + '</select></div>' +
+    '<button class="tl" id="yqTi"><div class="ic">IS</div><div><b>Inspection Summary</b><span>Daily data and performance, all customers</span></div><span class="op" style="margin-left:auto">Open ›</span></button></div>';
+  if(!HDATA){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
+  var R = HDATA.filter(function(r){ return r.date >= from && r.date <= today; });
+  var t = {n: R.length, p: 0, f: 0, a: 0, p1: 0};
+  R.forEach(function(r){ if(r.k === "pass"){ t.p++; if(r.first) t.p1++; } else if(r.k === "fail") t.f++; else if(r.k === "abort") t.a++; });
+  var pc = function(a, b){ return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; };
+  var cs = {}; R.forEach(function(r){ var c = cs[r.cust] = cs[r.cust] || {n: 0, p: 0, f: 0, a: 0, last: "", ws: r.ws}; c.n++; c[r.k === "pass" ? "p" : r.k === "fail" ? "f" : "a"]++; if(r.date > c.last) c.last = r.date; });
+  CLIST.forEach(function(w){ if(!cs[w.name]) cs[w.name] = {n: 0, p: 0, f: 0, a: 0, last: "", ws: w.id}; });
+  x += '<div class="kp"><div class="k"><span>External inspections</span><b>' + t.n + '</b><i>' + Object.keys(cs).filter(function(k){ return cs[k].n; }).length + ' customers</i></div>' +
+    '<div class="k"><span>Passed</span><b class="hok">' + t.p + '</b><i>' + t.p1 + ' first go</i></div>' +
+    '<div class="k"><span>Failed</span><b class="hbad">' + t.f + '</b><i>' + (t.a ? t.a + ' aborted' : 'awaiting re-inspection') + '</i></div>' +
+    '<div class="k"><span>Pass rate</span><b>' + pc(t.p, t.n) + '</b><i>passed ÷ all inspections</i></div>' +
+    '<div class="k"><span>First-go pass</span><b>' + pc(t.p1, t.n) + '</b><i>passed on 1st inspection</i></div></div>';
+  var ck = Object.keys(cs).sort(function(a, b){ return cs[b].n - cs[a].n || (a < b ? -1 : 1); });
+  x += '<div class="g2"><div class="cd"><h3>Customers</h3><table><tr><th>Customer</th><th>Inspections</th><th>Pass</th><th>Fail</th><th class="hide-m">Pass rate</th><th class="hide-m">Last</th><th></th></tr>' +
+    ck.map(function(k){ var c = cs[k], r = c.n ? c.p / c.n : 0; return '<tr' + (c.ws ? ' class="cl" data-ws="' + esc(c.ws) + '"' : '') + '><td><b>' + esc(k) + '</b></td><td>' + c.n + '</td><td class="hok">' + c.p + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m">' + (c.n ? '<div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(r * 100) + '%"></i></div>' + pc(c.p, c.n) + '</div>' : '—') + '</td><td class="hide-m">' + esc(c.last ? c.last.slice(8, 10) + "-" + c.last.slice(5, 7) : "—") + '</td><td>' + (c.ws ? '<span class="op">Open ›</span>' : '<span class="sub">Inspection Summary</span>') + '</td></tr>'; }).join("") + '</table></div>';
+  // daily chart: last 30 days in range
+  var days = [], end = new Date(), st = new Date(); st.setDate(st.getDate() - 29); if(from > ymd(st)) st = new Date(from + "T00:00:00");
+  for(var d0 = new Date(st); ymd(d0) <= today; d0.setDate(d0.getDate() + 1)) days.push(ymd(d0));
+  var by = {}; R.forEach(function(r){ var b = by[r.date] = by[r.date] || {p: 0, f: 0}; if(r.k === "pass") b.p++; else b.f++; });
+  var mx = 1; days.forEach(function(d){ var b = by[d]; if(b) mx = Math.max(mx, b.p + b.f); });
+  var W = 520, H = 190, bw = W / Math.max(days.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Daily external inspections">';
+  days.forEach(function(d, i){ var b = by[d] || {p: 0, f: 0}, hp = b.p / mx * H, hf = b.f / mx * H, xx = i * bw + 1.5, w = Math.max(bw - 3, 1);
+    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + d + ': ' + b.p + ' passed</title></rect>';
+    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + d + ': ' + b.f + ' failed</title></rect>';
+    if(i % 5 === 0 || i === days.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (H + 14) + '" text-anchor="' + (i === days.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
+  sv += '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="#dfe6d6"/></svg>';
+  x += '<div class="cd"><h3>Daily inspections</h3>' + (R.length ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed</span><span><i style="background:#d9534f"></i>Failed</span><span>Most in a day: ' + mx + '</span></div>' : '<div class="em">No external inspections in this period.</div>') + '</div></div>';
+  var fl = R.filter(function(r){ return r.k !== "pass"; }).sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 12);
+  x += '<div class="cd"><h3>Failed inspections</h3>' + (fl.length ? '<table><tr><th>Date</th><th>Customer</th><th>PO / YTM</th><th class="hide-m">Lot</th><th class="hide-m">Article</th><th>Result</th></tr>' + fl.map(function(r){ return '<tr' + (r.ws ? ' class="cl" data-ws="' + esc(r.ws) + '"' : '') + '><td>' + esc(r.date.slice(8, 10) + "-" + r.date.slice(5, 7)) + '</td><td><b>' + esc(r.cust) + '</b></td><td>' + esc(r.po) + '</td><td class="hide-m">' + esc(r.lot) + '</td><td class="hide-m">' + esc(r.art) + '</td><td class="hbad">' + esc(r.res) + '</td></tr>'; }).join("") + '</table>' : '<div class="em">No failed inspections in this period.</div>') + '</div></div>';
+  h.innerHTML = x; bindHome();
+}
+function openCust(id){ if(!id) return; lsSet(LSK, id); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
+function bindHome(){
+  var h = $("yqHome"); if(!h) return;
+  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; lsSet("yqi_hper", HPER); renderHome(); }; });
+  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ openCust(r.dataset.ws); }; });
+  var cs = $("yqCs"); if(cs){ cs.onchange = function(){ openCust(cs.value); }; cs.onclick = function(e){ e.stopPropagation(); }; }
+  var ti = $("yqTi"); if(ti) ti.onclick = function(){ showHome(false); var b = document.querySelector('[data-v="insp"]'); if(b) b.click(); };
+}
+function showHome(on){
+  homeCss(); var h = $("yqHome");
+  if(!h){ h = document.createElement("div"); h.id = "yqHome"; document.body.appendChild(h); }
+  HOMEON = !!on; h.style.display = on ? "block" : "none";
+  var c = $("yqCust"); if(c && on) c.style.display = "none";
+  if(on){ renderHome(); if(!HDATA) loadHome().then(renderHome); }
+}
+function startHome(){
+  showHome(true);
+  new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON) showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
 
 // ---------- free file storage: photos/PDF/Excel kept inside Firestore in 700 KB pieces ----------
@@ -327,13 +419,13 @@ function openWs(w){
     var sd = {}; q.docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
     return pickIsRoot();
-  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
-  p.innerHTML = '<b>' + esc(WSNAME) + '</b><span>' + (ROLE === "viewer" ? "view only" : ROLE) + '</span><a id="yqSw">switch</a>' + (OWNER ? '<a id="yqAm">admin</a>' : '') + '<a id="yqSo">sign out</a>';
+  p.innerHTML = '<b>' + esc(WSNAME) + '</b><span>' + (ROLE === "viewer" ? "view only" : ROLE) + '</span><a id="yqSw">' + (HASALL ? (WS === "_all" ? "customers" : "home") : "switch") + '</a>' + (OWNER ? '<a id="yqAm">admin</a>' : '') + '<a id="yqSo">sign out</a>';
   document.body.appendChild(p);
-  $("yqSw").onclick = function(){ lsSet(LSK, ""); location.reload(); };
+  $("yqSw").onclick = function(){ if(WS === "_all"){ showHome(true); return; } lsSet(LSK, HASALL ? "_all" : ""); location.reload(); };
   if($("yqAm")) $("yqAm").onclick = function(){ lsSet(LSK, ""); lsSet("yqi_admin", "1"); location.reload(); };
   $("yqSo").onclick = function(){ lsSet(LSK, ""); AUTH.signOut().then(function(){ location.reload(); }); };
 }
