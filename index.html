@@ -188,7 +188,7 @@ function saveBlob(name, data){
 // ---------- the claude.* replacement the app talks to ----------
 function makeDb(){
   var root = FS.collection("ws").doc(WS);
-  function col(c){ return root.collection(String(c)); }
+  function col(c){ c = String(c); return (/^is_/.test(c) && ISROOT ? ISROOT : root).collection(c); }
   function ds(s){ return {id: s.id, exists: s.exists, data: function(){ var d = s.data(); return d ? dec(d) : d; }, metadata: s.metadata || {fromCache: false}}; }
   function qs(q){ var docs = q.docs.map(ds); return {docs: docs, empty: !docs.length, size: docs.length, metadata: q.metadata || {fromCache: false}, forEach: function(f){ docs.forEach(f); }}; }
   function viewOnly(){ return Promise.reject(Object.assign(new Error("View only — ask the owner for edit access."), {code: "permission-denied"})); }
@@ -204,13 +204,119 @@ function makeDb(){
     collection: function(c){ var cr = col(c); return {id: String(c), doc: function(i){ return doc(i ? cr.doc(String(i)) : cr.doc()); },
       add: function(d){ if(ROLE === "viewer") return viewOnly(); return cr.add(enc(d)).then(function(r){ return doc(r); }); },
       get: function(){ return cr.get().then(qs); },
-      onSnapshot: function(cb, er){ return cr.onSnapshot(function(q){ cb(qs(q)); }, er || function(){}); }}; },
+      onSnapshot: function(cb, er){ var L = {c: String(c), cb: cb, q: null}; if(/^is_/.test(L.c)) ISL.push(L); return cr.onSnapshot(function(q){ L.q = qs(q); if(/^is_/.test(L.c)){ noteCust(L.c, L.q); cb(isFilter(L.c, L.q)); } else cb(L.q); }, er || function(){}); }}; },
     doc: function(p){ var a = String(p).split("/"); return doc(col(a[0]).doc(a[1])); }
   };
 }
+// ---------- Inspection Summary: one shared store for all customers + customer picker ----------
+var ISROOT = null, ISCUST = "", ISL = [], CUSTS = {};
+function fakeDoc(id, d){ return {id: id, exists: true, data: function(){ return JSON.parse(JSON.stringify(d)); }, metadata: {fromCache: false}}; }
+function isFilter(c, q){
+  if(!ISCUST || !q) return q;
+  var docs;
+  if(c === "is_ext") docs = q.docs.filter(function(d){ var x = d.data() || {}; return x.customer === ISCUST; });
+  else if(c === "is_extday") docs = q.docs.map(function(d){ var x = d.data() || {}, o = {}; Object.keys(x).forEach(function(k){ if(k !== "cust") o[k] = x[k]; }); var cu = x.cust || {}; o.cust = {}; if(cu[ISCUST]) o.cust[ISCUST] = cu[ISCUST]; return fakeDoc(d.id, o); });
+  else if(c === "is_int" || c === "is_hist") docs = [];
+  else return q;
+  return {docs: docs, empty: !docs.length, size: docs.length, metadata: {fromCache: false}, forEach: function(f){ docs.forEach(f); }};
+}
+function noteCust(c, q){
+  var n = Object.keys(CUSTS).length;
+  if(c === "is_ext") q.docs.forEach(function(d){ var x = d.data() || {}; if(x.customer && x.customer !== "Not recorded") CUSTS[x.customer] = 1; });
+  if(c === "is_extday") q.docs.forEach(function(d){ Object.keys((d.data() || {}).cust || {}).forEach(function(k){ CUSTS[k] = 1; }); });
+  if(Object.keys(CUSTS).length !== n) custUi();
+}
+function setCust(v){ ISCUST = v || ""; lsSet("yqi_iscust", ISCUST); ISL.forEach(function(L){ if(L.q) try{ L.cb(isFilter(L.c, L.q)); }catch(e){} }); custUi(); }
+function custUi(){
+  var b = document.body; if(!b) return;
+  var w = $("yqCust");
+  if(!w){ w = document.createElement("div"); w.id = "yqCust"; w.innerHTML = '<span>Customer</span><select></select><em></em>'; b.appendChild(w); w.querySelector("select").onchange = function(){ setCust(this.value); }; }
+  var names = Object.keys(CUSTS).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
+  if(ISCUST && names.indexOf(ISCUST) < 0) names.push(ISCUST);
+  w.querySelector("select").innerHTML = '<option value="">All customers</option>' + names.map(function(n){ return '<option' + (n === ISCUST ? " selected" : "") + '>' + esc(n) + '</option>'; }).join("");
+  w.querySelector("em").textContent = ISCUST ? "external data only" : "";
+  w.style.display = b.classList.contains("oninsp") ? "flex" : "none";
+}
+function startCustUi(){
+  var st = document.createElement("style");
+  st.textContent = "#yqCust{position:fixed;top:9px;left:50%;transform:translateX(-50%);z-index:2147483000;display:none;align-items:center;gap:8px;background:#fff;border:1px solid #cfd8c4;border-radius:10px;padding:4px 10px;font:600 12px system-ui,sans-serif;color:#28361f;box-shadow:0 2px 8px rgba(0,0,0,.15)}#yqCust select{font:700 13px system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:7px;padding:4px 6px;max-width:170px}#yqCust em{font-style:normal;font-weight:500;color:#6b7a60;max-width:220px;line-height:1.2}@media(max-width:700px){#yqCust{top:auto;bottom:10px}#yqCust em{display:none}}";
+  document.head.appendChild(st);
+  custUi(); new MutationObserver(custUi).observe(document.body, {attributes: true, attributeFilter: ["class"]});
+}
+function pickIsRoot(){
+  var all = FS.collection("ws").doc("_all");
+  ISCUST = lsGet("yqi_iscust") || "";
+  if(OWNER) return all.get().then(function(d){ if(!d.exists) return all.set({name: "All customers (Inspection Summary)", members: {}}); }).then(function(){ ISROOT = all; return FS.collection("ws").get(); }).then(function(q){ q.docs.forEach(function(d){ if(d.id !== "_all"){ var n = (d.data() || {}).name; if(n) CUSTS[n] = 1; } }); }).catch(function(){ ISROOT = ISROOT || null; });
+  return all.get().then(function(d){ ISROOT = d.exists ? all : null; }).catch(function(){ ISROOT = null; });
+}
+
+// ---------- free file storage: photos/PDF/Excel kept inside Firestore in 700 KB pieces ----------
+var BLOBP = {}, BLOBU = {}, CHUNK = 700000, MAXRAW = 9 * 1024 * 1024;
+function wsRoot(){ return FS.collection("ws").doc(WS); }
+function b64ToBytes(s){ var bin = atob(s), a = new Uint8Array(bin.length); for(var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+function bytesToB64(u){ var s = "", k = 0x8000; for(var i = 0; i < u.length; i += k) s += String.fromCharCode.apply(null, u.subarray(i, i + k)); return btoa(s); }
+function hex32(){ var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function(x){ return ("0" + x.toString(16)).slice(-2); }).join(""); }
+function getBlob(id){
+  if(BLOBP[id]) return BLOBP[id];
+  var r = wsRoot();
+  BLOBP[id] = r.collection("blob").doc(id).get().then(function(d){
+    if(!d.exists) throw new Error("This file is not in the company storage yet.");
+    var m = d.data(), ps = [];
+    for(var i = 0; i < (m.n || 1); i++) ps.push(r.collection("blobc").doc(id + "_" + i).get());
+    return Promise.all(ps).then(function(a){ return new Blob([b64ToBytes(a.map(function(x){ return x.exists ? x.data().d : ""; }).join(""))], {type: m.ct || "application/octet-stream"}); });
+  });
+  BLOBP[id].catch(function(){ delete BLOBP[id]; });
+  return BLOBP[id];
+}
+function blobUrl(id){ return BLOBU[id] ? Promise.resolve(BLOBU[id]) : getBlob(id).then(function(b){ return BLOBU[id] || (BLOBU[id] = URL.createObjectURL(b)); }); }
+function blobId(s){ var m = /^(?:https?:\/\/[^\/]+)?\/_blob\/([0-9a-f]{32})/.exec(String(s || "")); return m ? m[1] : null; }
+function shrinkImg(b){
+  if(!/^image\/(jpeg|png|webp)$/.test(b.type || "") || b.size < 350000 || !window.createImageBitmap) return Promise.resolve(b);
+  return createImageBitmap(b).then(function(bm){
+    function go(max, q){ var sc = Math.min(1, max / Math.max(bm.width, bm.height)), c = document.createElement("canvas"); c.width = Math.round(bm.width * sc); c.height = Math.round(bm.height * sc); var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(bm, 0, 0, c.width, c.height); return new Promise(function(res){ c.toBlob(res, "image/jpeg", q); }); }
+    return go(1800, .78).then(function(o){ return o && o.size > 900000 ? go(1400, .66) : o; }).then(function(o){ return o && o.size < b.size ? o : b; });
+  }).catch(function(){ return b; });
+}
+function makeAssets(){
+  return {
+    upload: function(b){
+      if(ROLE === "viewer") return Promise.reject(Object.assign(new Error("View only — ask the owner for edit access."), {code: "not_granted"}));
+      return shrinkImg(b).then(function(x){ return x.arrayBuffer().then(function(buf){
+        if(buf.byteLength > MAXRAW) throw Object.assign(new Error("File is too big for the free company version (max 9 MB)."), {code: "too_large"});
+        var id = hex32(), s = bytesToB64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), r = wsRoot(), ps = [];
+        for(var i = 0; i < n; i++) ps.push(r.collection("blobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
+        var ct = x.type || b.type || "application/octet-stream";
+        return Promise.all(ps).then(function(){ return r.collection("blob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: Date.now(), by: EMAIL}); }).then(function(){ BLOBP[id] = Promise.resolve(x); return {id: id, url: "/_blob/" + id, sizeBytes: buf.byteLength, contentType: ct}; });
+      }); });
+    },
+    list: function(){ return wsRoot().collection("blob").get().then(function(q){ var used = 0, a = q.docs.map(function(d){ var m = d.data(); used += m.size || 0; return {id: d.id, url: "/_blob/" + d.id, contentType: m.ct, sizeBytes: m.size}; }); return {assets: a, usage: {bytes: used}}; }); },
+    "delete": function(id){ var r = wsRoot(); return r.collection("blob").doc(id).get().then(function(d){ var n = d.exists ? d.data().n || 1 : 0, ps = []; for(var i = 0; i < n; i++) ps.push(r.collection("blobc").doc(id + "_" + i).delete()); return Promise.all(ps).then(function(){ return r.collection("blob").doc(id).delete(); }); }); }
+  };
+}
+// make <img src="/_blob/..."> and fetch("/_blob/...") work from the company storage (main page and the Inspection Summary frame)
+function hookWin(w){
+  if(!w || w.__yqiHooked) return; try{ w.__yqiHooked = true; }catch(e){ return; }
+  var of = w.fetch;
+  if(of) w.fetch = function(u, o){ var id = blobId(typeof u === "string" ? u : u && u.url); if(id) return getBlob(id).then(function(b){ return new Response(b, {status: 200, headers: {"content-type": b.type}}); }, function(){ return new Response("", {status: 404}); }); return of.apply(this, arguments); };
+  function fix(root){
+    try{
+      (root.querySelectorAll ? root.querySelectorAll("img[src*='/_blob/'],source[src*='/_blob/'],video[src*='/_blob/']") : []).forEach(function(im){
+        var id = blobId(im.getAttribute("src")); if(!id) return; im.__yb = id; im.setAttribute("data-u", "/_blob/" + id);
+        if(BLOBU[id]){ im.src = BLOBU[id]; return; } im.removeAttribute("src");
+        blobUrl(id).then(function(u){ im.src = u; }).catch(function(){ im.alt = im.alt || "file missing"; });
+      });
+      (root.querySelectorAll ? root.querySelectorAll("iframe") : []).forEach(function(f){ try{ var fw = f.contentWindow; if(fw && fw.document){ hookWin(fw); } f.addEventListener("load", function(){ try{ hookWin(f.contentWindow); }catch(e){} }); }catch(e){} });
+    }catch(e){}
+  }
+  var mo = new w.MutationObserver(function(list){ list.forEach(function(m){ if(m.type === "attributes") fix(m.target.parentNode || w.document); else m.addedNodes.forEach(function(n){ if(n.nodeType === 1){ fix(n.parentNode || n); } }); }); });
+  function start(){ fix(w.document); mo.observe(w.document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ["src"]}); }
+  if(w.document.readyState === "loading") w.document.addEventListener("DOMContentLoaded", start); else start();
+}
 function installClaude(){
-  var DBO = makeDb(), DLO = {save: function(o){ try{ saveBlob(o.filename || "download", o.data); return Promise.resolve(); }catch(e){ return Promise.reject(e); } }};
-  window.claude = {use: function(n){ if(n === "db") return Promise.resolve(DBO); if(n === "downloads") return Promise.resolve(DLO); return Promise.resolve(null); }};
+  var DBO = makeDb(), ASO = makeAssets(), DLO = {save: function(o){ try{ saveBlob(o.filename || "download", o.data); return Promise.resolve(); }catch(e){ return Promise.reject(e); } }};
+  window.claude = {use: function(n){ if(n === "db") return Promise.resolve(DBO); if(n === "downloads") return Promise.resolve(DLO); if(n === "assets") return Promise.resolve(ASO); return Promise.resolve(null); }};
+  window.__yqiBlobs = {getBlob: getBlob, blobUrl: blobUrl};
+  hookWin(window);
 }
 
 // ---------- open a workspace and start the app ----------
@@ -220,8 +326,8 @@ function openWs(w){
   FS.collection("ws").doc(WS).collection("seed").get().then(function(q){
     var sd = {}; q.docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
-    installClaude(); hideGate(); pill(); runApp();
-  }).catch(function(e){ msg(errTxt(e), 1); });
+    return pickIsRoot();
+  }).then(function(){ installClaude(); hideGate(); pill(); startCustUi(); runApp(); }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
@@ -911,7 +1017,7 @@ function land3d(){const root=document.querySelector('.l3');if(!root||root.__d3)r
 if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
 root.querySelectorAll('.l3c').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;c.style.setProperty('--ry',((x-.5)*14).toFixed(2)+'deg');c.style.setProperty('--rx',((.5-y)*10).toFixed(2)+'deg');c.style.setProperty('--mx',(x*100)+'%');c.style.setProperty('--my',(y*100)+'%');c.style.setProperty('--gl',1);c.classList.add('hv')});
 c.addEventListener('pointerleave',()=>{c.style.setProperty('--ry','0deg');c.style.setProperty('--rx','0deg');c.style.setProperty('--gl',0);c.classList.remove('hv')})})}
-function landing(){document.body.classList.add('onland');$('#app').className='lnd';const dt=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});$('#app').innerHTML=banner()+`<div class="l3"><svg class="l3w" viewBox="0 0 1600 300" preserveAspectRatio="none"><defs><linearGradient id="l3g" x1="0" x2="1"><stop offset="0" stop-color="#9ACD3A" stop-opacity=".55"/><stop offset=".6" stop-color="#5BA32A" stop-opacity=".25"/><stop offset="1" stop-color="#3F7D1F" stop-opacity="0"/></linearGradient></defs><path d="M0 130 C320 230 700 150 1100 250 L1600 300 L0 300Z" fill="url(#l3g)"/><path d="M0 170 C340 260 720 200 1200 290" fill="none" stroke="#7DB82E" stroke-width="2.5" opacity=".7"/></svg><div class="l3t"><div class="l3y"><img src="${LOGO.y}" alt="Yunus Textile for Life"></div><div class="l3q"><svg viewBox="0 0 118 62" aria-label="YQI"><g fill="none" stroke="#2F5A1A" stroke-width="11"><path d="M8 6 L26 29 L44 6"/><path d="M26 28 L26 52"/><circle cx="75" cy="28" r="16.5"/><path d="M107 6 L107 50"/></g><path d="M79 34 L92 52" stroke="#7DB82E" stroke-width="8" fill="none" stroke-linecap="round"/></svg></div></div><div class="l3m"><div class="l3l"><div class="l3cube" aria-hidden="true"><div class="cb"><div class="cf f1">Y</div><div class="cf f2">I</div><div class="cf f3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><div class="cf f4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></div><div class="cf f5">Q</div><div class="cf f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div></div></div><h1>Yunus Quality <em>Intelligence</em></h1><p>Quality Assurance Management System</p><div class="l3b"></div><div class="l3f"><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></i>Ensure Quality</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></i>Track Performance</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></i>Drive Improvement</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></i>Build Excellence</span></div></div><div class="l3d"></div><div class="l3r"><button class="l3c" data-a="open" data-v="bed"><span class="l3i"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19V6"/><path d="M3 15h18v4"/><path d="M21 15v-2.5A3.5 3.5 0 0 0 17.5 9H11v6"/><circle cx="7" cy="11.5" r="1.7"/></svg></span><span class="l3x"><b>${esc((window.__YQI_WS||{}).name||"Bedsure")}</b><i>Quality Intelligence</i></span><span class="l3a">›</span></button><button class="l3c" data-a="open" data-v="insp"><span class="l3i"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11"/><path d="M10 20V5"/><path d="M16 20v-6"/><path d="M3 20h18"/></svg></span><span class="l3x"><b>Inspection Summary</b><i>Data and Performance</i></span><span class="l3a">›</span></button><button class="l3c" data-a="open" data-v="stu"><span class="l3i"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9z"/><path d="M12 11l8-4.5"/><path d="M12 11v9"/><path d="M12 11L4 6.5"/></svg></span><span class="l3x"><b>Intelligence</b><i>3D Article Studio</i></span><span class="l3a">›</span></button>${VIEW&&!window.__SEL?'':``}</div></div><div class="l3z"><span class="l3p">✔ Quality First</span><span class="l3v"><em>Developed by</em><b>Hamza Khan</b><u>YQI Platform</u></span><span>${dt} &nbsp;·&nbsp; Better Quality. Brighter Future.</span></div></div>`;window.scrollTo(0,0);try{land3d()}catch(e){}}
+function landing(){document.body.classList.add('onland');$('#app').className='lnd';const dt=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});$('#app').innerHTML=banner()+`<div class="l3"><svg class="l3w" viewBox="0 0 1600 300" preserveAspectRatio="none"><defs><linearGradient id="l3g" x1="0" x2="1"><stop offset="0" stop-color="#9ACD3A" stop-opacity=".55"/><stop offset=".6" stop-color="#5BA32A" stop-opacity=".25"/><stop offset="1" stop-color="#3F7D1F" stop-opacity="0"/></linearGradient></defs><path d="M0 130 C320 230 700 150 1100 250 L1600 300 L0 300Z" fill="url(#l3g)"/><path d="M0 170 C340 260 720 200 1200 290" fill="none" stroke="#7DB82E" stroke-width="2.5" opacity=".7"/></svg><div class="l3t"><div class="l3y"><img src="${LOGO.y}" alt="Yunus Textile for Life"></div><div class="l3q"><svg viewBox="0 0 118 62" aria-label="YQI"><g fill="none" stroke="#2F5A1A" stroke-width="11"><path d="M8 6 L26 29 L44 6"/><path d="M26 28 L26 52"/><circle cx="75" cy="28" r="16.5"/><path d="M107 6 L107 50"/></g><path d="M79 34 L92 52" stroke="#7DB82E" stroke-width="8" fill="none" stroke-linecap="round"/></svg></div></div><div class="l3m"><div class="l3l"><div class="l3cube" aria-hidden="true"><div class="cb"><div class="cf f1">Y</div><div class="cf f2">I</div><div class="cf f3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><div class="cf f4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></div><div class="cf f5">Q</div><div class="cf f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div></div></div><h1>Yunus Quality <em>Intelligence</em></h1><p>Quality Assurance Management System</p><div class="l3b"></div><div class="l3f"><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></i>Ensure Quality</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></i>Track Performance</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></i>Drive Improvement</span><span><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></i>Build Excellence</span></div></div><div class="l3d"></div><div class="l3r"><button class="l3c" data-a="open" data-v="bed"><span class="l3i"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19V6"/><path d="M3 15h18v4"/><path d="M21 15v-2.5A3.5 3.5 0 0 0 17.5 9H11v6"/><circle cx="7" cy="11.5" r="1.7"/></svg></span><span class="l3x"><b>${esc((window.__YQI_WS||{}).name||"Bedsure")}</b><i>Quality Intelligence</i></span><span class="l3a">›</span></button><button class="l3c" data-a="open" data-v="insp"><span class="l3i"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11"/><path d="M10 20V5"/><path d="M16 20v-6"/><path d="M3 20h18"/></svg></span><span class="l3x"><b>Inspection Summary</b><i>Data and Performance</i></span><span class="l3a">›</span></button>${VIEW&&!window.__SEL?'':``}</div></div><div class="l3z"><span class="l3p">✔ Quality First</span><span class="l3v"><em>Developed by</em><b>Hamza Khan</b><u>YQI Platform</u></span><span>${dt} &nbsp;·&nbsp; Better Quality. Brighter Future.</span></div></div>`;window.scrollTo(0,0);try{land3d()}catch(e){}}
 function stuView(){if($('#app').className==='insp'&&$('#stuHost'))return;$('#app').className='insp';$('#app').innerHTML=`<div class="ib"><button data-a="gohome">‹ Yunus Home</button><span>Intelligence · 3D Article Studio</span></div><div id="stuHost" style="flex:1;min-height:0;position:relative"></div>`;try{window.STU.mount($('#stuHost'),{rows:allRows(),noTitle:1})}catch(e){$('#stuHost').textContent='3D Studio could not start: '+e.message}}
 function inspView(){if($('#app').className==='insp'&&$('#app').querySelector('iframe.if'))return;$('#app').className='insp';$('#app').innerHTML=`<div class="ib"><button data-a="gohome">‹ Yunus Home</button><span>Inspection Summary</span></div><iframe class="if" title="Inspection Summary"></iframe>`;$('iframe.if').srcdoc=INSPDOC}
 
@@ -1019,7 +1125,7 @@ setTimeout(()=>{try{io.disconnect()}catch(e){}jobs.forEach(j=>{if(!j.done){}})},
 function fin(el,an,prop){an.onfinish=()=>{try{an.cancel()}catch(e){}el.style[prop]=''}}
 function motion(){try{let ct='',it='';try{ct=S.view==='cut'?CU().tab:''}catch(e){}try{it=S.view==='int'?IN().tab:''}catch(e){}const k=[S.view,S.tab||'',ct,it,S.prog||'',S.shp||''].join('|');if(k===_mk)return;_mk=k;const a=document.getElementById('app');if(!a)return;a.classList.remove('mot');void a.offsetWidth;a.classList.add('mot');clearTimeout(window.__mt);window.__mt=setTimeout(()=>{const x=document.getElementById('app');x&&x.classList.remove('mot')},1500);cuAuto(a,'.kpis b,.kpg b,.kpi b,.lt b,.mgt,.l3x b');try{gfx(a)}catch(e){}}catch(e){}}
 function render(){if(S.view==='land'&&VIEW&&window.__SEL){}if(S.view==='pre'){document.body.classList.remove('onland','oninsp');document.body.classList.add('oncut');preView()}else render0();try{preBtn()}catch(e){}try{motion()}catch(e){}try{if(VIEW&&window.__SEL&&S.view==='land')document.querySelectorAll('.l3c').forEach(b=>{if(window.__SEL.indexOf(b.dataset.v)<0)b.remove()})}catch(e){}try{const a=document.getElementById('app');if(a&&!a.querySelector('.devby')){const d=document.createElement('div');d.className='devby';d.innerHTML='Developed by <b>Hamza Khan</b> | Yunus Quality Intelligence';a.appendChild(d)}}catch(e){}}
-function render0(){document.body.classList.toggle('onland',S.view==='land');document.body.classList.toggle('oninsp',S.view==='insp'||S.view==='stu');document.body.classList.toggle('oncut',S.view==='cut'||S.view==='int');if(S.view==='land'){landing();return}if(S.view==='insp'){inspView();return}if(S.view==='stu'){stuView();return}if(S.view==='cut'||S.view==='int'){S.view='land';landing();return}const sy=window.scrollY;const m={home:home,programs:programs,activity:activity,report:report,orders:orders,plans:plans}[S.tab]();
+function render0(){document.body.classList.toggle('onland',S.view==='land');document.body.classList.toggle('oninsp',S.view==='insp'||S.view==='stu');document.body.classList.toggle('oncut',S.view==='cut'||S.view==='int');if(S.view==='land'){landing();return}if(S.view==='insp'){inspView();return}if(S.view==='stu'){S.view='land';landing();return}if(S.view==='cut'||S.view==='int'){S.view='land';landing();return}const sy=window.scrollY;const m={home:home,programs:programs,activity:activity,report:report,orders:orders,plans:plans}[S.tab]();
 $('#app').className='tab-'+S.tab;$('#app').innerHTML=banner()+m+`<div class="nav"><div class="navh"><div class="ylogo"><img src="${LOGO.y}" alt="Yunus Textile for Life"></div></div>${[['home','Home'],['programs','Programs'],['orders','Orders'],['plans','Plans'],['activity','Activity'],['report','Report']].map(t=>`<button class="${S.tab===t[0]?'on':''}" data-a="tab" data-t="${t[0]}">${t[1]}</button>`).join('')}<button class="xl" data-a="gohome"><span class="xf">‹ Yunus Home</span><span class="xs">‹ Home</span></button><div class="navft">${themeHtml(1)}</div></div><div class="ftr">${themeHtml()}</div>`;fixImgs();window.scrollTo(0,sy)}
 function banner(){if(VIEW)return `<div class="banner" style="background:var(--nvb);color:var(--nvc)">View-only copy. Data as of ${SNAPDATE}. Nothing can be edited here.</div>`;if(location.protocol==='file:')return `<div class="banner">You opened a saved copy of this app from your computer. Uploads, saving and spec files do not work here. Open this link instead: https://claude.ai/artifact/EECkRa7NSpJUxEZG6Nakzw</div>`;if(ST==='nodb')return `<div class="banner">View only. Saving is off in this view. Open the link in Chrome while signed in to Claude with access to this app.</div>`;if(ST==='noas')return `<div class="banner">Company version: photo and file uploads are off (free plan). Everything else saves normally.</div>`;return ''}
 const AMZ=__S("AMZ",{});
