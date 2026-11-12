@@ -429,8 +429,15 @@ function showHome(on){
   if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
 }
 function goDirect(){
-  if(ssGet("yqi_direct") !== "bed") return; ssSet("yqi_direct", "");
-  var n = 0; (function f(){ var b = document.querySelector('[data-v="bed"]'); if(b && document.body.classList.contains("onland")){ b.click(); return; } if(++n < 60) setTimeout(f, 150); })();
+  var fresh = ssGet("yqi_direct") === "bed"; ssSet("yqi_direct", "");
+  if(!HASALL) return;
+  var back = function(){ ssSet("yqi_cur", ""); lsSet(LSK, "_all"); showGate('<h1>Opening all customers…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); };
+  var n = 0, armed = false;
+  (function f(){ var b = document.querySelector('[data-v="bed"]'), land = document.body.classList.contains("onland");
+    if(b && land){ b.click(); setTimeout(function(){ armed = true; }, 400); return; }
+    if(!land && document.getElementById("app") && document.getElementById("app").innerHTML){ armed = true; return; }
+    if(++n < 80) setTimeout(f, 150); })();
+  new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
 function startHome(){
   showHome(true);
