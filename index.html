@@ -21,6 +21,8 @@ function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); }
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+function ssGet(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
+function ssSet(k, v){ try{ sessionStorage.setItem(k, v); }catch(e){} }
 function slug(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "ws"; }
 function loadJs(u){ return new Promise(function(res, rej){ var s = document.createElement("script"); s.src = u; s.onload = res; s.onerror = function(){ rej(new Error("Could not load " + u)); }; document.head.appendChild(s); }); }
 // Firestore cannot store arrays inside arrays or undefined values: encode on write, decode on read.
@@ -100,7 +102,7 @@ function afterLogin(u){
     var allW = list.filter(function(w){ return w.id === "_all"; })[0];
     if(OWNER && !allW) allW = {id: "_all", name: "All customers", role: "owner"};
     HASALL = !!allW;
-    if(allW && (!want || want === "_all" || !pick)) return openWs({id: "_all", name: "All customers", role: allW.role});
+    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
     if(pick) return openWs(pick);
     if(list.length === 1 && !OWNER) return openWs(list[0]);
     chooseWs(list);
@@ -322,7 +324,7 @@ function renderHome(){
   x += '<div class="cd"><h3>Failed inspections</h3>' + (fl.length ? '<table><tr><th>Date</th><th>Customer</th><th>PO / YTM</th><th class="hide-m">Lot</th><th class="hide-m">Article</th><th>Result</th></tr>' + fl.map(function(r){ return '<tr' + (r.ws ? ' class="cl" data-ws="' + esc(r.ws) + '"' : '') + '><td>' + esc(r.date.slice(8, 10) + "-" + r.date.slice(5, 7)) + '</td><td><b>' + esc(r.cust) + '</b></td><td>' + esc(r.po) + '</td><td class="hide-m">' + esc(r.lot) + '</td><td class="hide-m">' + esc(r.art) + '</td><td class="hbad">' + esc(r.res) + '</td></tr>'; }).join("") + '</table>' : '<div class="em">No failed inspections in this period.</div>') + '</div></div>';
   h.innerHTML = x; bindHome();
 }
-function openCust(id){ if(!id) return; lsSet(LSK, id); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
+function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); showGate('<h1>Opening…</h1><div class="sub">' + esc(EMAIL) + '</div>'); location.reload(); }
 function bindHome(){
   var h = $("yqHome"); if(!h) return;
   h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; lsSet("yqi_hper", HPER); renderHome(); }; });
@@ -413,7 +415,7 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
-  WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS);
+  WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
   showGate('<h1>Opening ' + esc(WSNAME) + '…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
   FS.collection("ws").doc(WS).collection("seed").get().then(function(q){
     var sd = {}; q.docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
@@ -425,9 +427,9 @@ function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
   p.innerHTML = '<b>' + esc(WSNAME) + '</b><span>' + (ROLE === "viewer" ? "view only" : ROLE) + '</span><a id="yqSw">' + (HASALL ? (WS === "_all" ? "customers" : "home") : "switch") + '</a>' + (OWNER ? '<a id="yqAm">admin</a>' : '') + '<a id="yqSo">sign out</a>';
   document.body.appendChild(p);
-  $("yqSw").onclick = function(){ if(WS === "_all"){ showHome(true); return; } lsSet(LSK, HASALL ? "_all" : ""); location.reload(); };
+  $("yqSw").onclick = function(){ if(WS === "_all"){ showHome(true); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
   if($("yqAm")) $("yqAm").onclick = function(){ lsSet(LSK, ""); lsSet("yqi_admin", "1"); location.reload(); };
-  $("yqSo").onclick = function(){ lsSet(LSK, ""); AUTH.signOut().then(function(){ location.reload(); }); };
+  $("yqSo").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); AUTH.signOut().then(function(){ location.reload(); }); };
 }
 var started = false;
 function runApp(){
