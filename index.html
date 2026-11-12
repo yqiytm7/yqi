@@ -224,9 +224,20 @@ function makeDb(){
     collection: function(c){ var cr = col(c); return {id: String(c), doc: function(i){ return doc(i ? cr.doc(String(i)) : cr.doc()); },
       add: function(d){ if(ROLE === "viewer") return viewOnly(); return cr.add(enc(d)).then(function(r){ return doc(r); }); },
       get: function(){ return cr.get().then(/^is_/.test(String(c)) ? qsx : qs); },
-      onSnapshot: function(cb, er){ var L = {c: String(c), cb: cb, q: null}; if(/^is_/.test(L.c)) ISL.push(L); return cr.onSnapshot(function(q){ L.q = /^is_/.test(L.c) ? qsx(q) : qs(q); if(/^is_/.test(L.c)){ noteCust(L.c, L.q); cb(isFilter(L.c, L.q)); homeSoon(); } else cb(L.q); }, er || function(){}); }}; },
+      onSnapshot: function(cb, er){ var L = {c: String(c), cb: cb, q: null};
+        if(/^is_/.test(L.c)){ ISL.push(L); return hubSub(L.c, cr, function(q){ L.q = qsx(q); noteCust(L.c, L.q); cb(isFilter(L.c, L.q)); homeSoon(); }, er); }
+        return cr.onSnapshot(function(q){ L.q = qs(q); cb(L.q); }, er || function(){}); }}; },
     doc: function(p){ var a = String(p).split("/"); return doc(col(a[0]).doc(a[1])); }
   };
+}
+// one live connection per Inspection Summary collection, shared by the front page and the app (each document is read once)
+var HUB = {};
+function hubSub(c, ref, fn, er){
+  var H = HUB[c] = HUB[c] || {fns: [], last: null, un: null};
+  H.fns.push(fn);
+  if(H.last) setTimeout(function(){ if(H.fns.indexOf(fn) >= 0) fn(H.last); }, 0);
+  if(!H.un) H.un = ref.onSnapshot(function(q){ H.last = q; H.fns.slice().forEach(function(f){ try{ f(q); }catch(e){} }); }, er || function(){});
+  return function(){ var i = H.fns.indexOf(fn); if(i >= 0) H.fns.splice(i, 1); };
 }
 // ---------- customer names: the same buyer is written in different ways in different files ----------
 var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA"};
@@ -282,7 +293,8 @@ function pickIsRoot(){
 // ---------- Home: all customers overview (opens from the "All customers" workspace) ----------
 var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper3") || "6m", HDAY = "", HFROM = ssGet("yqi_hf") || "", HTO = ssGet("yqi_ht") || "";
 function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/pend/i.test(r)) return "pend"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
-function ymd(d){ return d.toISOString().slice(0, 10); }
+function ymd(d){ return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+function ymdU(d){ return d.toISOString().slice(0, 10); }
 function snap1(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(q){ if(ok) return; ok = true; res(q); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res({docs: []}); } }); }catch(e){ res({docs: []}); } }); }
 var KIND = function(s){ s = String(s || ""); return /fail|await/i.test(s) ? "fl" : /1st/i.test(s) ? "p1" : /re-?insp/i.test(s) ? "re" : /reject/i.test(s) ? "rej" : /not insp|not offer/i.test(s) ? "ni" : /pass|ok|accept/i.test(s) ? "p1" : "ni"; };
 function snapDoc(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(d){ if(ok) return; ok = true; res(d); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res(null); } }); }catch(e){ res(null); } }); }
@@ -312,12 +324,21 @@ function loadHomeTry(n){
 function isRows(c){ var L = ISL.filter(function(x){ return x.c === c && x.q; })[0]; return L ? L.q.docs.map(function(d){ var x = d.data() || {}; x._id = d.id; return x; }) : null; }
 // one inspection = one shipping plan (customer workspace) or one YTM / PO (Inspection Summary)
 function buildLots(R, ext, wsHas){
-  var lots = [], m = {};
+  var lots = [], m = {}, byPo = {};
+  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !wsHas[ckey(c)] || !x.po) return; String(x.po).split(/[,\/;]+/).forEach(function(p){ p = p.trim().toUpperCase(); if(p) (byPo[ckey(c) + "|" + p] = byPo[ckey(c) + "|" + p] || []).push(x); }); });
   R.forEach(function(r){ var key = r.cust + "|" + r.p, q = m[key];
-    if(!q){ q = m[key] = {cust: r.cust, ws: r.ws, id: r.p, kind: "plan", date: "", last: "", n: 0, p1: 0, re: 0, bad: 0, ni: 0, rows: [], sample: 0, major: 0, dl: {}}; lots.push(q); }
+    if(!q){ q = m[key] = {cust: r.cust, ws: r.ws, id: r.p, lbl: r.p, kind: "plan", date: "", last: "", n: 0, p1: 0, re: 0, bad: 0, ni: 0, rows: [], sample: 0, major: 0, dl: {}, w: 1}; lots.push(q); }
     q.n++; q.rows.push(r); if(r.k === "p1") q.p1++; else if(r.k === "re") q.re++; else if(r.k === "ni") q.ni++; else q.bad++;
     if(r.date && (!q.date || r.date < q.date)) q.date = r.date; if(r.date > q.last) q.last = r.date; });
-  lots.forEach(function(q){ q.first = (q.re || q.bad) ? "fail" : q.ni && !q.p1 ? "pend" : "pass"; q.final = q.bad ? "fail" : q.re ? "repass" : q.ni && !q.p1 ? "pend" : "pass"; });
+  lots.forEach(function(q){
+    q.first = (q.re || q.bad) ? "fail" : q.ni && !q.p1 ? "pend" : "pass"; q.final = q.bad ? "fail" : q.re ? "repass" : q.ni && !q.p1 ? "pend" : "pass";
+    // the external inspection records (Inspection Summary) give the real inspection day and the 1st-go result of the shipping plan
+    var h = (byPo[ckey(q.cust) + "|" + String(q.id).toUpperCase()] || []).slice().sort(function(a, b){ return (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1; });
+    if(h.length){ q.hist = h; q.date = h[0].date; if(h[h.length - 1].date > q.last) q.last = h[h.length - 1].date;
+      var f0 = rkind(h[0].result), fl = rkind(h[h.length - 1].result);
+      if(f0 === "fail"){ q.first = "fail"; q.final = q.bad && fl !== "pass" ? "fail" : (fl === "pass" || !q.bad) ? "repass" : "fail"; }
+      h.forEach(function(r){ if(r.sample){ q.sample += +r.sample || 0; q.major += +r.major || 0; } (r.dlist || []).forEach(function(d){ if(d && d.n) q.dl[d.n] = (q.dl[d.n] || 0) + (+d.q || 1); }); }); }
+  });
   // Inspection Summary: every record is one inspection (count = number of inspections it stands for)
   var by = {};
   (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || wsHas[ckey(c)]) return; var y = String(x.ytm || "").trim(); if(y) (by[c + "|" + y] = by[c + "|" + y] || []).push(x); });
@@ -342,29 +363,61 @@ function homeRange(){
 }
 function homeCss(){
   if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
-  st.textContent = "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:radial-gradient(1200px 500px at 85% -10%,#e3f0cf,transparent),#f3f6ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17}" +
-  "#yqHome .hw{max-width:1280px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
-  "#yqHome .per{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px Manrope,system-ui,sans-serif;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}#yqHome .per input{width:auto!important;min-width:0;max-width:140px;margin:0;border:1px solid #cfd8c4;border-radius:9px;padding:5px 7px;font:600 12px Manrope,system-ui,sans-serif;color:#33452a;background:#fff}#yqHome .per .dl{font-size:11px;color:#62705a;font-weight:700}" +
-  "#yqHome .sec{font:800 13px Manrope,system-ui,sans-serif;color:#62705a;text-transform:uppercase;letter-spacing:.06em;margin:4px 2px 8px}" +
-  "#yqHome .kp{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}#yqHome .k{background:#fff;border:1px solid #e1e8d8;border-radius:14px;padding:12px 14px}#yqHome .k b{display:block;font:800 24px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:600}#yqHome .k i{font-style:normal;font-size:11.5px;color:#62705a}" +
-  "#yqHome .g2{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;margin-bottom:16px;overflow-x:auto}#yqHome .g2 .cd{margin-bottom:0}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif}" +
-  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8;white-space:nowrap}#yqHome td{padding:8px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td,#yqHome tr.on td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
-  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:50px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}#yqHome .hw8{color:#a66b00;font-weight:800}" +
-  "#yqHome .tiles{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap}#yqHome button.tl{cursor:pointer}#yqHome button.tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 17px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 17px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:12.5px}#yqHome .tl select{font:700 14px Manrope,system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;min-width:150px;flex:1}" +
-  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}" +
-  "#yqHome .pl{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}#yqHome .pl.pass{background:#e4f3d8;color:#2f7d1f}#yqHome .pl.repass{background:#e3efe9;color:#1f6b4f}#yqHome .pl.fail{background:#fbe3e0;color:#b3261e}#yqHome .pl.pend{background:#fff1d6;color:#8a5a00}" +
-  "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px;flex-wrap:wrap}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
-  "#yqHome .dfl{display:flex;flex-direction:column;gap:7px}#yqHome .dfl div{display:grid;grid-template-columns:1fr 110px 36px;gap:8px;align-items:center;font-size:13px}" +
-  "@media(max-width:1100px){#yqHome .kp{grid-template-columns:repeat(3,1fr)}}@media(max-width:980px){#yqHome .tiles{grid-template-columns:1fr}#yqHome .g2{grid-template-columns:1fr}#yqHome .per{margin-left:0;justify-content:flex-start}#yqHome h1{font-size:22px}}@media(max-width:700px){#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .hide-m{display:none}}";
+  st.textContent = [
+  "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:#f2f5ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17;-webkit-overflow-scrolling:touch}",
+  "#yqHome *{box-sizing:border-box}#yqHome .hw{max-width:1280px;margin:0 auto;padding:18px 16px 70px}",
+  "#yqHome .hero{position:relative;overflow:hidden;border-radius:24px;padding:34px 26px 22px;color:#fff;background:radial-gradient(900px 380px at 88% -20%,rgba(160,214,86,.35),transparent 60%),radial-gradient(600px 300px at -10% 120%,rgba(91,163,42,.35),transparent 60%),linear-gradient(135deg,#0d2416 0%,#173d20 45%,#2F5A1A 100%);box-shadow:0 18px 40px rgba(18,48,24,.25)}",
+  "#yqHome .hero:after{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:18px 18px;pointer-events:none}",
+  "#yqHome .hrow{position:relative;z-index:1;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}#yqHome .hl{flex:1;min-width:280px}",
+  "#yqHome .eyebrow{font:800 11px Manrope,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#bfe58b}#yqHome h1{font:800 34px Manrope,system-ui,sans-serif;margin:6px 0 4px;letter-spacing:-.8px;color:#fff}#yqHome h1 em{font-style:normal;color:#a6dd5e}",
+  "#yqHome .hsub{color:#d6e8c8;font-size:13.5px}#yqHome .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px;align-items:center}",
+  "#yqHome .chips button{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#eaf5df;border-radius:999px;padding:7px 13px;font:700 12px Manrope,sans-serif;cursor:pointer;transition:.15s}#yqHome .chips button:hover{background:rgba(255,255,255,.18)}#yqHome .chips button.on{background:#a6dd5e;color:#10260f;border-color:#a6dd5e}",
+  "#yqHome .chips label{display:flex;align-items:center;gap:5px;font:700 11px Manrope,sans-serif;color:#cfe3bf;margin-left:4px}#yqHome .chips input{width:auto!important;max-width:150px;height:auto!important;min-height:0!important;line-height:1.2;margin:0;border:1px solid rgba(255,255,255,.3);border-radius:9px;padding:5px 7px;font:600 12px Manrope,sans-serif;color:#10260f;background:#f4faee}",
+  "#yqHome .ring{position:relative;width:170px;height:170px;flex:none}#yqHome .ring svg{width:170px;height:170px;transform:rotate(-90deg)}#yqHome .ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}#yqHome .ring .c b{font:800 34px Manrope,sans-serif}#yqHome .ring .c span{font-size:11.5px;color:#cfe3bf;font-weight:700}",
+  "#yqHome .rleg{display:flex;flex-direction:column;gap:8px;justify-content:center;font-size:12.5px;color:#e3f0d8;min-width:170px}#yqHome .rleg div{display:flex;align-items:center;gap:8px;cursor:pointer}#yqHome .rleg i{width:11px;height:11px;border-radius:4px;flex:none}#yqHome .rleg b{margin-left:auto;font-weight:800;color:#fff}",
+  "#yqHome .big{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}#yqHome .big div{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:12px 14px;backdrop-filter:blur(4px)}#yqHome .big span{font-size:11.5px;color:#cfe3bf;font-weight:700;text-transform:uppercase;letter-spacing:.06em}#yqHome .big b{display:block;font:800 28px Manrope,sans-serif;margin-top:4px;color:#fff}#yqHome .big i{font-style:normal;font-size:12px;color:#cfe3bf}",
+  "#yqHome .tiles{display:grid;grid-template-columns:1.3fr 1fr 1.15fr;gap:14px;margin:16px 0}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:18px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap;box-shadow:0 4px 14px rgba(30,60,20,.05)}#yqHome button.tl{cursor:pointer;transition:.15s}#yqHome button.tl:hover{transform:translateY(-2px);border-color:#7DB82E;box-shadow:0 10px 24px rgba(63,125,31,.14)}",
+  "#yqHome .tl .ic{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#8ccb3c,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 16px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 16px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:12.5px}#yqHome .tl select{font:700 14px Manrope,system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:10px;padding:9px 10px;min-width:150px;flex:1;background:#fbfdf8}",
+  "#yqHome .ub{background:linear-gradient(135deg,#3d7322,#2F5A1A);color:#fff;border:0;border-radius:10px;padding:10px 15px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 6px 14px rgba(47,90,26,.25)}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}",
+  "#yqHome .yqsec{display:flex!important;justify-content:flex-start!important;align-items:center;gap:8px;font:800 12.5px Manrope,system-ui,sans-serif;color:#4c5d43;text-transform:uppercase;letter-spacing:.08em;margin:8px 2px 10px}#yqHome .yqsec:before{content:'';width:4px;height:16px;border-radius:3px;background:#5BA32A}",
+  "#yqHome .kp{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}#yqHome .k{position:relative;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:13px 14px 12px;overflow:hidden;box-shadow:0 4px 14px rgba(30,60,20,.05);cursor:default;transition:.15s}#yqHome .k:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(30,60,20,.1)}#yqHome .k:before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ac,#5BA32A)}",
+  "#yqHome .k b{display:block;font:800 25px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:700}#yqHome .k i{font-style:normal;font-size:11.5px;color:#7a8872}#yqHome .k[data-go]{cursor:pointer}",
+  "#yqHome .g2{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:18px;padding:16px;margin-bottom:16px;overflow-x:auto;box-shadow:0 4px 14px rgba(30,60,20,.05)}#yqHome .g2 .cd{margin-bottom:0}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif;display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:7px 8px;border-bottom:1px solid #e1e8d8;white-space:nowrap}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td,#yqHome tr.on td{background:#f2f8ea}#yqHome .op{color:#7DB82E;font-weight:800;white-space:nowrap}",
+  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:50px}#yqHome .bar i{display:block;height:100%;background:linear-gradient(90deg,#7DB82E,#3d7322)}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}#yqHome .hw8{color:#a66b00;font-weight:800}",
+  "#yqHome .pl{display:inline-block;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:800;white-space:nowrap}#yqHome .pl.pass{background:#e4f3d8;color:#2f7d1f}#yqHome .pl.repass{background:#dff0ea;color:#16654a}#yqHome .pl.fail{background:#fbe3e0;color:#b3261e}#yqHome .pl.pend{background:#fff1d6;color:#8a5a00}#yqHome .pl.reins{background:#eef1f6;color:#3d4a66}",
+  "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px;flex-wrap:wrap}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}",
+  "#yqHome .chart rect{cursor:pointer;transition:opacity .15s}#yqHome .chart:hover rect{opacity:.55}#yqHome .chart rect:hover{opacity:1}",
+  "#yqHome .dfl{display:flex;flex-direction:column;gap:7px}#yqHome .dfl>div{display:grid;grid-template-columns:1fr 110px 36px;gap:8px;align-items:center;font-size:13px}",
+  "#yqHome .hbars>div{display:grid;grid-template-columns:120px 1fr 44px;gap:8px;align-items:center;font-size:12.5px;margin-bottom:7px;cursor:pointer}#yqHome .hbars .bar{height:10px}",
+  "#yqTip{position:fixed;z-index:2147483600;pointer-events:none;max-width:320px;background:#10260f;color:#eaf5df;border-radius:12px;padding:9px 11px;font:12.5px/1.45 Manrope,system-ui,sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.3);display:none;white-space:pre-line}#yqTip b{color:#a6dd5e}",
+  "@keyframes yqIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}#yqHome.anim .k,#yqHome.anim .cd,#yqHome.anim .tl{animation:yqIn .45s ease both}",
+  "@media(max-width:1100px){#yqHome .kp{grid-template-columns:repeat(3,1fr)}}@media(max-width:980px){#yqHome .tiles{grid-template-columns:1fr}#yqHome .g2{grid-template-columns:1fr}#yqHome .big{grid-template-columns:repeat(2,1fr)}}",
+  "@media(max-width:700px){#yqHome .hero{padding:18px 16px;border-radius:18px}#yqHome h1{font-size:25px}#yqHome .ring,#yqHome .ring svg{width:130px;height:130px}#yqHome .ring .c b{font-size:26px}#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .hide-m{display:none}#yqHome .big b{font-size:22px}#yqHome .rleg{min-width:0;flex:1}}"
+  ].join("");
   document.head.appendChild(st);
 }
-var HCUST = ssGet("yqi_hcust") || "", HMSG = "", HPLAN = "";
+var HCUST = ssGet("yqi_hcust") || "", HMSG = "", HPLAN = "", HFILT = "", HANIM = true;
 function pc(a, b){ return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; }
 function dmy(d){ return d && d.length >= 10 ? d.slice(8, 10) + "-" + d.slice(5, 7) + "-" + d.slice(2, 4) : "—"; }
 function hTable(head, rows){ return '<table><tr>' + head.map(function(h){ return '<th' + (h[1] ? ' class="hide-m"' : '') + '>' + h[0] + '</th>'; }).join("") + '</tr>' + rows.join("") + '</table>'; }
 function barc(a, b){ return b ? '<div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(a / b * 100) + '%"></i></div>' + pc(a, b) + '</div>' : '—'; }
-var PST = {pass: "Passed 1st go", repass: "Passed after re-inspection", fail: "Failed", pend: "Not inspected yet"};
-function kpi(t, v, cls, sub){ return '<div class="k"><span>' + t + '</span><b' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</b><i>' + sub + '</i></div>'; }
+var PST = {pass: "Passed 1st go", repass: "Passed after re-inspection", fail: "Failed", pend: "Not inspected yet", reins: "Re-inspection", all: "All inspections"};
+function tip(t){ return ' data-tip="' + esc(t) + '"'; }
+function kpi(t, v, ac, sub, tp, go){ return '<div class="k" style="--ac:' + (ac || "#5BA32A") + '"' + (tp ? tip(tp) : "") + (go ? ' data-go="' + go + '"' : "") + '><span>' + t + '</span><b>' + v + '</b><i>' + sub + '</i></div>'; }
+function lotTip(q){
+  var s = q.cust + " · " + (q.kind === "plan" ? "Shipping plan " + q.id : q.lbl) + "\n" + dmy(q.date) + (q.last && q.last !== q.date ? " → " + dmy(q.last) : "") + " · " + PST[q.first === "reins" ? "reins" : q.final];
+  if(q.kind === "plan") s += "\n" + q.n + " articles · " + q.p1 + " passed 1st go" + (q.re ? " · " + q.re + " re-inspected" : "") + (q.bad ? " · " + q.bad + " failed" : "") + (q.ni ? " · " + q.ni + " not inspected" : "");
+  if(q.hist) s += "\n" + q.hist.map(function(r){ return dmy(r.date) + " " + r.result + (r.major != null && r.sample ? " (" + r.major + "/" + r.sample + ")" : ""); }).join("\n");
+  if(q.kind === "is"){ if(q.art) s += "\n" + q.art; if(q.sample) s += "\nSample " + q.sample + " · major " + q.major; }
+  var d = Object.keys(q.dl || {}).sort(function(a, b){ return q.dl[b] - q.dl[a]; }).slice(0, 4); if(d.length) s += "\nDefects: " + d.map(function(k){ return k + " " + q.dl[k]; }).join(", ");
+  return s + "\nClick for details";
+}
+function ring(segs, total){
+  var R = 70, C = 2 * Math.PI * R, off = 0, s = '<svg viewBox="0 0 170 170"><circle cx="85" cy="85" r="' + R + '" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="16"/>';
+  segs.forEach(function(g){ if(!g.v || !total) return; var L = g.v / total * C; s += '<circle cx="85" cy="85" r="' + R + '" fill="none" stroke="' + g.c + '" stroke-width="16" stroke-dasharray="' + L + ' ' + (C - L) + '" stroke-dashoffset="' + (-off) + '" stroke-linecap="butt"><title>' + esc(g.t + ": " + g.v) + '</title></circle>'; off += L; });
+  return s + '</svg>';
+}
 function renderHome(){
   var h = $("yqHome"); if(!h) return;
   var sc = h.scrollTop, rg = homeRange(), today = ymd(new Date());
@@ -377,75 +430,102 @@ function renderHome(){
   var nk = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
   if(HCUST && !(HCUST in names) && HDATA && EXT) HCUST = "";
   var per = [["day", "Day"], ["3d", "Last 3 days"], ["m", "This month"], ["6m", "Last 6 months"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("");
-  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div></div><div class="per">' + per +
-    '<span class="dl">Day</span><input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || today) : "") + '"><span class="dl">From</span><input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"><span class="dl">To</span><input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></div></div>';
-  x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:120px"><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' : '') + '</div>' +
+  var head = '<div class="hrow"><div class="hl"><div class="eyebrow">Yunus Textile Mills · Quality</div><h1>Quality <em>Intelligence</em></h1><div class="hsub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div><div class="chips">' + per +
+    '<label>Day <input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || today) : "") + '"></label><label>From <input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"></label><label>To <input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></label></div></div>';
+  var tiles = '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:110px"><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' : '') + '</div>' +
     '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b>Inspection Summary</b><span>Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
-    '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b>Upload inspections</b><span>Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>';
-  if(HMSG) x += '<div class="cd msgb">' + HMSG + '</div>';
-  if(!HDATA || !EXT){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
+    '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b>Upload inspections</b><span>Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>' + (HMSG ? '<div class="cd msgb">' + HMSG + '</div>' : '');
+  if(!HDATA || !EXT){ h.innerHTML = '<div class="hw"><div class="hero">' + head + '<div class="ring"></div></div><div class="big"><div><span>Loading</span><b>…</b><i>all customers</i></div></div></div>' + tiles + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
   var inR = function(d){ return d && d >= rg.from && d <= rg.to; }, isC = function(c){ return !HCUST || canonC(c) === HCUST; };
   var LOTS = buildLots(HDATA, EXT, wsHas).filter(function(q){ return isC(q.cust) && inR(q.date); });
   var done = LOTS.filter(function(q){ return q.first !== "pend"; });
   var W = function(a){ return a.reduce(function(t, q){ return t + (q.w || 1); }, 0); };
   var nAll = W(done), p1 = W(done.filter(function(q){ return q.first === "pass"; })), rp = W(done.filter(function(q){ return q.final === "repass"; })), fl = W(done.filter(function(q){ return q.final === "fail"; })), ri = W(done.filter(function(q){ return q.first === "reins"; })), base = nAll - ri;
-  var smp = 0, maj = 0; done.forEach(function(q){ if(q.kind === "is"){ smp += q.sample; maj += q.major; } });
+  var smp = 0, maj = 0; done.forEach(function(q){ smp += q.sample || 0; maj += q.major || 0; });
   var IR = (INT || []).filter(function(r){ return inR(r.date) && (!HCUST || (r.customer && canonC(r.customer) === HCUST)); });
   var it = {n: 0, p: 0, f: 0}; IR.forEach(function(r){ var c = +r.count || 1, k = rkind(r.result); it.n += c; if(k === "pass") it.p += c; else if(k === "fail") it.f += c; });
   var WR = []; (WST || []).forEach(function(dd){ if(!inR(dd.date || dd._id)) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = dd.cust[cn] || {}; WR.push({date: dd.date || dd._id, cust: canonC(cn), wpct: v.wpct, wmtr: v.wmtr, rem: v.remarks || "", unit: v.unit || ""}); }); });
   var wp = WR.filter(function(w){ return w.wpct != null; }), wavg = wp.length ? wp.reduce(function(a, w){ return a + (+w.wpct); }, 0) / wp.length : null, wm = WR.reduce(function(a, w){ return a + (+w.wmtr || 0); }, 0);
-  var ccount = {}; LOTS.forEach(function(q){ ccount[q.cust] = 1; });
-  x += '<div class="sec">External inspections</div><div class="kp">' + kpi("Inspections", nAll, "", (HCUST ? esc(HCUST) : Object.keys(ccount).length + " customers") + (ri ? " · incl. " + ri + " re-inspections" : "") + (LOTS.length > done.length ? " · " + (LOTS.length - done.length) + " not inspected yet" : "")) +
-    kpi("Passed 1st go", p1, "hok", pc(p1, base) + " of inspections") + kpi("Passed after re-inspection", rp, "", "failed 1st go, then passed") + kpi("Still failed", fl, fl ? "hbad" : "", "need re-inspection or action") +
-    kpi("Overall pass", pc(p1 + rp, base), "", (p1 + rp) + " of " + base + " passed in the end") + kpi("OQL", smp ? (Math.round(maj / smp * 10000) / 100) + "%" : "—", "", smp ? maj + " major in " + smp + " samples" : "from Inspection Summary") + '</div>';
-  x += '<div class="sec">Internal inspections and wastage</div><div class="kp">' + kpi("Internal inspections", it.n, "", HCUST ? "for " + esc(HCUST) : "all floors") + kpi("Internal passed", it.p, "hok", pc(it.p, it.n) + " pass rate") + kpi("Internal failed", it.f, it.f ? "hbad" : "", pc(it.f, it.n) + " of internal") +
-    kpi("Floors", (function(){ var f = {}; IR.forEach(function(r){ if(r.floor) f[r.floor] = 1; }); return Object.keys(f).length; })(), "", "with internal data") + kpi("Wastage", wavg != null ? (Math.round(wavg * 10000) / 100) + "%" : "—", "", wp.length ? "average of " + wp.length + " entries" : "no wastage in this period") + kpi("Wastage MTR", wm ? Math.round(wm).toLocaleString() : "—", "", WR.length + " entries") + '</div>';
-  var left;
-  if(!HCUST){
+  var ccount = {}; done.forEach(function(q){ ccount[q.cust] = 1; });
+  var oql = smp ? Math.round(maj / smp * 10000) / 100 : null;
+  // hero
+  var segs = [{t: "Passed 1st go", v: p1, c: "#a6dd5e", f: "pass"}, {t: "Passed after re-inspection", v: rp, c: "#4fc3a1", f: "repass"}, {t: "Still failed", v: fl, c: "#ff7a6b", f: "fail"}];
+  var ov = base ? Math.round((p1 + rp) / base * 1000) / 10 : null;
+  var x = '<div class="hw"><div class="hero">' + head + '<div class="ring"' + tip("Overall pass: " + (p1 + rp) + " of " + base + " inspections passed in the end") + '>' + ring(segs, base) + '<div class="c"><b data-cnt="' + (ov == null ? "" : ov) + '" data-suf="%">' + (ov == null ? "—" : ov + "%") + '</b><span>overall pass</span></div></div>' +
+    '<div class="rleg">' + segs.map(function(g){ return '<div data-filt="' + g.f + '"' + tip(g.t + ": " + g.v + " inspections\nClick to list them") + '><i style="background:' + g.c + '"></i>' + g.t + '<b>' + g.v + '</b></div>'; }).join("") + '</div></div>' +
+    '<div class="big"><div' + tip(nAll + " external inspections in " + rg.lbl + (ri ? "\nincludes " + ri + " re-inspections" : "")) + '><span>External inspections</span><b data-cnt="' + nAll + '">' + nAll + '</b><i>' + (HCUST ? esc(HCUST) : Object.keys(ccount).length + " customers") + '</i></div>' +
+    '<div' + tip(p1 + " of " + base + " passed on the first inspection") + '><span>1st-go pass</span><b data-cnt="' + (base ? Math.round(p1 / base * 1000) / 10 : "") + '" data-suf="%">' + pc(p1, base) + '</b><i>' + p1 + ' of ' + base + '</i></div>' +
+    '<div' + tip(it.p + " of " + it.n + " internal (floor) inspections passed") + '><span>Internal pass</span><b data-cnt="' + (it.n ? Math.round(it.p / it.n * 1000) / 10 : "") + '" data-suf="%">' + pc(it.p, it.n) + '</b><i>' + it.n + ' floor inspections</i></div>' +
+    '<div' + tip(smp ? maj + " major defects in " + smp + " samples (external)" : "OQL needs sample and major from Inspection Summary") + '><span>OQL</span><b data-cnt="' + (oql == null ? "" : oql) + '" data-suf="%" data-dec="2">' + (oql == null ? "—" : oql + "%") + '</b><i>limit 2.5%</i></div></div></div>' + tiles;
+  x += '<div class="yqsec">External inspections</div><div class="kp">' +
+    kpi("Inspections", nAll, "#2F5A1A", (ri ? "incl. " + ri + " re-inspections" : esc(rg.lbl)), "Every external inspection in " + rg.lbl, "") +
+    kpi("Passed 1st go", p1, "#5BA32A", pc(p1, base) + " of inspections", "Passed on the first inspection\nClick to list them", "pass") +
+    kpi("Passed after re-inspection", rp, "#1f9d7a", "failed 1st go, then passed", "Failed the first time, passed on re-inspection\nClick to list them", "repass") +
+    kpi("Still failed", fl, "#c0392b", "need re-inspection or action", "Failed and not passed yet\nClick to list them", "fail") +
+    kpi("Overall pass", pc(p1 + rp, base), "#3d7322", (p1 + rp) + " of " + base + " passed in the end", "", "") +
+    kpi("OQL", oql == null ? "—" : oql + "%", oql != null && oql > 2.5 ? "#c0392b" : "#7DB82E", smp ? maj + " major in " + smp + " samples" : "from Inspection Summary", "Outgoing quality level = major defects ÷ samples", "") + '</div>';
+  var nfl = {}; IR.forEach(function(r){ if(r.floor) nfl[r.floor] = 1; });
+  x += '<div class="yqsec">Internal inspections and wastage</div><div class="kp">' + kpi("Internal inspections", it.n, "#2F5A1A", HCUST ? "for " + esc(HCUST) : "all floors", "Floor (internal) inspections in " + rg.lbl, "") + kpi("Internal passed", it.p, "#5BA32A", pc(it.p, it.n) + " pass rate", "", "") + kpi("Internal failed", it.f, "#c0392b", pc(it.f, it.n) + " of internal", "", "") +
+    kpi("Floors", Object.keys(nfl).length, "#7DB82E", "with internal data", Object.keys(nfl).slice(0, 12).join("\n"), "") + kpi("Wastage", wavg != null ? (Math.round(wavg * 10000) / 100) + "%" : "—", "#a66b00", wp.length ? "average of " + wp.length + " entries" : "no wastage in this period", WR.slice(0, 8).map(function(w){ return dmy(w.date) + " " + w.cust + " " + (w.wpct != null ? (Math.round(w.wpct * 10000) / 100) + "%" : "") + (w.wmtr ? " · " + w.wmtr + " m" : ""); }).join("\n"), "") + kpi("Wastage MTR", wm ? Math.round(wm).toLocaleString() : "—", "#a66b00", WR.length + " entries", "", "") + '</div>';
+  // left card
+  var left, list = done;
+  if(HFILT && HFILT !== "all") list = done.filter(function(q){ return HFILT === "pass" ? q.first === "pass" : q.final === HFILT; });
+  if(!HCUST && !HFILT){
     var cs = {};
-    LOTS.forEach(function(q){ var c = cs[q.cust] = cs[q.cust] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; if(q.first === "pend") return; var w = q.w || 1; c.n += w; if(q.first === "pass") c.p1 += w; if(q.final === "repass") c.rp += w; if(q.final === "fail") c.f += w; if(q.last > c.last) c.last = q.last; });
-    IR.forEach(function(r){ if(!r.customer) return; var k = canonC(r.customer), c = cs[k] = cs[k] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; var n = +r.count || 1; c.in += n; if(rkind(r.result) === "pass") c.ip += n; if(r.date > c.last) c.last = r.date; });
-    WR.forEach(function(w){ var c = cs[w.cust] = cs[w.cust] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; if(w.wpct != null) c.w.push(+w.wpct); });
-    var ck = Object.keys(cs).sort(function(a, b){ return (cs[b].n + cs[b].in) - (cs[a].n + cs[a].in) || (a < b ? -1 : 1); });
+    var mk = function(k){ return cs[k] = cs[k] || {n: 0, p1: 0, rp: 0, f: 0, last: "", "in": 0, ip: 0, w: []}; };
+    LOTS.forEach(function(q){ var c = mk(q.cust); if(q.first === "pend") return; var w = q.w || 1; c.n += w; if(q.first === "pass") c.p1 += w; if(q.final === "repass") c.rp += w; if(q.final === "fail") c.f += w; if(q.last > c.last) c.last = q.last; });
+    IR.forEach(function(r){ if(!r.customer) return; var c = mk(canonC(r.customer)); var n = +r.count || 1; c["in"] += n; if(rkind(r.result) === "pass") c.ip += n; if(r.date > c.last) c.last = r.date; });
+    WR.forEach(function(w){ var c = mk(w.cust); if(w.wpct != null) c.w.push(+w.wpct); });
+    var ck = Object.keys(cs).sort(function(a, b){ return (cs[b].n + cs[b]["in"]) - (cs[a].n + cs[a]["in"]) || (a < b ? -1 : 1); });
     left = '<h3>Customers · ' + esc(rg.lbl) + '</h3>' + (ck.length ? hTable([["Customer"], ["External"], ["1st go"], ["After re-insp."], ["Failed"], ["1st go %", 1], ["Internal", 1], ["Int. pass", 1], ["Wastage", 1], ["Last", 1]], ck.map(function(k){ var c = cs[k], wv = c.w.length ? c.w.reduce(function(a, b){ return a + b; }, 0) / c.w.length : null;
-      return '<tr class="cl" data-c="' + esc(k) + '"><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.n + '</td><td class="hok">' + c.p1 + '</td><td>' + c.rp + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m">' + barc(c.p1, c.n) + '</td><td class="hide-m">' + (c.in || "—") + '</td><td class="hide-m">' + (c.in ? pc(c.ip, c.in) : "—") + '</td><td class="hide-m">' + (wv != null ? (Math.round(wv * 10000) / 100) + "%" : "—") + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; })) : '<div class="em">No inspections in ' + esc(rg.lbl) + '. Pick another period.</div>');
+      var t = k + "\nExternal: " + c.n + " · 1st go " + c.p1 + " · after re-insp. " + c.rp + " · failed " + c.f + "\nInternal: " + (c["in"] || 0) + (c["in"] ? " · " + pc(c.ip, c["in"]) + " pass" : "") + (wv != null ? "\nWastage avg " + (Math.round(wv * 10000) / 100) + "%" : "") + "\nClick to open " + k;
+      return '<tr class="cl" data-c="' + esc(k) + '"' + tip(t) + '><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.n + '</td><td class="hok">' + c.p1 + '</td><td>' + c.rp + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m">' + barc(c.p1, c.n) + '</td><td class="hide-m">' + (c["in"] || "—") + '</td><td class="hide-m">' + (c["in"] ? pc(c.ip, c["in"]) : "—") + '</td><td class="hide-m">' + (wv != null ? (Math.round(wv * 10000) / 100) + "%" : "—") + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; })) : '<div class="em">No inspections in ' + esc(rg.lbl) + '. Pick another period.</div>');
   } else {
-    var PL = done.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? -1 : 1); });
-    left = '<h3>' + esc(HCUST) + ' · inspections (' + PL.length + ')</h3>' + (PL.length ? hTable([["Date"], ["Inspection"], ["PO / article", 1], ["Articles / sample", 1], ["1st go"], ["Final result"]], PL.slice(0, 200).map(function(q){
+    var PL = list.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? -1 : 1); });
+    left = '<h3>' + (HCUST ? esc(HCUST) + ' · ' : '') + (HFILT ? PST[HFILT] : 'inspections') + ' (' + W(PL) + ')' + (HFILT ? ' <a class="tp" id="yqClrF">show all</a>' : '') + '</h3>' + (PL.length ? hTable([["Date"]].concat(HCUST ? [] : [["Customer"]]).concat([["Inspection"], ["PO / article", 1], ["Detail", 1], ["1st go"], ["Final result"]]), PL.slice(0, 250).map(function(q){
       var det = q.kind === "plan" ? (q.p1 + " of " + q.n + " articles 1st go") : (q.sample ? q.sample + " sample, " + q.major + " major" : "");
       var pk = q.kind === "plan" ? q.id : q.rid;
-      return '<tr class="cl' + (HPLAN === pk ? ' on' : '') + '" data-p="' + esc(pk) + '"><td>' + dmy(q.date) + '</td><td><b>' + esc(q.kind === "plan" ? q.id : q.lbl) + (q.w > 1 ? " ×" + q.w : "") + '</b> <span class="op">' + (HPLAN === pk ? '▾' : '›') + '</span></td><td class="hide-m">' + esc(q.kind === "plan" ? "" : [q.po, q.art].filter(Boolean).join(" · ")) + '</td><td class="hide-m">' + esc(det) + '</td><td class="' + (q.first === "pass" ? "hok" : q.first === "reins" ? "" : "hbad") + '">' + (q.first === "pass" ? "Pass" : q.first === "reins" ? "Re-inspection" : "Fail") + '</td><td><span class="pl ' + q.final + '">' + PST[q.final] + '</span></td></tr>'; })) : '<div class="em">No inspections for ' + esc(HCUST) + ' in ' + esc(rg.lbl) + '. Pick "All time" or another period.</div>');
+      return '<tr class="cl' + (HPLAN === pk ? ' on' : '') + '" data-c="' + esc(q.cust) + '" data-p="' + esc(pk) + '"' + tip(lotTip(q)) + '><td>' + dmy(q.date) + '</td>' + (HCUST ? '' : '<td><b>' + esc(q.cust) + '</b></td>') + '<td><b>' + esc(q.lbl) + (q.w > 1 ? " ×" + q.w : "") + '</b> <span class="op">' + (HPLAN === pk ? '▾' : '›') + '</span></td><td class="hide-m">' + esc(q.kind === "plan" ? "" : [q.po, q.art].filter(Boolean).join(" · ")) + '</td><td class="hide-m">' + esc(det) + '</td><td class="' + (q.first === "pass" ? "hok" : q.first === "reins" ? "" : "hbad") + '">' + (q.first === "pass" ? "Pass" : q.first === "reins" ? "Re-insp." : "Fail") + '</td><td><span class="pl ' + (q.first === "reins" ? "reins" : q.final) + '">' + PST[q.first === "reins" ? "reins" : q.final] + '</span></td></tr>'; })) : '<div class="em">Nothing in ' + esc(rg.lbl) + '. Pick "All time" or another period.</div>');
   }
-  // chart: inspections per day (or per week for long periods)
-  var span = rg.from === "0000" ? null : rg.from, all = done.map(function(q){ return q.date; }).sort(), first = span && span > (all[0] || span) ? span : (all[0] || today), last = rg.to === "9999" ? today : (rg.to < today ? rg.to : today);
+  // chart with hover + click
+  var span = rg.from === "0000" ? null : rg.from, alld = done.map(function(q){ return q.date; }).sort(), first = span && span > (alld[0] || span) ? span : (alld[0] || today), last = rg.to === "9999" ? today : (rg.to < today ? rg.to : today);
   var days = []; for(var d0 = new Date(first + "T00:00:00"); ymd(d0) <= last && days.length < 400; d0.setDate(d0.getDate() + 1)) days.push(ymd(d0));
   var wk = days.length > 62, bucket = function(d){ if(!wk) return d; var t = new Date(d + "T00:00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return ymd(t); };
   var keys = []; days.forEach(function(d){ var b = bucket(d); if(keys[keys.length - 1] !== b) keys.push(b); });
-  var by = {}; done.forEach(function(q){ var b = by[bucket(q.date)] = by[bucket(q.date)] || {p: 0, f: 0}; if(q.first === "fail") b.f += q.w || 1; else b.p += q.w || 1; });
+  var by = {}; done.forEach(function(q){ var b = by[bucket(q.date)] = by[bucket(q.date)] || {p: 0, f: 0, L: []}; if(q.first === "fail") b.f += q.w || 1; else b.p += q.w || 1; b.L.push(q); });
   var mx = 1; keys.forEach(function(k){ var b = by[k]; if(b) mx = Math.max(mx, b.p + b.f); });
-  var W = 520, H = 190, bw = W / Math.max(keys.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="External inspections per ' + (wk ? "week" : "day") + '">', step = Math.max(1, Math.ceil(keys.length / 7));
-  keys.forEach(function(d, i){ var b = by[d] || {p: 0, f: 0}, hp = b.p / mx * H, hf = b.f / mx * H, xx = i * bw + 1, w = Math.max(bw - 2, 1);
-    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + (wk ? "Week of " : "") + d + ': ' + b.p + ' passed 1st go</title></rect>';
-    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + (wk ? "Week of " : "") + d + ': ' + b.f + ' failed 1st go</title></rect>';
-    if(i % step === 0 || i === keys.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (H + 14) + '" text-anchor="' + (i === keys.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
-  sv += '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="#dfe6d6"/></svg>';
-  x += '<div class="g2"><div class="cd">' + left + '</div><div class="cd"><h3>External inspections per ' + (wk ? "week" : "day") + '</h3>' + (done.length ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed 1st go</span><span><i style="background:#d9534f"></i>Failed 1st go</span><span>Most in a ' + (wk ? "week" : "day") + ': ' + mx + '</span></div>' : '<div class="em">No external inspections in this period.</div>') + topDef(done, IR) + '</div></div>';
-  if(HCUST && HPLAN){
-    var q = done.filter(function(z){ return z.kind === "plan" ? z.id === HPLAN : z.rid === HPLAN; })[0];
-    if(q && q.kind === "plan") x += '<div class="cd" id="yqPD"><h3>Inspection ' + esc(q.id) + ' · ' + q.n + ' articles <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' + hTable([["Article"], ["Colour", 1], ["Size", 1], ["Lot", 1], ["Qty", 1], ["Date", 1], ["Result"]], q.rows.slice().sort(function(a, b){ return (a.k === "p1") - (b.k === "p1") || (a.n < b.n ? -1 : 1); }).map(function(r){ return '<tr><td>' + esc(r.n) + '</td><td class="hide-m">' + esc(r.c) + '</td><td class="hide-m">' + esc(r.z) + '</td><td class="hide-m">' + esc(r.l) + '</td><td class="hide-m">' + (r.q || "") + '</td><td class="hide-m">' + dmy(r.date) + '</td><td class="' + (r.k === "p1" || r.k === "re" ? "hok" : r.k === "ni" ? "hw8" : "hbad") + '">' + esc(r.s) + '</td></tr>'; })) + '</div>';
-    if(q && q.kind === "is") x += '<div class="cd" id="yqPD"><h3>YTM ' + esc(q.id) + ' · ' + esc(q.cust) + ' <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' + hTable([["Date"], ["Result"], ["PO", 1], ["Article", 1], ["Unit", 1], ["Sample", 1], ["Major", 1], ["Defects"]], (EXT || []).filter(function(r){ return canonC(r.customer) === q.cust && String(r.ytm || r.po || "—") === q.id; }).map(function(r){ return '<tr><td>' + dmy(r.date) + '</td><td class="' + (rkind(r.result) === "pass" ? "hok" : "hbad") + '">' + esc(r.result) + '</td><td class="hide-m">' + esc(r.po || "") + '</td><td class="hide-m">' + esc(r.article || "") + '</td><td class="hide-m">' + esc(r.unit || "") + '</td><td class="hide-m">' + (r.sample || "") + '</td><td class="hide-m">' + (r.major != null ? r.major : "") + '</td><td>' + esc(r.defects || "") + '</td></tr>'; })) + '</div>';
+  var CW = 520, CH = 190, bw = CW / Math.max(keys.length, 1), sv = '<svg class="chart" viewBox="0 0 ' + CW + ' ' + (CH + 20) + '" width="100%" role="img" aria-label="External inspections per ' + (wk ? "week" : "day") + '">', step = Math.max(1, Math.ceil(keys.length / 7));
+  keys.forEach(function(d, i){ var b = by[d]; var xx = i * bw + 1, w = Math.max(bw - 2, 1);
+    if(b){ var hp = b.p / mx * CH, hf = b.f / mx * CH, t = (wk ? "Week of " : "") + dmy(d) + "\n" + (b.p + b.f) + " inspections · " + b.p + " passed 1st go" + (b.f ? " · " + b.f + " failed 1st go" : "") + "\n" + b.L.slice(0, 6).map(function(q){ return (q.first === "fail" ? "✗ " : "✓ ") + q.cust + " " + q.lbl; }).join("\n") + (b.L.length > 6 ? "\n… " + (b.L.length - 6) + " more" : "") + "\nClick to list " + (wk ? "this week" : "this day");
+      sv += '<g data-day="' + d + '" data-wk="' + (wk ? 1 : 0) + '"' + tip(t) + '><rect x="' + xx + '" y="0" width="' + w + '" height="' + CH + '" fill="transparent"/>' + (hp ? '<rect x="' + xx + '" y="' + (CH - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"/>' : '') + (hf ? '<rect x="' + xx + '" y="' + (CH - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#e0574b"/>' : '') + '</g>'; }
+    if((i % step === 0 && keys.length - 1 - i >= step * 0.6) || i === keys.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (CH + 14) + '" text-anchor="' + (i === keys.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
+  sv += '<line x1="0" x2="' + CW + '" y1="' + CH + '" y2="' + CH + '" stroke="#dfe6d6"/></svg>';
+  var right = '<h3>External inspections per ' + (wk ? "week" : "day") + '</h3>' + (done.length ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed 1st go</span><span><i style="background:#e0574b"></i>Failed 1st go</span><span>Most in a ' + (wk ? "week" : "day") + ': ' + mx + '</span><span>Hover a bar for details, click to list</span></div>' : '<div class="em">No external inspections in this period.</div>') + topDef(done, IR);
+  x += '<div class="g2"><div class="cd" id="yqList">' + left + '</div><div class="cd">' + right + '</div></div>';
+  if(HPLAN){
+    var q = done.filter(function(z){ return z.kind === "plan" ? z.id === HPLAN && (!HCUST || z.cust === HCUST) : z.rid === HPLAN; })[0];
+    if(q && q.kind === "plan") x += '<div class="cd" id="yqPD"><h3>' + esc(q.cust) + ' · shipping plan ' + esc(q.id) + ' · ' + q.n + ' articles <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' +
+      (q.hist ? '<div class="lg" style="margin:0 0 10px">' + q.hist.map(function(r){ return '<span class="pl ' + (rkind(r.result) === "pass" ? "pass" : "fail") + '">' + dmy(r.date) + ' · ' + esc(r.result) + (r.sample ? ' · ' + r.major + '/' + r.sample : '') + '</span>'; }).join(" ") + '</div>' : '') +
+      hTable([["Article"], ["Colour", 1], ["Size", 1], ["Lot", 1], ["Qty", 1], ["Date", 1], ["Result"]], q.rows.slice().sort(function(a, b){ return (a.k === "p1") - (b.k === "p1") || (a.n < b.n ? -1 : 1); }).map(function(r){ return '<tr' + tip(r.n + (r.c ? "\nColour: " + r.c : "") + (r.z ? "\nSize: " + r.z : "") + (r.l ? "\nLot: " + r.l : "") + (r.q ? "\nQty: " + r.q : "") + "\n" + r.s) + '><td>' + esc(r.n) + '</td><td class="hide-m">' + esc(r.c) + '</td><td class="hide-m">' + esc(r.z) + '</td><td class="hide-m">' + esc(r.l) + '</td><td class="hide-m">' + (r.q || "") + '</td><td class="hide-m">' + dmy(r.date) + '</td><td class="' + (r.k === "p1" || r.k === "re" ? "hok" : r.k === "ni" ? "hw8" : "hbad") + '">' + esc(r.s) + '</td></tr>'; })) + '</div>';
+    if(q && q.kind === "is") x += '<div class="cd" id="yqPD"><h3>' + esc(q.cust) + ' · ' + esc(q.lbl) + ' <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' + hTable([["Date"], ["Result"], ["PO", 1], ["Article", 1], ["Unit", 1], ["Sample", 1], ["Major", 1], ["Defects"]], (EXT || []).filter(function(r){ return canonC(r.customer) === q.cust && String(r.ytm || r.po || "—") === q.id; }).map(function(r){ return '<tr><td>' + dmy(r.date) + '</td><td class="' + (rkind(r.result) === "pass" ? "hok" : "hbad") + '">' + esc(r.result) + '</td><td class="hide-m">' + esc(r.po || "") + '</td><td class="hide-m">' + esc(r.article || "") + '</td><td class="hide-m">' + esc(r.unit || "") + '</td><td class="hide-m">' + (r.sample || "") + '</td><td class="hide-m">' + (r.major != null ? r.major : "") + '</td><td>' + esc(r.defects || "") + '</td></tr>'; })) + '</div>';
   }
   if(HCUST){
     var fls = {}; IR.forEach(function(r){ var f = fls[r.floor || "—"] = fls[r.floor || "—"] || {n: 0, p: 0, f: 0}; var n = +r.count || 1; f.n += n; if(rkind(r.result) === "pass") f.p += n; else if(rkind(r.result) === "fail") f.f += n; });
     var fk = Object.keys(fls).sort(function(a, b){ return fls[b].n - fls[a].n; });
-    x += '<div class="g2"><div class="cd"><h3>Internal inspections · ' + esc(HCUST) + '</h3>' + (fk.length ? hTable([["Floor"], ["Inspections"], ["Pass"], ["Fail"], ["Pass rate", 1]], fk.map(function(k){ var f = fls[k]; return '<tr><td><b>' + esc(k) + '</b></td><td>' + f.n + '</td><td class="hok">' + f.p + '</td><td class="' + (f.f ? 'hbad' : '') + '">' + f.f + '</td><td class="hide-m">' + barc(f.p, f.n) + '</td></tr>'; })) : '<div class="em">No internal inspections with this customer name in ' + esc(rg.lbl) + '.</div>') + '</div>' +
+    x += '<div class="g2"><div class="cd"><h3>Internal inspections · ' + esc(HCUST) + '</h3>' + (fk.length ? hTable([["Floor"], ["Inspections"], ["Pass"], ["Fail"], ["Pass rate", 1]], fk.map(function(k){ var f = fls[k]; return '<tr' + tip(k + "\n" + f.n + " inspections · " + f.p + " pass · " + f.f + " fail") + '><td><b>' + esc(k) + '</b></td><td>' + f.n + '</td><td class="hok">' + f.p + '</td><td class="' + (f.f ? 'hbad' : '') + '">' + f.f + '</td><td class="hide-m">' + barc(f.p, f.n) + '</td></tr>'; })) : '<div class="em">No internal inspections with this customer name in ' + esc(rg.lbl) + '.</div>') + '</div>' +
       '<div class="cd"><h3>Wastage · ' + esc(HCUST) + '</h3>' + (WR.length ? hTable([["Date"], ["Wastage %"], ["MTR"], ["Remarks", 1]], WR.sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 60).map(function(w){ return '<tr><td>' + dmy(w.date) + '</td><td>' + (w.wpct != null ? (Math.round(w.wpct * 10000) / 100) + "%" : "—") + '</td><td>' + (w.wmtr != null ? w.wmtr : "—") + '</td><td class="hide-m">' + esc(w.rem) + '</td></tr>'; })) : '<div class="em">No wastage saved for ' + esc(HCUST) + ' in ' + esc(rg.lbl) + '.</div>') + '</div></div>';
-  } else {
+  } else if(!HFILT){
     var fail = done.filter(function(q){ return q.first === "fail"; }).sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 15);
     x += '<div class="cd"><h3>Inspections that failed 1st go · ' + esc(rg.lbl) + '</h3>' + (fail.length ? hTable([["Date"], ["Customer"], ["Inspection"], ["Final result"], ["Details", 1]], fail.map(function(q){ var det = q.kind === "plan" ? q.rows.filter(function(r){ return r.k !== "p1" && r.k !== "ni"; }).slice(0, 3).map(function(r){ return r.n + (r.c ? " " + r.c : ""); }).join(", ") : Object.keys(q.dl).slice(0, 3).join(", ");
-      return '<tr class="cl" data-c="' + esc(q.cust) + '" data-p="' + esc(q.kind === "plan" ? q.id : q.rid) + '"><td>' + dmy(q.date) + '</td><td><b>' + esc(q.cust) + '</b></td><td>' + esc(q.kind === "plan" ? q.id : q.lbl) + '</td><td><span class="pl ' + q.final + '">' + PST[q.final] + '</span></td><td class="hide-m">' + esc(det) + '</td></tr>'; })) : '<div class="em">No inspection failed 1st go in this period.</div>') + '</div>';
+      return '<tr class="cl" data-c="' + esc(q.cust) + '" data-p="' + esc(q.kind === "plan" ? q.id : q.rid) + '"' + tip(lotTip(q)) + '><td>' + dmy(q.date) + '</td><td><b>' + esc(q.cust) + '</b></td><td>' + esc(q.lbl) + '</td><td><span class="pl ' + q.final + '">' + PST[q.final] + '</span></td><td class="hide-m">' + esc(det) + '</td></tr>'; })) : '<div class="em">No inspection failed 1st go in this period.</div>') + '</div>';
   }
-  h.innerHTML = x + '</div>'; bindHome(); h.scrollTop = sc;
+  h.className = HANIM ? "anim" : ""; h.innerHTML = x + '</div>'; bindHome(); h.scrollTop = sc;
+  if(HANIM){ HANIM = false; countUp(h); }
+}
+function countUp(h){
+  var els = [].slice.call(h.querySelectorAll("[data-cnt]")).filter(function(e){ return e.dataset.cnt !== ""; }); if(!els.length || !window.requestAnimationFrame) return;
+  var t0 = performance.now(), D = 900;
+  (function f(t){ var k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3); els.forEach(function(el){ var v = +el.dataset.cnt, dec = el.dataset.dec ? +el.dataset.dec : (String(el.dataset.cnt).indexOf(".") >= 0 ? 1 : 0); el.textContent = (v * e).toFixed(dec) + (el.dataset.suf || ""); }); if(k < 1) requestAnimationFrame(f); else els.forEach(function(el){ el.textContent = el.dataset.cnt + (el.dataset.suf || ""); }); })(t0);
 }
 function topDef(done, IR){
   var m = {};
@@ -453,7 +533,7 @@ function topDef(done, IR){
   IR.forEach(function(r){ (r.dlist || []).forEach(function(d){ if(d && d.n) m[d.n] = (m[d.n] || 0) + (+d.q || 1); }); });
   var k = Object.keys(m).sort(function(a, b){ return m[b] - m[a]; }).slice(0, 8); if(!k.length) return "";
   var mx = m[k[0]];
-  return '<h3 style="margin-top:18px">Top defects</h3><div class="dfl">' + k.map(function(n){ return '<div><span>' + esc(n) + '</span><div class="bar" style="background:#eef2e8"><i style="width:' + Math.round(m[n] / mx * 100) + '%;background:#c0392b"></i></div><b>' + Math.round(m[n]) + '</b></div>'; }).join("") + '</div>';
+  return '<h3 style="margin-top:18px">Top defects</h3><div class="dfl">' + k.map(function(n){ return '<div' + tip(n + ": " + Math.round(m[n]) + " found (external + internal)") + '><span>' + esc(n) + '</span><div class="bar" style="background:#f3efe9"><i style="width:' + Math.round(m[n] / mx * 100) + '%;background:linear-gradient(90deg,#ff9a8a,#c0392b)"></i></div><b>' + Math.round(m[n]) + '</b></div>'; }).join("") + '</div>';
 }
 function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
@@ -461,20 +541,42 @@ function openCustName(n){
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
   var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ ssSet("yqi_lc", ""); openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
 }
-function setHC(c){ HCUST = c || ""; HPLAN = ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
+function setHC(c){ HCUST = c || ""; HPLAN = ""; HFILT = ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
+function toList(){ var l = $("yqList"); if(l) l.scrollIntoView({behavior: "smooth", block: "start"}); }
+function tipInit(){
+  if($("yqTip")) return; var t = document.createElement("div"); t.id = "yqTip"; document.body.appendChild(t);
+  var cur = null;
+  function place(e){ var w = t.offsetWidth, hh = t.offsetHeight, x = e.clientX + 14, y = e.clientY + 16; if(x + w > innerWidth - 8) x = e.clientX - w - 14; if(y + hh > innerHeight - 8) y = e.clientY - hh - 12; t.style.left = Math.max(6, x) + "px"; t.style.top = Math.max(6, y) + "px"; }
+  document.addEventListener("mouseover", function(e){ var el = e.target.closest && e.target.closest("#yqHome [data-tip]"); if(el === cur) return; cur = el; if(!el){ t.style.display = "none"; return; } var s = el.getAttribute("data-tip"); t.innerHTML = esc(s).replace(/^([^\n]*)/, "<b>$1</b>"); t.style.display = "block"; place(e); });
+  document.addEventListener("mousemove", function(e){ if(cur) place(e); });
+  document.addEventListener("scroll", function(){ t.style.display = "none"; cur = null; }, true);
+}
 function bindHome(){
-  var h = $("yqHome"); if(!h) return;
-  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; if(HPER === "day" && !HDAY) HDAY = ymd(new Date()); lsSet("yqi_hper3", HPER); renderHome(); }; });
+  var h = $("yqHome"); if(!h) return; tipInit();
+  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; if(HPER === "day" && !HDAY) HDAY = ymd(new Date()); lsSet("yqi_hper3", HPER); HPLAN = ""; renderHome(); }; });
   if($("yqDay")) $("yqDay").onchange = function(){ if(!this.value) return; HDAY = this.value; HPER = "day"; renderHome(); };
   var rng = function(){ HFROM = $("yqFr").value; HTO = $("yqTo").value; ssSet("yqi_hf", HFROM); ssSet("yqi_ht", HTO); if(HFROM || HTO){ HPER = "rng"; renderHome(); } };
   if($("yqFr")) $("yqFr").onchange = rng; if($("yqTo")) $("yqTo").onchange = rng;
-  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ if(r.dataset.c && r.dataset.c !== HCUST){ setHC(r.dataset.c); if(r.dataset.p){ HPLAN = r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({block: "start"}); } return; } if(r.dataset.p){ HPLAN = HPLAN === r.dataset.p ? "" : r.dataset.p; renderHome(); var pd2 = $("yqPD"); if(pd2) pd2.scrollIntoView({behavior: "smooth", block: "start"}); } }; });
+  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ var c = r.dataset.c, p = r.dataset.p;
+    if(c && !p){ setHC(c); return; }
+    if(c && p && !HCUST && HFILT !== "all" && !HFILT){ HCUST = c; ssSet("yqi_hcust", c); }
+    if(p){ HPLAN = HPLAN === p ? "" : p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({behavior: "smooth", block: "start"}); } }; });
+  h.querySelectorAll("[data-filt],[data-go]").forEach(function(el){ var f = el.dataset.filt || el.dataset.go; if(!f) return; el.onclick = function(){ HFILT = f; HPLAN = ""; renderHome(); toList(); }; });
+  h.querySelectorAll("g[data-day]").forEach(function(g){ g.onclick = function(){ if(g.dataset.wk === "1"){ var a = new Date(g.dataset.day + "T00:00:00"), b = new Date(a); b.setDate(b.getDate() + 6); HFROM = g.dataset.day; HTO = ymd(b); HPER = "rng"; } else { HDAY = g.dataset.day; HPER = "day"; } HFILT = "all"; HPLAN = ""; renderHome(); toList(); }; });
+  if($("yqClrF")) $("yqClrF").onclick = function(){ HFILT = ""; renderHome(); };
   var cs = $("yqCs"); if(cs) cs.onchange = function(){ setHC(cs.value); };
   if($("yqFull")) $("yqFull").onclick = function(){ openCustName(HCUST); };
-  var ti = $("yqTi"); if(ti) ti.onclick = function(){ showHome(false); if(HCUST && HCUST !== ISCUST) setCust(HCUST); var b = document.querySelector('[data-v="insp"]'); if(b) b.click(); };
+  var ti = $("yqTi"); if(ti) ti.onclick = function(){ openIS(); };
   if($("yqUpB")) $("yqUpB").onclick = function(){ if(ROLE === "viewer"){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
   if($("yqUpF")) $("yqUpF").onchange = function(){ var f = this.files[0]; this.value = ""; if(f) uploadInsp(f); };
   if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Shipping plan,Date,Program,Article,Colour,Size,Lot,Qty,Result,Reason,Remarks\n" + (HCUST || "Bedsure") + ",202611PKEU009," + ymd(new Date()) + ",Washed Zip,Duvet Cover Set-Washed Cotton-Zip,Simply Taupe,200x200CM,A65094,48,Passed - 1st Go,,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
+}
+// Inspection Summary opens on demand: the app behind it only starts the first time it is needed
+function openIS(){
+  if(HCUST && HCUST !== ISCUST) setCust(HCUST);
+  showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
+  if(!started){ showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
+  var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
 }
 // ----- upload: one file, rows go into each customer's article list automatically -----
 function normKey(s){ return String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, ""); }
@@ -482,8 +584,8 @@ var COLS = {cust: ["customer", "buyer", "client", "brand", "customername"], p: [
 function pickCols(hdr){ var m = {}; hdr.forEach(function(hc, i){ var k = normKey(hc); Object.keys(COLS).forEach(function(f){ if(m[f] == null && COLS[f].indexOf(k) >= 0) m[f] = i; }); }); return m; }
 function toYmd(v){
   if(v == null || v === "") return "";
-  if(v instanceof Date && !isNaN(v)) return ymd(new Date(v.getTime() - v.getTimezoneOffset() * 60000));
-  if(typeof v === "number" && v > 20000 && v < 80000) return ymd(new Date(Math.round((v - 25569) * 864e5)));
+  if(v instanceof Date && !isNaN(v)) return ymdU(new Date(v.getTime() - v.getTimezoneOffset() * 60000));
+  if(typeof v === "number" && v > 20000 && v < 80000) return ymdU(new Date(Math.round((v - 25569) * 864e5)));
   var s = String(v).trim(), m;
   if((m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(s))) return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
   if((m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/.exec(s))){ var y = m[3].length === 2 ? "20" + m[3] : m[3], a = +m[1], b = +m[2], dd = a, mm = b; if(b > 12 && a <= 12){ dd = b; mm = a; } return y + "-" + ("0" + mm).slice(-2) + "-" + ("0" + dd).slice(-2); }
@@ -561,6 +663,7 @@ function goDirect(){
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
 function startHome(){
+  try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true);
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON) showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
@@ -741,8 +844,9 @@ function hookWin(w){
   function start(){ fix(w.document); mo.observe(w.document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ["src"]}); }
   if(w.document.readyState === "loading") w.document.addEventListener("DOMContentLoaded", start); else start();
 }
+var DBX = null; function makeDbOnce(){ return DBX || (DBX = makeDb()); }
 function installClaude(){
-  var DBO = makeDb(), ASO = makeAssets(), DLO = {save: function(o){ try{ saveBlob(o.filename || "download", o.data); return Promise.resolve(); }catch(e){ return Promise.reject(e); } }};
+  var DBO = makeDbOnce(), ASO = makeAssets(), DLO = {save: function(o){ try{ saveBlob(o.filename || "download", o.data); return Promise.resolve(); }catch(e){ return Promise.reject(e); } }};
   window.claude = {use: function(n){ if(n === "db") return Promise.resolve(DBO); if(n === "downloads") return Promise.resolve(DLO); if(n === "assets") return Promise.resolve(ASO); return Promise.resolve(null); }};
   window.__yqiBlobs = {getBlob: getBlob, blobUrl: blobUrl};
   hookWin(window);
@@ -756,7 +860,7 @@ function openWs(w){
   Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
     var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL};
-  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); startCustUi(); runApp(); if(WS === "_all") startHome(); else goDirect(); }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); startCustUi(); if(WS === "_all"){ startHome(); } else { runApp(); goDirect(); } }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
