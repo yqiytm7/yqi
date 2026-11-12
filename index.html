@@ -205,43 +205,57 @@ function makeDb(){
   function col(c){ c = String(c); return (/^is_/.test(c) && ISROOT ? ISROOT : root).collection(c); }
   function ds(s){ return {id: s.id, exists: s.exists, data: function(){ var d = s.data(); return d ? dec(d) : d; }, metadata: s.metadata || {fromCache: false}}; }
   function qs(q){ var docs = q.docs.map(ds); return {docs: docs, empty: !docs.length, size: docs.length, metadata: q.metadata || {fromCache: false}, forEach: function(f){ docs.forEach(f); }}; }
+  // big history is kept as a few "pack" documents (one read each); here they are opened back into single records
+  function qsx(q){ var real = [], pk = [], dead = {}, have = {};
+    q.docs.forEach(function(s){ var d = s.data() || {}; if(Array.isArray(d.__pack)) pk.push([s.id, d.__pack]); else if(d.__del) dead[s.id] = 1; else { real.push(ds(s)); have[s.id] = 1; } });
+    pk.forEach(function(p){ p[1].forEach(function(x, i){ var id = p[0] + "_" + i; if(!dead[id] && !have[id]) real.push(fakeDoc(id, x)); }); });
+    return {docs: real, empty: !real.length, size: real.length, metadata: q.metadata || {fromCache: false}, forEach: function(f){ real.forEach(f); }}; }
+  function isPk(r){ return /^pk[A-Z]\d+_\d+$/.test(r.id); }
   function viewOnly(){ return Promise.reject(Object.assign(new Error("View only — ask the owner for edit access."), {code: "permission-denied"})); }
   function doc(r){
     return {id: r.id,
       set: function(d){ return ROLE === "viewer" ? viewOnly() : r.set(enc(d)); },
       update: function(d){ if(ROLE === "viewer") return viewOnly(); var e = enc(d); return r.set(e, {mergeFields: Object.keys(e).map(function(k){ return new firebase.firestore.FieldPath(k); })}); },
-      "delete": function(){ return ROLE === "viewer" ? viewOnly() : r.delete(); },
+      "delete": function(){ return ROLE === "viewer" ? viewOnly() : isPk(r) ? r.set({__del: 1}) : r.delete(); },
       get: function(){ return r.get().then(ds); },
       onSnapshot: function(cb, er){ return r.onSnapshot(function(s){ cb(ds(s)); }, er || function(){}); }};
   }
   return {
     collection: function(c){ var cr = col(c); return {id: String(c), doc: function(i){ return doc(i ? cr.doc(String(i)) : cr.doc()); },
       add: function(d){ if(ROLE === "viewer") return viewOnly(); return cr.add(enc(d)).then(function(r){ return doc(r); }); },
-      get: function(){ return cr.get().then(qs); },
-      onSnapshot: function(cb, er){ var L = {c: String(c), cb: cb, q: null}; if(/^is_/.test(L.c)) ISL.push(L); return cr.onSnapshot(function(q){ L.q = qs(q); if(/^is_/.test(L.c)){ noteCust(L.c, L.q); cb(isFilter(L.c, L.q)); } else cb(L.q); }, er || function(){}); }}; },
+      get: function(){ return cr.get().then(/^is_/.test(String(c)) ? qsx : qs); },
+      onSnapshot: function(cb, er){ var L = {c: String(c), cb: cb, q: null}; if(/^is_/.test(L.c)) ISL.push(L); return cr.onSnapshot(function(q){ L.q = /^is_/.test(L.c) ? qsx(q) : qs(q); if(/^is_/.test(L.c)){ noteCust(L.c, L.q); cb(isFilter(L.c, L.q)); homeSoon(); } else cb(L.q); }, er || function(){}); }}; },
     doc: function(p){ var a = String(p).split("/"); return doc(col(a[0]).doc(a[1])); }
   };
 }
+// ---------- customer names: the same buyer is written in different ways in different files ----------
+var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA"};
+function ckey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function canonC(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; return w ? w.name : String(n || "").trim(); }
+
 // ---------- Inspection Summary: one shared store for all customers + customer picker ----------
 var ISROOT = null, ISCUST = "", ISL = [], CUSTS = {};
 function fakeDoc(id, d){ return {id: id, exists: true, data: function(){ return JSON.parse(JSON.stringify(d)); }, metadata: {fromCache: false}}; }
 function isFilter(c, q){
   if(!ISCUST || !q) return q;
   var docs;
-  if(c === "is_ext") docs = q.docs.filter(function(d){ var x = d.data() || {}; return x.customer === ISCUST; });
-  else if(c === "is_extday") docs = q.docs.map(function(d){ var x = d.data() || {}, o = {}; Object.keys(x).forEach(function(k){ if(k !== "cust") o[k] = x[k]; }); var cu = x.cust || {}; o.cust = {}; if(cu[ISCUST]) o.cust[ISCUST] = cu[ISCUST]; return fakeDoc(d.id, o); });
-  else if(c === "is_int" || c === "is_hist") docs = [];
+  if(c === "is_ext") docs = q.docs.filter(function(d){ var x = d.data() || {}; return canonC(x.customer) === canonC(ISCUST); });
+  else if(c === "is_extday") docs = q.docs.map(function(d){ var x = d.data() || {}, o = {}; Object.keys(x).forEach(function(k){ if(k !== "cust") o[k] = x[k]; }); var cu = x.cust || {}; o.cust = {}; Object.keys(cu).forEach(function(k){ if(canonC(k) === canonC(ISCUST)) o.cust[k] = cu[k]; }); return fakeDoc(d.id, o); });
+  else if(c === "is_int") docs = q.docs.filter(function(d){ var x = d.data() || {}; return x.customer && canonC(x.customer) === canonC(ISCUST); });
+  else if(c === "is_hist") docs = [];
   else return q;
   return {docs: docs, empty: !docs.length, size: docs.length, metadata: {fromCache: false}, forEach: function(f){ docs.forEach(f); }};
 }
 function noteCust(c, q){
   var n = Object.keys(CUSTS).length;
-  if(c === "is_ext") q.docs.forEach(function(d){ var x = d.data() || {}; if(x.customer && x.customer !== "Not recorded") CUSTS[x.customer] = 1; });
-  if(c === "is_extday") q.docs.forEach(function(d){ Object.keys((d.data() || {}).cust || {}).forEach(function(k){ CUSTS[k] = 1; }); });
+  if(c === "is_ext" || c === "is_int") q.docs.forEach(function(d){ var x = d.data() || {}; if(x.customer && x.customer !== "Not recorded") CUSTS[canonC(x.customer)] = 1; });
+  if(c === "is_extday") q.docs.forEach(function(d){ Object.keys((d.data() || {}).cust || {}).forEach(function(k){ CUSTS[canonC(k)] = 1; }); });
   if(Object.keys(CUSTS).length !== n) custUi();
 }
 function setCust(v){ ISCUST = v || ""; lsSet("yqi_iscust", ISCUST); ISL.forEach(function(L){ if(L.q) try{ L.cb(isFilter(L.c, L.q)); }catch(e){} }); custUi(); }
+var CUSTUI = [];
 function custUi(){
+  CUSTUI.forEach(function(f){ try{ f(); }catch(e){} });
   var b = document.body; if(!b) return;
   var w = $("yqCust");
   if(!w){ w = document.createElement("div"); w.id = "yqCust"; w.innerHTML = '<span>Customer</span><select></select><em></em>'; b.appendChild(w); w.querySelector("select").onchange = function(){ setCust(this.value); }; }
@@ -249,7 +263,7 @@ function custUi(){
   if(ISCUST && names.indexOf(ISCUST) < 0) names.push(ISCUST);
   w.querySelector("select").innerHTML = '<option value="">All customers</option>' + names.map(function(n){ return '<option' + (n === ISCUST ? " selected" : "") + '>' + esc(n) + '</option>'; }).join("");
   w.querySelector("em").textContent = ISCUST ? "external data only" : "";
-  w.style.display = b.classList.contains("oninsp") && !HOMEON ? "flex" : "none";
+  w.style.display = "none";
 }
 function startCustUi(){
   var st = document.createElement("style");
@@ -266,16 +280,16 @@ function pickIsRoot(){
 }
 
 // ---------- Home: all customers overview (opens from the "All customers" workspace) ----------
-var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper2") || "all";
-function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
+var HOMEON = false, HDATA = null, HPER = lsGet("yqi_hper3") || "6m", HDAY = "", HFROM = ssGet("yqi_hf") || "", HTO = ssGet("yqi_ht") || "";
+function rkind(r){ r = String(r || ""); if(/abort/i.test(r)) return "abort"; if(/pend/i.test(r)) return "pend"; if(/fail|reject/i.test(r)) return "fail"; if(/pass|accept|ok/i.test(r)) return "pass"; return "other"; }
 function ymd(d){ return d.toISOString().slice(0, 10); }
 function snap1(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(q){ if(ok) return; ok = true; res(q); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res({docs: []}); } }); }catch(e){ res({docs: []}); } }); }
-// ----- data: every customer's articles (built-in list + uploads) grouped into shipping plans -----
 var KIND = function(s){ s = String(s || ""); return /fail|await/i.test(s) ? "fl" : /1st/i.test(s) ? "p1" : /re-?insp/i.test(s) ? "re" : /reject/i.test(s) ? "rej" : /not insp|not offer/i.test(s) ? "ni" : /pass|ok|accept/i.test(s) ? "p1" : "ni"; };
 function snapDoc(ref){ return new Promise(function(res){ var u = null, ok = false; try{ u = ref.onSnapshot(function(d){ if(ok) return; ok = true; res(d); setTimeout(function(){ try{ u && u(); }catch(e){} }, 0); }, function(){ if(!ok){ ok = true; res(null); } }); }catch(e){ res(null); } }); }
+// customer workspaces: built-in article list + uploads (same numbers as each customer's own page)
 function loadHome(){
-  var custs = CLIST.slice(), rows = [];
-  var ps = custs.map(function(w){
+  var rows = [];
+  return Promise.all(CLIST.map(function(w){
     var r = FS.collection("ws").doc(w.id);
     return Promise.all([snapDoc(r.collection("seed").doc("ROWS")), snap1(r.collection("insp")), snap1(r.collection("shadeov"))]).then(function(a){
       var m = {}, base = a[0] && a[0].exists ? (dec(a[0].data().v) || []) : [];
@@ -283,105 +297,163 @@ function loadHome(){
       (a[1].docs || []).map(function(d){ return dec(d.data()) || {}; }).sort(function(x, y){ return (x.ts || 0) - (y.ts || 0); }).forEach(function(d){ (d.rows || []).forEach(function(x){ if(x && x.k) m[x.k] = x; }); });
       var ov = {}; (a[2].docs || []).map(function(d){ return d.data() || {}; }).sort(function(x, y){ return (x.ts || 0) - (y.ts || 0); }).forEach(function(d){ if(d.key) ov[d.key] = Object.assign({}, ov[d.key], d); });
       Object.keys(m).forEach(function(k){ var x = m[k], o = ov["rp:" + k], s = x.s || ""; if(o && o.rp && /fail|await/i.test(s)) s = "Passed - Re-inspection";
-        rows.push({cust: w.name, ws: w.id, date: String(x.d || "").slice(0, 10), k: KIND(s), s: s, p: x.p || "—", n: x.n || "", c: x.c || "", z: x.z || "", l: x.l || "", q: +x.q || 0, pg: x.pg || ""}); });
+        rows.push({cust: w.name, ws: w.id, date: String(x.d || "").slice(0, 10), k: KIND(s), s: s, p: x.p || "—", n: x.n || "", c: x.c || "", z: x.z || "", l: x.l || "", q: +x.q || 0}); });
     }).catch(function(){});
-  });
-  ps.push((ISROOT ? snap1(ISROOT.collection("is_ext")) : Promise.resolve({docs: []})).then(function(q){ var have = {}; custs.forEach(function(w){ have[String(w.name).toLowerCase()] = 1; });
-    q.docs.forEach(function(d){ var x = d.data() || {}; if(!x.date || !x.customer || x.customer === "Not recorded" || have[String(x.customer).toLowerCase()]) return; var k = rkind(x.result);
-      rows.push({cust: x.customer, ws: null, date: String(x.date).slice(0, 10), k: k === "pass" ? "p1" : k === "fail" ? "fl" : "ni", s: x.result || "", p: x.ytm || x.po || "—", n: x.unit || "", c: "", z: "", l: "", q: +x.sample || 0, pg: x.unit || ""}); }); }).catch(function(){}));
-  return Promise.all(ps).then(function(){ if(!HDATA || rows.length >= HDATA.length) HDATA = rows; });
+  })).then(function(){ HDATA = rows; });
 }
+var HRT = null; function homeSoon(){ if(!HOMEON) return; clearTimeout(HRT); HRT = setTimeout(function(){ if(HOMEON) renderHome(); }, 300); }
 var HLOAD = 0;
 function loadHomeTry(n){
   var my = ++HLOAD, done = false;
   loadHome().then(function(){ done = true; if(HOMEON) renderHome(); });
   setTimeout(function(){ if(!done && !HDATA && my === HLOAD && n < 4) loadHomeTry(n + 1); }, 8000 + n * 4000);
 }
-function plans(R){
-  var m = {};
-  R.forEach(function(r){ var key = r.cust + "|" + r.p, q = m[key] = m[key] || {cust: r.cust, ws: r.ws, p: r.p, n: 0, p1: 0, re: 0, bad: 0, ni: 0, d: "", rows: []}; q.n++; q.rows.push(r);
-    if(r.k === "p1") q.p1++; else if(r.k === "re") q.re++; else if(r.k === "ni") q.ni++; else q.bad++; if(r.date > q.d) q.d = r.date; });
-  var l = Object.keys(m).map(function(k){ var q = m[k]; q.st = (q.re || q.bad) ? "fail" : q.ni ? (q.p1 ? "part" : "wait") : "pass"; return q; });
-  return l;
+// Inspection Summary data, already loaded by the app (no extra reading)
+function isRows(c){ var L = ISL.filter(function(x){ return x.c === c && x.q; })[0]; return L ? L.q.docs.map(function(d){ var x = d.data() || {}; x._id = d.id; return x; }) : null; }
+// one inspection = one shipping plan (customer workspace) or one YTM / PO (Inspection Summary)
+function buildLots(R, ext, wsHas){
+  var lots = [], m = {};
+  R.forEach(function(r){ var key = r.cust + "|" + r.p, q = m[key];
+    if(!q){ q = m[key] = {cust: r.cust, ws: r.ws, id: r.p, kind: "plan", date: "", last: "", n: 0, p1: 0, re: 0, bad: 0, ni: 0, rows: [], sample: 0, major: 0, dl: {}}; lots.push(q); }
+    q.n++; q.rows.push(r); if(r.k === "p1") q.p1++; else if(r.k === "re") q.re++; else if(r.k === "ni") q.ni++; else q.bad++;
+    if(r.date && (!q.date || r.date < q.date)) q.date = r.date; if(r.date > q.last) q.last = r.date; });
+  lots.forEach(function(q){ q.first = (q.re || q.bad) ? "fail" : q.ni && !q.p1 ? "pend" : "pass"; q.final = q.bad ? "fail" : q.re ? "repass" : q.ni && !q.p1 ? "pend" : "pass"; });
+  // Inspection Summary: every record is one inspection (count = number of inspections it stands for)
+  var by = {};
+  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || wsHas[ckey(c)]) return; var y = String(x.ytm || "").trim(); if(y) (by[c + "|" + y] = by[c + "|" + y] || []).push(x); });
+  var reOf = {};
+  Object.keys(by).forEach(function(k){ var rs = by[k].sort(function(a, b){ return (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1; }), seenFail = null;
+    rs.forEach(function(r){ var rk = rkind(r.result); if(rk === "fail") seenFail = r; else if(rk === "pass" && seenFail){ reOf[seenFail._id] = "repass"; reOf[r._id] = "reins"; seenFail = null; } }); });
+  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || wsHas[ckey(c)]) return; var fk = rkind(x.result), dl = {};
+    (x.dlist || []).forEach(function(d){ if(d && d.n) dl[d.n] = (dl[d.n] || 0) + (+d.q || 1); });
+    var st = reOf[x._id] || (fk === "pass" ? "pass" : fk === "fail" ? "fail" : "pend");
+    lots.push({cust: c, ws: null, id: String(x.ytm || x.po || "—"), lbl: x.ytm ? "YTM " + x.ytm : x.po ? "PO " + x.po : "—", rid: x._id, kind: "is", date: x.date, last: x.date, w: +x.count || 1, first: st === "reins" ? "reins" : fk === "pass" ? "pass" : fk === "fail" ? "fail" : "pend", final: st === "reins" ? "pass" : st,
+      po: x.po || "", art: x.article || "", unit: x.unit || "", sample: +x.sample || 0, major: x.sample ? (+x.major || 0) : 0, dl: dl, recs: [x]}); });
+  return lots;
+}
+function homeRange(){
+  var today = ymd(new Date()), d;
+  if(HPER === "day") return {from: HDAY || today, to: HDAY || today, lbl: dmy(HDAY || today)};
+  if(HPER === "3d"){ d = new Date(); d.setDate(d.getDate() - 2); return {from: ymd(d), to: today, lbl: "last 3 days"}; }
+  if(HPER === "m") return {from: today.slice(0, 8) + "01", to: today, lbl: "this month"};
+  if(HPER === "6m"){ d = new Date(); d.setMonth(d.getMonth() - 6); return {from: ymd(d), to: today, lbl: "last 6 months"}; }
+  if(HPER === "rng") return {from: HFROM || "0000", to: HTO || "9999", lbl: (HFROM ? dmy(HFROM) : "start") + " → " + (HTO ? dmy(HTO) : "today")};
+  return {from: "0000", to: "9999", lbl: "all time"};
 }
 function homeCss(){
   if($("yqHomeCss")) return; var st = document.createElement("style"); st.id = "yqHomeCss";
   st.textContent = "#yqHome{position:fixed;inset:0;z-index:2147481000;overflow:auto;background:radial-gradient(1200px 500px at 85% -10%,#e3f0cf,transparent),#f3f6ee;font:14px Manrope,system-ui,sans-serif;color:#1f2d17}" +
-  "#yqHome .hw{max-width:1240px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
-  "#yqHome .per{margin-left:auto;display:flex;gap:6px}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px Manrope,system-ui,sans-serif;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}" +
-  "#yqHome .kp{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}#yqHome .k{background:#fff;border:1px solid #e1e8d8;border-radius:14px;padding:14px}#yqHome .k b{display:block;font:800 26px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:600}#yqHome .k i{font-style:normal;font-size:12px;color:#62705a}" +
+  "#yqHome .hw{max-width:1280px;margin:0 auto;padding:22px 16px 60px}#yqHome .ht{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:16px 0 18px}#yqHome h1{font:800 28px Manrope,system-ui,sans-serif;margin:0;letter-spacing:-.5px}#yqHome h1 em{font-style:normal;color:#5BA32A}#yqHome .sub{color:#62705a;font-size:13px}" +
+  "#yqHome .per{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end}#yqHome .per button{border:1px solid #cfd8c4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px Manrope,system-ui,sans-serif;cursor:pointer;color:#33452a}#yqHome .per button.on{background:#2F5A1A;color:#fff;border-color:#2F5A1A}#yqHome .per input{width:auto!important;min-width:0;max-width:140px;margin:0;border:1px solid #cfd8c4;border-radius:9px;padding:5px 7px;font:600 12px Manrope,system-ui,sans-serif;color:#33452a;background:#fff}#yqHome .per .dl{font-size:11px;color:#62705a;font-weight:700}" +
+  "#yqHome .sec{font:800 13px Manrope,system-ui,sans-serif;color:#62705a;text-transform:uppercase;letter-spacing:.06em;margin:4px 2px 8px}" +
+  "#yqHome .kp{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}#yqHome .k{background:#fff;border:1px solid #e1e8d8;border-radius:14px;padding:12px 14px}#yqHome .k b{display:block;font:800 24px Manrope,system-ui,sans-serif;margin-top:4px}#yqHome .k span{font-size:12px;color:#62705a;font-weight:600}#yqHome .k i{font-style:normal;font-size:11.5px;color:#62705a}" +
   "#yqHome .g2{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;margin-bottom:16px}#yqHome .cd{background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:16px;margin-bottom:16px;overflow-x:auto}#yqHome .g2 .cd{margin-bottom:0}#yqHome .cd h3{margin:0 0 12px;font:800 16px Manrope,system-ui,sans-serif}" +
-  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8;white-space:nowrap}#yqHome td{padding:9px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td,#yqHome tr.on td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
-  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:60px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}#yqHome .hw8{color:#a66b00;font-weight:800}" +
+  "#yqHome table{width:100%;border-collapse:collapse;font-size:13px}#yqHome th{text-align:left;color:#62705a;font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid #e1e8d8;white-space:nowrap}#yqHome td{padding:8px 8px;border-bottom:1px solid #eef2e8}#yqHome tr.cl{cursor:pointer}#yqHome tr.cl:hover td,#yqHome tr.on td{background:#f4f9ec}#yqHome .op{color:#2F5A1A;font-weight:800;white-space:nowrap}" +
+  "#yqHome .bar{height:8px;border-radius:9px;background:#f1d6d2;overflow:hidden;min-width:50px}#yqHome .bar i{display:block;height:100%;background:#5BA32A}#yqHome .hok{color:#2f7d1f;font-weight:800}#yqHome .hbad{color:#c0392b;font-weight:800}#yqHome .hw8{color:#a66b00;font-weight:800}" +
   "#yqHome .tiles{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:16px;margin-bottom:16px}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:16px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap}#yqHome button.tl{cursor:pointer}#yqHome button.tl:hover{border-color:#7DB82E;box-shadow:0 6px 18px rgba(63,125,31,.12)}#yqHome .tl .ic{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,#7DB82E,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 17px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 17px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:12.5px}#yqHome .tl select{font:700 14px Manrope,system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:9px;padding:8px 10px;min-width:150px;flex:1}" +
-  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .ub.lt{background:#eef4e6;color:#2F5A1A}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}" +
-  "#yqHome .pl{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}#yqHome .pl.pass{background:#e4f3d8;color:#2f7d1f}#yqHome .pl.fail{background:#fbe3e0;color:#b3261e}#yqHome .pl.part,#yqHome .pl.wait{background:#fff1d6;color:#8a5a00}" +
+  "#yqHome .ub{background:#2F5A1A;color:#fff;border:0;border-radius:9px;padding:9px 14px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}" +
+  "#yqHome .pl{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}#yqHome .pl.pass{background:#e4f3d8;color:#2f7d1f}#yqHome .pl.repass{background:#e3efe9;color:#1f6b4f}#yqHome .pl.fail{background:#fbe3e0;color:#b3261e}#yqHome .pl.pend{background:#fff1d6;color:#8a5a00}" +
   "#yqHome .em{color:#62705a;padding:16px 0;text-align:center}#yqHome svg text{font:600 10px system-ui,sans-serif;fill:#62705a}#yqHome .lg{display:flex;gap:14px;font-size:12px;color:#62705a;margin-top:6px;flex-wrap:wrap}#yqHome .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}" +
-  "@media(max-width:980px){#yqHome .tiles{grid-template-columns:1fr}#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .g2{grid-template-columns:1fr}#yqHome .per{margin-left:0}#yqHome h1{font-size:22px}}@media(max-width:700px){#yqHome .hide-m{display:none}}";
+  "#yqHome .dfl{display:flex;flex-direction:column;gap:7px}#yqHome .dfl div{display:grid;grid-template-columns:1fr 110px 36px;gap:8px;align-items:center;font-size:13px}" +
+  "@media(max-width:1100px){#yqHome .kp{grid-template-columns:repeat(3,1fr)}}@media(max-width:980px){#yqHome .tiles{grid-template-columns:1fr}#yqHome .g2{grid-template-columns:1fr}#yqHome .per{margin-left:0;justify-content:flex-start}#yqHome h1{font-size:22px}}@media(max-width:700px){#yqHome .kp{grid-template-columns:repeat(2,1fr)}#yqHome .hide-m{display:none}}";
   document.head.appendChild(st);
 }
 var HCUST = ssGet("yqi_hcust") || "", HMSG = "", HPLAN = "";
 function pc(a, b){ return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; }
-function dmy(d){ return d ? d.slice(8, 10) + "-" + d.slice(5, 7) + "-" + d.slice(2, 4) : "—"; }
+function dmy(d){ return d && d.length >= 10 ? d.slice(8, 10) + "-" + d.slice(5, 7) + "-" + d.slice(2, 4) : "—"; }
 function hTable(head, rows){ return '<table><tr>' + head.map(function(h){ return '<th' + (h[1] ? ' class="hide-m"' : '') + '>' + h[0] + '</th>'; }).join("") + '</tr>' + rows.join("") + '</table>'; }
 function barc(a, b){ return b ? '<div style="display:flex;align-items:center;gap:6px"><div class="bar"><i style="width:' + Math.round(a / b * 100) + '%"></i></div>' + pc(a, b) + '</div>' : '—'; }
-var PST = {pass: "Passed 1st go", fail: "Failed 1st go", part: "Partly inspected", wait: "Not inspected"};
+var PST = {pass: "Passed 1st go", repass: "Passed after re-inspection", fail: "Failed", pend: "Not inspected yet"};
+function kpi(t, v, cls, sub){ return '<div class="k"><span>' + t + '</span><b' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</b><i>' + sub + '</i></div>'; }
 function renderHome(){
   var h = $("yqHome"); if(!h) return;
-  var sc = h.scrollTop, today = ymd(new Date()), from = "0000";
-  if(HPER === "30"){ var d = new Date(); d.setDate(d.getDate() - 29); from = ymd(d); }
-  else if(HPER === "m"){ from = today.slice(0, 8) + "01"; }
+  var sc = h.scrollTop, rg = homeRange(), today = ymd(new Date());
+  var EXT = isRows("is_ext"), INT = isRows("is_int"), WST = isRows("is_extday");
   var dt = new Date().toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short", year: "numeric"});
-  var names = {}; CLIST.forEach(function(w){ names[w.name] = w.id; }); (HDATA || []).forEach(function(r){ if(!(r.cust in names)) names[r.cust] = r.ws; });
+  var wsHas = {}; (HDATA || []).forEach(function(r){ wsHas[ckey(r.cust)] = 1; });
+  var names = {}; CLIST.forEach(function(w){ names[w.name] = w.id; });
+  (EXT || []).forEach(function(x){ var c = canonC(x.customer); if(c && c !== "Not recorded" && !(c in names)) names[c] = null; });
+  (INT || []).forEach(function(x){ if(x.customer){ var c = canonC(x.customer); if(!(c in names)) names[c] = null; } });
   var nk = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
-  if(HCUST && !(HCUST in names) && HDATA) HCUST = "";
-  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · shipping plans and inspections · ' + esc(dt) + '</div></div><div class="per">' +
-    [["m", "This month"], ["30", "Last 30 days"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("") + '</div></div>';
+  if(HCUST && !(HCUST in names) && HDATA && EXT) HCUST = "";
+  var per = [["day", "Day"], ["3d", "Last 3 days"], ["m", "This month"], ["6m", "Last 6 months"], ["all", "All time"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("");
+  var x = '<div class="hw"><div class="ht"><div><h1>Yunus Quality <em>Intelligence</em></h1><div class="sub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div></div><div class="per">' + per +
+    '<span class="dl">Day</span><input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || today) : "") + '"><span class="dl">From</span><input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"><span class="dl">To</span><input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></div></div>';
   x += '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:120px"><b>Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' : '') + '</div>' +
-    '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b>Inspection Summary</b><span>Daily floor and external data, reports and presentations</span></div><span class="op">Open ›</span></button>' +
+    '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b>Inspection Summary</b><span>Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
     '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b>Upload inspections</b><span>Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div></div>';
   if(HMSG) x += '<div class="cd msgb">' + HMSG + '</div>';
-  if(!HDATA){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
-  var R = HDATA.filter(function(r){ return (!HCUST || r.cust === HCUST) && (from === "0000" || (r.date >= from && r.date <= today)); });
-  var P = plans(R), off = R.filter(function(r){ return r.k !== "ni"; }), a1 = off.filter(function(r){ return r.k === "p1"; }).length;
-  var pp = P.filter(function(q){ return q.st === "pass"; }).length, pf = P.filter(function(q){ return q.st === "fail"; }).length, po = P.length - pp - pf;
-  x += '<div class="kp"><div class="k"><span>Shipping plans</span><b>' + P.length + '</b><i>' + (po ? po + ' not fully inspected' : (HCUST ? esc(HCUST) : (function(){ var c = {}; P.forEach(function(q){ c[q.cust] = 1; }); return Object.keys(c).length + ' customers'; })())) + '</i></div>' +
-    '<div class="k"><span>Plans passed 1st go</span><b class="hok">' + pp + '</b><i>' + pc(pp, pp + pf) + ' of inspected plans</i></div>' +
-    '<div class="k"><span>Plans failed 1st go</span><b class="hbad">' + pf + '</b><i>one failed article fails the plan</i></div>' +
-    '<div class="k"><span>Articles inspected</span><b>' + off.length + '</b><i>' + (R.length - off.length) + ' not inspected</i></div>' +
-    '<div class="k"><span>Article 1st-go pass</span><b>' + pc(a1, off.length) + '</b><i>' + a1 + ' of ' + off.length + ' passed 1st go</i></div></div>';
+  if(!HDATA || !EXT){ h.innerHTML = x + '<div class="cd em">Loading all customers…</div></div>'; bindHome(); return; }
+  var inR = function(d){ return d && d >= rg.from && d <= rg.to; }, isC = function(c){ return !HCUST || canonC(c) === HCUST; };
+  var LOTS = buildLots(HDATA, EXT, wsHas).filter(function(q){ return isC(q.cust) && inR(q.date); });
+  var done = LOTS.filter(function(q){ return q.first !== "pend"; });
+  var W = function(a){ return a.reduce(function(t, q){ return t + (q.w || 1); }, 0); };
+  var nAll = W(done), p1 = W(done.filter(function(q){ return q.first === "pass"; })), rp = W(done.filter(function(q){ return q.final === "repass"; })), fl = W(done.filter(function(q){ return q.final === "fail"; })), ri = W(done.filter(function(q){ return q.first === "reins"; })), base = nAll - ri;
+  var smp = 0, maj = 0; done.forEach(function(q){ if(q.kind === "is"){ smp += q.sample; maj += q.major; } });
+  var IR = (INT || []).filter(function(r){ return inR(r.date) && (!HCUST || (r.customer && canonC(r.customer) === HCUST)); });
+  var it = {n: 0, p: 0, f: 0}; IR.forEach(function(r){ var c = +r.count || 1, k = rkind(r.result); it.n += c; if(k === "pass") it.p += c; else if(k === "fail") it.f += c; });
+  var WR = []; (WST || []).forEach(function(dd){ if(!inR(dd.date || dd._id)) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = dd.cust[cn] || {}; WR.push({date: dd.date || dd._id, cust: canonC(cn), wpct: v.wpct, wmtr: v.wmtr, rem: v.remarks || "", unit: v.unit || ""}); }); });
+  var wp = WR.filter(function(w){ return w.wpct != null; }), wavg = wp.length ? wp.reduce(function(a, w){ return a + (+w.wpct); }, 0) / wp.length : null, wm = WR.reduce(function(a, w){ return a + (+w.wmtr || 0); }, 0);
+  var ccount = {}; LOTS.forEach(function(q){ ccount[q.cust] = 1; });
+  x += '<div class="sec">External inspections</div><div class="kp">' + kpi("Inspections", nAll, "", (HCUST ? esc(HCUST) : Object.keys(ccount).length + " customers") + (ri ? " · incl. " + ri + " re-inspections" : "") + (LOTS.length > done.length ? " · " + (LOTS.length - done.length) + " not inspected yet" : "")) +
+    kpi("Passed 1st go", p1, "hok", pc(p1, base) + " of inspections") + kpi("Passed after re-inspection", rp, "", "failed 1st go, then passed") + kpi("Still failed", fl, fl ? "hbad" : "", "need re-inspection or action") +
+    kpi("Overall pass", pc(p1 + rp, base), "", (p1 + rp) + " of " + base + " passed in the end") + kpi("OQL", smp ? (Math.round(maj / smp * 10000) / 100) + "%" : "—", "", smp ? maj + " major in " + smp + " samples" : "from Inspection Summary") + '</div>';
+  x += '<div class="sec">Internal inspections and wastage</div><div class="kp">' + kpi("Internal inspections", it.n, "", HCUST ? "for " + esc(HCUST) : "all floors") + kpi("Internal passed", it.p, "hok", pc(it.p, it.n) + " pass rate") + kpi("Internal failed", it.f, it.f ? "hbad" : "", pc(it.f, it.n) + " of internal") +
+    kpi("Floors", (function(){ var f = {}; IR.forEach(function(r){ if(r.floor) f[r.floor] = 1; }); return Object.keys(f).length; })(), "", "with internal data") + kpi("Wastage", wavg != null ? (Math.round(wavg * 10000) / 100) + "%" : "—", "", wp.length ? "average of " + wp.length + " entries" : "no wastage in this period") + kpi("Wastage MTR", wm ? Math.round(wm).toLocaleString() : "—", "", WR.length + " entries") + '</div>';
   var left;
   if(!HCUST){
-    var cs = {}; nk.forEach(function(n){ cs[n] = {pl: 0, pp: 0, pf: 0, off: 0, a1: 0, last: ""}; });
-    P.forEach(function(q){ var c = cs[q.cust]; c.pl++; if(q.st === "pass") c.pp++; if(q.st === "fail") c.pf++; if(q.d > c.last) c.last = q.d; });
-    off.forEach(function(r){ var c = cs[r.cust]; c.off++; if(r.k === "p1") c.a1++; });
-    var ck = Object.keys(cs).sort(function(a, b){ return cs[b].off - cs[a].off || (a < b ? -1 : 1); });
-    left = '<h3>Customers</h3>' + hTable([["Customer"], ["Plans"], ["Passed 1st go"], ["Failed 1st go"], ["Articles", 1], ["Article 1st go", 1], ["Last", 1]], ck.map(function(k){ var c = cs[k]; return '<tr class="cl" data-c="' + esc(k) + '"><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.pl + '</td><td class="hok">' + c.pp + '</td><td class="' + (c.pf ? 'hbad' : '') + '">' + c.pf + '</td><td class="hide-m">' + c.off + '</td><td class="hide-m">' + barc(c.a1, c.off) + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; }));
+    var cs = {};
+    LOTS.forEach(function(q){ var c = cs[q.cust] = cs[q.cust] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; if(q.first === "pend") return; var w = q.w || 1; c.n += w; if(q.first === "pass") c.p1 += w; if(q.final === "repass") c.rp += w; if(q.final === "fail") c.f += w; if(q.last > c.last) c.last = q.last; });
+    IR.forEach(function(r){ if(!r.customer) return; var k = canonC(r.customer), c = cs[k] = cs[k] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; var n = +r.count || 1; c.in += n; if(rkind(r.result) === "pass") c.ip += n; if(r.date > c.last) c.last = r.date; });
+    WR.forEach(function(w){ var c = cs[w.cust] = cs[w.cust] || {n: 0, p1: 0, rp: 0, f: 0, last: "", in: 0, ip: 0, w: []}; if(w.wpct != null) c.w.push(+w.wpct); });
+    var ck = Object.keys(cs).sort(function(a, b){ return (cs[b].n + cs[b].in) - (cs[a].n + cs[a].in) || (a < b ? -1 : 1); });
+    left = '<h3>Customers · ' + esc(rg.lbl) + '</h3>' + (ck.length ? hTable([["Customer"], ["External"], ["1st go"], ["After re-insp."], ["Failed"], ["1st go %", 1], ["Internal", 1], ["Int. pass", 1], ["Wastage", 1], ["Last", 1]], ck.map(function(k){ var c = cs[k], wv = c.w.length ? c.w.reduce(function(a, b){ return a + b; }, 0) / c.w.length : null;
+      return '<tr class="cl" data-c="' + esc(k) + '"><td><b>' + esc(k) + '</b> <span class="op">›</span></td><td>' + c.n + '</td><td class="hok">' + c.p1 + '</td><td>' + c.rp + '</td><td class="' + (c.f ? 'hbad' : '') + '">' + c.f + '</td><td class="hide-m">' + barc(c.p1, c.n) + '</td><td class="hide-m">' + (c.in || "—") + '</td><td class="hide-m">' + (c.in ? pc(c.ip, c.in) : "—") + '</td><td class="hide-m">' + (wv != null ? (Math.round(wv * 10000) / 100) + "%" : "—") + '</td><td class="hide-m">' + dmy(c.last) + '</td></tr>'; })) : '<div class="em">No inspections in ' + esc(rg.lbl) + '. Pick another period.</div>');
   } else {
-    var PL = P.slice().sort(function(a, b){ return a.d < b.d ? 1 : a.d > b.d ? -1 : (a.p < b.p ? -1 : 1); });
-    left = '<h3>' + esc(HCUST) + ' · shipping plans (' + PL.length + ')</h3>' + (PL.length ? hTable([["Shipping plan"], ["Articles"], ["1st go"], ["Re-insp.", 1], ["Failed", 1], ["Result"], ["Last", 1]], PL.map(function(q){ return '<tr class="cl' + (HPLAN === q.p ? ' on' : '') + '" data-p="' + esc(q.p) + '"><td><b>' + esc(q.p) + '</b> <span class="op">' + (HPLAN === q.p ? '▾' : '›') + '</span></td><td>' + q.n + '</td><td class="hok">' + q.p1 + '</td><td class="hide-m">' + q.re + '</td><td class="hide-m ' + (q.bad ? 'hbad' : '') + '">' + q.bad + '</td><td><span class="pl ' + q.st + '">' + PST[q.st] + '</span></td><td class="hide-m">' + dmy(q.d) + '</td></tr>'; })) : '<div class="em">No shipping plans in this period. Pick "All time" or upload a file.</div>');
+    var PL = done.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? -1 : 1); });
+    left = '<h3>' + esc(HCUST) + ' · inspections (' + PL.length + ')</h3>' + (PL.length ? hTable([["Date"], ["Inspection"], ["PO / article", 1], ["Articles / sample", 1], ["1st go"], ["Final result"]], PL.slice(0, 200).map(function(q){
+      var det = q.kind === "plan" ? (q.p1 + " of " + q.n + " articles 1st go") : (q.sample ? q.sample + " sample, " + q.major + " major" : "");
+      var pk = q.kind === "plan" ? q.id : q.rid;
+      return '<tr class="cl' + (HPLAN === pk ? ' on' : '') + '" data-p="' + esc(pk) + '"><td>' + dmy(q.date) + '</td><td><b>' + esc(q.kind === "plan" ? q.id : q.lbl) + (q.w > 1 ? " ×" + q.w : "") + '</b> <span class="op">' + (HPLAN === pk ? '▾' : '›') + '</span></td><td class="hide-m">' + esc(q.kind === "plan" ? "" : [q.po, q.art].filter(Boolean).join(" · ")) + '</td><td class="hide-m">' + esc(det) + '</td><td class="' + (q.first === "pass" ? "hok" : q.first === "reins" ? "" : "hbad") + '">' + (q.first === "pass" ? "Pass" : q.first === "reins" ? "Re-inspection" : "Fail") + '</td><td><span class="pl ' + q.final + '">' + PST[q.final] + '</span></td></tr>'; })) : '<div class="em">No inspections for ' + esc(HCUST) + ' in ' + esc(rg.lbl) + '. Pick "All time" or another period.</div>');
   }
-  var days = [], st = new Date(); st.setDate(st.getDate() - 29); if(from > ymd(st)) st = new Date(from + "T00:00:00");
-  for(var d0 = new Date(st); ymd(d0) <= today; d0.setDate(d0.getDate() + 1)) days.push(ymd(d0));
-  var by = {}; off.forEach(function(r){ var b = by[r.date] = by[r.date] || {p: 0, f: 0}; if(r.k === "p1") b.p++; else b.f++; });
-  var mx = 1; days.forEach(function(d){ var b = by[d]; if(b) mx = Math.max(mx, b.p + b.f); });
-  var W = 520, H = 190, bw = W / Math.max(days.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Articles inspected per day, last 30 days">';
-  days.forEach(function(d, i){ var b = by[d] || {p: 0, f: 0}, hp = b.p / mx * H, hf = b.f / mx * H, xx = i * bw + 1.5, w = Math.max(bw - 3, 1);
-    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + d + ': ' + b.p + ' passed 1st go</title></rect>';
-    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + d + ': ' + b.f + ' not passed 1st go</title></rect>';
-    if(i % 5 === 0 || i === days.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (H + 14) + '" text-anchor="' + (i === days.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
+  // chart: inspections per day (or per week for long periods)
+  var span = rg.from === "0000" ? null : rg.from, all = done.map(function(q){ return q.date; }).sort(), first = span && span > (all[0] || span) ? span : (all[0] || today), last = rg.to === "9999" ? today : (rg.to < today ? rg.to : today);
+  var days = []; for(var d0 = new Date(first + "T00:00:00"); ymd(d0) <= last && days.length < 400; d0.setDate(d0.getDate() + 1)) days.push(ymd(d0));
+  var wk = days.length > 62, bucket = function(d){ if(!wk) return d; var t = new Date(d + "T00:00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return ymd(t); };
+  var keys = []; days.forEach(function(d){ var b = bucket(d); if(keys[keys.length - 1] !== b) keys.push(b); });
+  var by = {}; done.forEach(function(q){ var b = by[bucket(q.date)] = by[bucket(q.date)] || {p: 0, f: 0}; if(q.first === "fail") b.f += q.w || 1; else b.p += q.w || 1; });
+  var mx = 1; keys.forEach(function(k){ var b = by[k]; if(b) mx = Math.max(mx, b.p + b.f); });
+  var W = 520, H = 190, bw = W / Math.max(keys.length, 1), sv = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="External inspections per ' + (wk ? "week" : "day") + '">', step = Math.max(1, Math.ceil(keys.length / 7));
+  keys.forEach(function(d, i){ var b = by[d] || {p: 0, f: 0}, hp = b.p / mx * H, hf = b.f / mx * H, xx = i * bw + 1, w = Math.max(bw - 2, 1);
+    if(hp) sv += '<rect x="' + xx + '" y="' + (H - hp) + '" width="' + w + '" height="' + hp + '" rx="2" fill="#5BA32A"><title>' + (wk ? "Week of " : "") + d + ': ' + b.p + ' passed 1st go</title></rect>';
+    if(hf) sv += '<rect x="' + xx + '" y="' + (H - hp - hf) + '" width="' + w + '" height="' + hf + '" rx="2" fill="#d9534f"><title>' + (wk ? "Week of " : "") + d + ': ' + b.f + ' failed 1st go</title></rect>';
+    if(i % step === 0 || i === keys.length - 1) sv += '<text x="' + (xx + w / 2) + '" y="' + (H + 14) + '" text-anchor="' + (i === keys.length - 1 ? 'end' : i === 0 ? 'start' : 'middle') + '">' + d.slice(8, 10) + '-' + d.slice(5, 7) + '</text>'; });
   sv += '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="#dfe6d6"/></svg>';
-  var any30 = days.some(function(d){ return by[d]; });
-  x += '<div class="g2"><div class="cd">' + left + '</div><div class="cd"><h3>Articles inspected · last 30 days</h3>' + (any30 ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed 1st go</span><span><i style="background:#d9534f"></i>Failed 1st go</span><span>Most in a day: ' + mx + '</span></div>' : '<div class="em">No inspections in the last 30 days.</div>') + '</div></div>';
+  x += '<div class="g2"><div class="cd">' + left + '</div><div class="cd"><h3>External inspections per ' + (wk ? "week" : "day") + '</h3>' + (done.length ? sv + '<div class="lg"><span><i style="background:#5BA32A"></i>Passed 1st go</span><span><i style="background:#d9534f"></i>Failed 1st go</span><span>Most in a ' + (wk ? "week" : "day") + ': ' + mx + '</span></div>' : '<div class="em">No external inspections in this period.</div>') + topDef(done, IR) + '</div></div>';
   if(HCUST && HPLAN){
-    var q = P.filter(function(z){ return z.p === HPLAN; })[0];
-    if(q) x += '<div class="cd" id="yqPD"><h3>Shipping plan ' + esc(q.p) + ' · ' + q.n + ' articles <span class="pl ' + q.st + '">' + PST[q.st] + '</span></h3>' + hTable([["Article"], ["Colour", 1], ["Size", 1], ["Lot", 1], ["Qty", 1], ["Date", 1], ["Result"]], q.rows.slice().sort(function(a, b){ return (a.k === "p1") - (b.k === "p1") || (a.n < b.n ? -1 : 1); }).map(function(r){ return '<tr><td>' + esc(r.n) + '</td><td class="hide-m">' + esc(r.c) + '</td><td class="hide-m">' + esc(r.z) + '</td><td class="hide-m">' + esc(r.l) + '</td><td class="hide-m">' + (r.q || "") + '</td><td class="hide-m">' + dmy(r.date) + '</td><td class="' + (r.k === "p1" ? "hok" : r.k === "ni" ? "hw8" : "hbad") + '">' + esc(r.s) + '</td></tr>'; })) + '</div>';
+    var q = done.filter(function(z){ return z.kind === "plan" ? z.id === HPLAN : z.rid === HPLAN; })[0];
+    if(q && q.kind === "plan") x += '<div class="cd" id="yqPD"><h3>Inspection ' + esc(q.id) + ' · ' + q.n + ' articles <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' + hTable([["Article"], ["Colour", 1], ["Size", 1], ["Lot", 1], ["Qty", 1], ["Date", 1], ["Result"]], q.rows.slice().sort(function(a, b){ return (a.k === "p1") - (b.k === "p1") || (a.n < b.n ? -1 : 1); }).map(function(r){ return '<tr><td>' + esc(r.n) + '</td><td class="hide-m">' + esc(r.c) + '</td><td class="hide-m">' + esc(r.z) + '</td><td class="hide-m">' + esc(r.l) + '</td><td class="hide-m">' + (r.q || "") + '</td><td class="hide-m">' + dmy(r.date) + '</td><td class="' + (r.k === "p1" || r.k === "re" ? "hok" : r.k === "ni" ? "hw8" : "hbad") + '">' + esc(r.s) + '</td></tr>'; })) + '</div>';
+    if(q && q.kind === "is") x += '<div class="cd" id="yqPD"><h3>YTM ' + esc(q.id) + ' · ' + esc(q.cust) + ' <span class="pl ' + q.final + '">' + PST[q.final] + '</span></h3>' + hTable([["Date"], ["Result"], ["PO", 1], ["Article", 1], ["Unit", 1], ["Sample", 1], ["Major", 1], ["Defects"]], (EXT || []).filter(function(r){ return canonC(r.customer) === q.cust && String(r.ytm || r.po || "—") === q.id; }).map(function(r){ return '<tr><td>' + dmy(r.date) + '</td><td class="' + (rkind(r.result) === "pass" ? "hok" : "hbad") + '">' + esc(r.result) + '</td><td class="hide-m">' + esc(r.po || "") + '</td><td class="hide-m">' + esc(r.article || "") + '</td><td class="hide-m">' + esc(r.unit || "") + '</td><td class="hide-m">' + (r.sample || "") + '</td><td class="hide-m">' + (r.major != null ? r.major : "") + '</td><td>' + esc(r.defects || "") + '</td></tr>'; })) + '</div>';
   }
-  if(!HCUST){
-    var fl = P.filter(function(q){ return q.st === "fail"; }).sort(function(a, b){ return a.d < b.d ? 1 : -1; }).slice(0, 15);
-    x += '<div class="cd"><h3>Shipping plans that failed 1st go</h3>' + (fl.length ? hTable([["Last date"], ["Customer"], ["Shipping plan"], ["Articles", 1], ["Failed / re-insp."], ["Articles that failed", 1]], fl.map(function(q){ var bad = q.rows.filter(function(r){ return r.k !== "p1" && r.k !== "ni"; }); return '<tr class="cl" data-c="' + esc(q.cust) + '" data-p="' + esc(q.p) + '"><td>' + dmy(q.d) + '</td><td><b>' + esc(q.cust) + '</b></td><td>' + esc(q.p) + '</td><td class="hide-m">' + q.n + '</td><td class="hbad">' + bad.length + '</td><td class="hide-m">' + esc(bad.slice(0, 3).map(function(r){ return r.n + (r.c ? " " + r.c : ""); }).join(", ") + (bad.length > 3 ? " …" : "")) + '</td></tr>'; })) : '<div class="em">No shipping plan failed 1st go in this period.</div>') + '</div>';
+  if(HCUST){
+    var fls = {}; IR.forEach(function(r){ var f = fls[r.floor || "—"] = fls[r.floor || "—"] || {n: 0, p: 0, f: 0}; var n = +r.count || 1; f.n += n; if(rkind(r.result) === "pass") f.p += n; else if(rkind(r.result) === "fail") f.f += n; });
+    var fk = Object.keys(fls).sort(function(a, b){ return fls[b].n - fls[a].n; });
+    x += '<div class="g2"><div class="cd"><h3>Internal inspections · ' + esc(HCUST) + '</h3>' + (fk.length ? hTable([["Floor"], ["Inspections"], ["Pass"], ["Fail"], ["Pass rate", 1]], fk.map(function(k){ var f = fls[k]; return '<tr><td><b>' + esc(k) + '</b></td><td>' + f.n + '</td><td class="hok">' + f.p + '</td><td class="' + (f.f ? 'hbad' : '') + '">' + f.f + '</td><td class="hide-m">' + barc(f.p, f.n) + '</td></tr>'; })) : '<div class="em">No internal inspections with this customer name in ' + esc(rg.lbl) + '.</div>') + '</div>' +
+      '<div class="cd"><h3>Wastage · ' + esc(HCUST) + '</h3>' + (WR.length ? hTable([["Date"], ["Wastage %"], ["MTR"], ["Remarks", 1]], WR.sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 60).map(function(w){ return '<tr><td>' + dmy(w.date) + '</td><td>' + (w.wpct != null ? (Math.round(w.wpct * 10000) / 100) + "%" : "—") + '</td><td>' + (w.wmtr != null ? w.wmtr : "—") + '</td><td class="hide-m">' + esc(w.rem) + '</td></tr>'; })) : '<div class="em">No wastage saved for ' + esc(HCUST) + ' in ' + esc(rg.lbl) + '.</div>') + '</div></div>';
+  } else {
+    var fail = done.filter(function(q){ return q.first === "fail"; }).sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 15);
+    x += '<div class="cd"><h3>Inspections that failed 1st go · ' + esc(rg.lbl) + '</h3>' + (fail.length ? hTable([["Date"], ["Customer"], ["Inspection"], ["Final result"], ["Details", 1]], fail.map(function(q){ var det = q.kind === "plan" ? q.rows.filter(function(r){ return r.k !== "p1" && r.k !== "ni"; }).slice(0, 3).map(function(r){ return r.n + (r.c ? " " + r.c : ""); }).join(", ") : Object.keys(q.dl).slice(0, 3).join(", ");
+      return '<tr class="cl" data-c="' + esc(q.cust) + '" data-p="' + esc(q.kind === "plan" ? q.id : q.rid) + '"><td>' + dmy(q.date) + '</td><td><b>' + esc(q.cust) + '</b></td><td>' + esc(q.kind === "plan" ? q.id : q.lbl) + '</td><td><span class="pl ' + q.final + '">' + PST[q.final] + '</span></td><td class="hide-m">' + esc(det) + '</td></tr>'; })) : '<div class="em">No inspection failed 1st go in this period.</div>') + '</div>';
   }
   h.innerHTML = x + '</div>'; bindHome(); h.scrollTop = sc;
+}
+function topDef(done, IR){
+  var m = {};
+  done.forEach(function(q){ Object.keys(q.dl || {}).forEach(function(k){ m[k] = (m[k] || 0) + q.dl[k]; }); });
+  IR.forEach(function(r){ (r.dlist || []).forEach(function(d){ if(d && d.n) m[d.n] = (m[d.n] || 0) + (+d.q || 1); }); });
+  var k = Object.keys(m).sort(function(a, b){ return m[b] - m[a]; }).slice(0, 8); if(!k.length) return "";
+  var mx = m[k[0]];
+  return '<h3 style="margin-top:18px">Top defects</h3><div class="dfl">' + k.map(function(n){ return '<div><span>' + esc(n) + '</span><div class="bar" style="background:#eef2e8"><i style="width:' + Math.round(m[n] / mx * 100) + '%;background:#c0392b"></i></div><b>' + Math.round(m[n]) + '</b></div>'; }).join("") + '</div>';
 }
 function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
@@ -392,11 +464,14 @@ function openCustName(n){
 function setHC(c){ HCUST = c || ""; HPLAN = ""; ssSet("yqi_hcust", HCUST); renderHome(); try{ $("yqHome").scrollTop = 0; }catch(e){} }
 function bindHome(){
   var h = $("yqHome"); if(!h) return;
-  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; lsSet("yqi_hper2", HPER); renderHome(); }; });
-  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ if(r.dataset.c && r.dataset.c !== HCUST){ setHC(r.dataset.c); if(r.dataset.p){ HPLAN = r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({block: "start"}); } return; } if(r.dataset.p){ HPLAN = HPLAN === r.dataset.p ? "" : r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({behavior: "smooth", block: "start"}); } }; });
+  h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; if(HPER === "day" && !HDAY) HDAY = ymd(new Date()); lsSet("yqi_hper3", HPER); renderHome(); }; });
+  if($("yqDay")) $("yqDay").onchange = function(){ if(!this.value) return; HDAY = this.value; HPER = "day"; renderHome(); };
+  var rng = function(){ HFROM = $("yqFr").value; HTO = $("yqTo").value; ssSet("yqi_hf", HFROM); ssSet("yqi_ht", HTO); if(HFROM || HTO){ HPER = "rng"; renderHome(); } };
+  if($("yqFr")) $("yqFr").onchange = rng; if($("yqTo")) $("yqTo").onchange = rng;
+  h.querySelectorAll("tr.cl").forEach(function(r){ r.onclick = function(){ if(r.dataset.c && r.dataset.c !== HCUST){ setHC(r.dataset.c); if(r.dataset.p){ HPLAN = r.dataset.p; renderHome(); var pd = $("yqPD"); if(pd) pd.scrollIntoView({block: "start"}); } return; } if(r.dataset.p){ HPLAN = HPLAN === r.dataset.p ? "" : r.dataset.p; renderHome(); var pd2 = $("yqPD"); if(pd2) pd2.scrollIntoView({behavior: "smooth", block: "start"}); } }; });
   var cs = $("yqCs"); if(cs) cs.onchange = function(){ setHC(cs.value); };
   if($("yqFull")) $("yqFull").onclick = function(){ openCustName(HCUST); };
-  var ti = $("yqTi"); if(ti) ti.onclick = function(){ showHome(false); var b = document.querySelector('[data-v="insp"]'); if(b) b.click(); };
+  var ti = $("yqTi"); if(ti) ti.onclick = function(){ showHome(false); if(HCUST && HCUST !== ISCUST) setCust(HCUST); var b = document.querySelector('[data-v="insp"]'); if(b) b.click(); };
   if($("yqUpB")) $("yqUpB").onclick = function(){ if(ROLE === "viewer"){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
   if($("yqUpF")) $("yqUpF").onchange = function(){ var f = this.files[0]; this.value = ""; if(f) uploadInsp(f); };
   if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Shipping plan,Date,Program,Article,Colour,Size,Lot,Qty,Result,Reason,Remarks\n" + (HCUST || "Bedsure") + ",202611PKEU009," + ymd(new Date()) + ",Washed Zip,Duvet Cover Set-Washed Cotton-Zip,Simply Taupe,200x200CM,A65094,48,Passed - 1st Go,,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
@@ -490,6 +565,101 @@ function startHome(){
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON) showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
 
+// ---------- Inspection Summary add-ons (company version): customer picker in the side panel, wastage by YTM ----------
+function addonSoon(w){ try{ if(w.__yqAddP) return; w.__yqAddP = 1; }catch(e){ return; } var n = 0; (function f(){ try{ if(w.__yqAdd) return; if(w.document && w.document.getElementById("nav") && w.document.querySelector('[data-p="import"]')){ isAddon(w); return; } }catch(e){ return; } if(++n < 120) setTimeout(f, 250); })(); }
+function isAddon(w){
+  try{ if(!w || w.__yqAdd) return; var d = w.document; if(!d || !d.getElementById("nav")) return; w.__yqAdd = 1; }catch(e){ return; }
+  var st = d.createElement("style");
+  st.textContent = ".yqcs{margin:4px 2px 14px;padding:10px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}.yqcs label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.75;margin-bottom:6px;font-weight:700}.yqcs select{width:100%;border-radius:9px;border:0;padding:8px 9px;font:700 13px inherit;color:#14263d;background:#fff}.yqcs em{display:block;font-style:normal;font-size:11px;opacity:.7;margin-top:6px}" +
+    ".yqw textarea{width:100%;min-height:110px}.yqw table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}.yqw th,.yqw td{padding:6px 6px;border-bottom:1px solid var(--line,#e5e7eb);text-align:left}.yqw td select,.yqw td input{font:inherit;padding:4px 6px;border:1px solid var(--line,#d6dbe3);border-radius:7px;max-width:150px}.yqw .bad{color:#b3261e;font-weight:700}.yqw .ok{color:#2f7d1f;font-weight:700}";
+  d.head.appendChild(st);
+  // 1) customer picker under the logo
+  var box = d.createElement("div"); box.className = "yqcs"; box.innerHTML = '<label>Customer</label><select></select><em></em>';
+  var bs = d.querySelector(".brandsub"); (bs && bs.parentNode ? bs.parentNode : d.querySelector("aside")).insertBefore(box, d.getElementById("nav"));
+  var sel = box.querySelector("select");
+  sel.onchange = function(){ setCust(sel.value); };
+  function fill(){ var names = Object.keys(CUSTS).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }); if(ISCUST && names.indexOf(ISCUST) < 0) names.push(ISCUST);
+    sel.innerHTML = '<option value="">All customers</option>' + names.map(function(n){ return '<option' + (n === ISCUST ? " selected" : "") + '>' + esc(n) + '</option>'; }).join("");
+    box.querySelector("em").textContent = ISCUST ? "Only " + ISCUST + " · external, internal and wastage" : "Every customer"; }
+  fill(); CUSTUI.push(fill);
+  // 2) wastage by YTM — paste lines, each YTM goes to its customer and day
+  var imp = d.querySelector('[data-p="import"] .grid');
+  if(imp){
+    var card = d.createElement("div"); card.className = "card yqw"; card.style.marginTop = "14px";
+    card.innerHTML = '<h3>Wastage by YTM <span class="sub">paste YTM numbers with wastage — each one goes to its customer and day by itself</span></h3>' +
+      '<div class="note" style="margin-bottom:8px">One YTM per line, any order, e.g. <b>1533 6.16% 1576 mtr</b> or copy rows from Excel (YTM, Wastage %, Wastage MTR, Remarks). The customer is taken from the external inspection of that YTM.</div>' +
+      '<textarea id="yqwT" placeholder="1533  6.16%  1576  trims short&#10;1395  2.85%  3992"></textarea>' +
+      '<div class="row" style="margin-top:8px;gap:8px;align-items:center"><button class="pri" id="yqwA">Check</button><button id="yqwS" class="hide">Save wastage</button><label class="note" style="margin-left:6px">Day if YTM not found <input type="date" id="yqwD" style="margin-left:4px"></label></div><div class="msg" id="yqwM"></div><div id="yqwP"></div>';
+    imp.parentNode.insertBefore(card, imp.nextSibling);
+    var $w = function(id){ return d.getElementById(id); }, rows = [];
+    try{ $w("yqwD").value = (d.getElementById("day") || {}).value || new Date().toISOString().slice(0, 10); }catch(e){}
+    function ytmMap(){ var m = {}; (isRows("is_ext") || []).forEach(function(r){ var y = String(r.ytm || "").replace(/^0+/, ""); if(!y) return; if(!m[y] || (r.date || "") > (m[y].date || "")) m[y] = r; }); return m; }
+    function num(t){ return parseFloat(String(t).replace(/,/g, "").replace(/[^0-9.\-]/g, "")); }
+    function parse(txt){
+      var M = ytmMap(), out = [], hdr = null;
+      txt.split(/\r?\n/).forEach(function(line){
+        if(!line.trim()) return;
+        var cells = line.indexOf("\t") >= 0 ? line.split("\t") : line.split(/\s{2,}|\s*[;,|]\s*/);
+        var low = line.toLowerCase();
+        if(/ytm/.test(low) && /wast/.test(low) && !/\d{3,}/.test(low.replace(/ytm\s*-?\s*\d/g, ""))){ hdr = cells.map(function(c){ c = c.toLowerCase(); return /ytm/.test(c) ? "y" : /%|pct|percent/.test(c) ? "p" : /mtr|meter|metre/.test(c) ? "m" : /rem|note|comment/.test(c) ? "r" : /cust|buyer/.test(c) ? "c" : ""; }); return; }
+        var o = {ytm: "", pct: null, mtr: null, rem: "", cust: "", line: line};
+        if(hdr){ cells.forEach(function(c, i){ var h = hdr[i]; if(h === "y") o.ytm = String(c).replace(/\D/g, ""); else if(h === "p") o.pct = num(c); else if(h === "m") o.mtr = num(c); else if(h === "r") o.rem = String(c).trim(); else if(h === "c") o.cust = String(c).trim(); }); }
+        else {
+          var toks = line.replace(/ytm\s*[-#:]?\s*/ig, " ").split(/[\s\t,;|]+/).filter(Boolean), rest = [], yi = -1;
+          toks.forEach(function(t, i){ if(yi < 0 && /^\d{3,6}$/.test(t) && M[t.replace(/^0+/, "")]) yi = i; });
+          if(yi < 0) toks.forEach(function(t, i){ if(yi < 0 && /^\d{3,6}$/.test(t)) yi = i; });
+          if(yi >= 0){ o.ytm = toks[yi].replace(/^0+/, ""); toks.splice(yi, 1); }
+          toks.forEach(function(t){
+            var clean = t.replace(/[^0-9.%]/g, "");
+            if(o.pct == null && /%/.test(t) && !isNaN(num(t))){ o.pct = num(t); return; }
+            if(/^\d+(\.\d+)?(m|mtr|mtrs)?$/i.test(t) && clean){ var v = num(t); if(o.pct == null && /\./.test(t) && v < 100 && !/m/i.test(t)){ o.pct = v; return; } if(o.mtr == null){ o.mtr = v; return; } }
+            if(/^(m|mtr|mtrs|meter|meters|wastage|%)$/i.test(t)) return;
+            rest.push(t);
+          });
+          o.rem = rest.join(" ").trim();
+        }
+        if(o.pct != null && o.pct > 0 && o.pct < 1 && !/%/.test(line)) o.pct = o.pct * 100;
+        var hit = M[o.ytm];
+        o.cust = hit ? canonCIS(hit.customer) : (o.cust || "");
+        o.date = hit ? hit.date : $w("yqwD").value; o.unit = hit ? (hit.unit || "") : "";
+        if(hit && o.rem && ckey(o.rem).indexOf(ckey(hit.customer)) === 0) o.rem = o.rem.slice(String(hit.customer).length).trim();
+        out.push(o);
+      });
+      return out;
+    }
+    function canonCIS(n){ return n; }
+    function custOpts(sel){ var c = {}; (isRows("is_ext") || []).forEach(function(r){ if(r.customer) c[r.customer] = 1; }); return '<option value="">— pick —</option>' + Object.keys(c).sort().map(function(n){ return '<option' + (n === sel ? " selected" : "") + '>' + esc(n) + '</option>'; }).join(""); }
+    function show(){
+      if(!rows.length){ $w("yqwP").innerHTML = ""; $w("yqwS").classList.add("hide"); return; }
+      $w("yqwP").innerHTML = '<table><tr><th>YTM</th><th>Customer</th><th>Day</th><th>Wastage %</th><th>Wastage MTR</th><th>Remarks</th><th></th></tr>' + rows.map(function(o, i){
+        return '<tr><td><b>' + esc(o.ytm || "—") + '</b></td><td><select data-i="' + i + '" data-f="cust">' + custOpts(o.cust) + '</select></td><td><input type="date" data-i="' + i + '" data-f="date" value="' + esc(o.date || "") + '"></td><td><input data-i="' + i + '" data-f="pct" value="' + (o.pct != null ? +o.pct.toFixed(2) : "") + '" style="width:70px"></td><td><input data-i="' + i + '" data-f="mtr" value="' + (o.mtr != null ? o.mtr : "") + '" style="width:80px"></td><td><input data-i="' + i + '" data-f="rem" value="' + esc(o.rem) + '"></td><td class="' + (o.cust ? "ok" : "bad") + '">' + (o.cust ? "ready" : "YTM not found — pick customer") + '</td></tr>'; }).join("") + '</table>';
+      $w("yqwP").querySelectorAll("[data-f]").forEach(function(el){ el.onchange = function(){ var o = rows[+el.dataset.i], f = el.dataset.f; o[f] = (f === "pct" || f === "mtr") ? (el.value === "" ? null : num(el.value)) : el.value; show(); }; });
+      $w("yqwS").classList.remove("hide");
+    }
+    $w("yqwA").onclick = function(){ rows = parse($w("yqwT").value); $w("yqwM").textContent = rows.length ? rows.filter(function(o){ return o.cust; }).length + " of " + rows.length + " lines matched to a customer. Check and press Save." : "Nothing found. Paste lines with a YTM number and wastage."; show(); };
+    $w("yqwS").onclick = function(){
+      var ok = rows.filter(function(o){ return o.cust && o.date && (o.pct != null || o.mtr != null); });
+      if(!ok.length){ $w("yqwM").textContent = "Pick a customer and type Wastage % or MTR first."; return; }
+      var byDay = {}; ok.forEach(function(o){ var g = byDay[o.date] = byDay[o.date] || {}; var c = g[o.cust] = g[o.cust] || {list: [], unit: o.unit}; c.list.push(o); if(o.unit && c.unit.indexOf(o.unit) < 0) c.unit = c.unit ? c.unit + "/" + o.unit : o.unit; });
+      $w("yqwM").textContent = "Saving…";
+      Promise.all(Object.keys(byDay).map(function(day){
+        var ex = (isRows("is_extday") || []).filter(function(z){ return (z.date || z._id) === day; })[0];
+        var cust = JSON.parse(JSON.stringify((ex || {}).cust || {}));
+        Object.keys(byDay[day]).forEach(function(n){ var c = byDay[day][n], L = c.list, ps = L.filter(function(o){ return o.pct != null; }), ms = L.filter(function(o){ return o.mtr != null; });
+          var v = Object.assign({}, cust[n] || {});
+          if(ps.length) v.wpct = Math.round(ps.reduce(function(a, o){ return a + o.pct; }, 0) / ps.length * 100) / 10000;
+          if(ms.length) v.wmtr = ms.reduce(function(a, o){ return a + o.mtr; }, 0);
+          var rem = L.map(function(o){ return o.rem; }).filter(Boolean).join("; "); if(rem) v.remarks = rem;
+          if(c.unit && !v.unit) v.unit = c.unit;
+          v.ytms = L.map(function(o){ return {ytm: o.ytm, wpct: o.pct != null ? o.pct / 100 : null, wmtr: o.mtr}; });
+          cust[n] = v; });
+        if(ROLE === "viewer") return Promise.reject(new Error("view only"));
+        return (ISROOT || FS.collection("ws").doc(WS)).collection("is_extday").doc(day).set(enc({date: day, cust: cust}));
+      })).then(function(){ $w("yqwM").innerHTML = '<span class="ok">Saved ✓ ' + ok.length + ' YTM: ' + ok.map(function(o){ return esc(o.ytm + " → " + o.cust); }).join(", ") + '</span>'; rows = []; $w("yqwT").value = ""; show(); }, function(e){ $w("yqwM").textContent = "Not saved: " + (e && e.message || e); });
+    };
+  }
+}
+
 // ---------- free file storage: photos/PDF/Excel kept inside Firestore in 700 KB pieces ----------
 var BLOBP = {}, BLOBU = {}, CHUNK = 700000, MAXRAW = 9 * 1024 * 1024;
 function wsRoot(){ return FS.collection("ws").doc(WS); }
@@ -564,7 +734,7 @@ function hookWin(w){
         if(BLOBU[id]){ im.src = BLOBU[id]; return; } im.removeAttribute("src");
         if(im.tagName === "IMG") lazyImg(im, id); else blobUrl(id).then(function(u){ im.src = u; }).catch(function(){});
       });
-      (root.querySelectorAll ? root.querySelectorAll("iframe") : []).forEach(function(f){ try{ var fw = f.contentWindow; if(fw && fw.document){ hookWin(fw); } f.addEventListener("load", function(){ try{ hookWin(f.contentWindow); }catch(e){} }); }catch(e){} });
+      (root.querySelectorAll ? root.querySelectorAll("iframe") : []).forEach(function(f){ try{ var fw = f.contentWindow; if(fw && fw.document){ hookWin(fw); addonSoon(fw); } f.addEventListener("load", function(){ try{ hookWin(f.contentWindow); addonSoon(f.contentWindow); }catch(e){} }); }catch(e){} });
     }catch(e){}
   }
   var mo = new w.MutationObserver(function(list){ list.forEach(function(m){ if(m.type === "attributes") fix(m.target.parentNode || w.document); else m.addedNodes.forEach(function(n){ if(n.nodeType === 1){ fix(n.parentNode || n); } }); }); });
