@@ -1,0 +1,17 @@
+{
+  "name": "YQI – Yunus Quality Intelligence",
+  "short_name": "YQI",
+  "description": "Yunus Textile Mills quality dashboard: inspections, wastage and customers.",
+  "id": "/yqi/",
+  "start_url": "/yqi/",
+  "scope": "/yqi/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#10260f",
+  "theme_color": "#10260f",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
