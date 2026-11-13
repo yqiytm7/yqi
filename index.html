@@ -241,7 +241,7 @@ function hubSub(c, ref, fn, er){
   return function(){ var i = H.fns.indexOf(fn); if(i >= 0) H.fns.splice(i, 1); };
 }
 // ---------- customer names: the same buyer is written in different ways in different files ----------
-var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA", atc: "ATC", gli: "GLI", glidreamtex: "Dreamtex", dreamtex: "Dreamtex", jla: "JLA Home", jlahome: "JLA Home", revman: "Revman", revmanindustries: "Revman", revmaninternationalinc: "Revman", holtex: "Holtex", holtexdelafronterasderldecv: "Holtex", tradelinks: "Tradelinks", tradelinksinternational: "Tradelinks", stc: "STC", turnerbianca: "Turner Bianca"};
+var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA", atc: "ATC", gli: "GLI", glidreamtex: "Dreamtex", dreamtex: "Dreamtex", jla: "JLA Home", jlahome: "JLA Home", revman: "Revman", revmanindustries: "Revman", revmaninternationalinc: "Revman", holtex: "Holtex", holtexdelafronterasderldecv: "Holtex", tradelinks: "Tradelinks", tradelinksinternational: "Tradelinks", stc: "STC", turnerbianca: "Turner Bianca", jlyhome: "JLA Home", sainsbury: "Sainsbury's", sainsburys: "Sainsbury's", thewarehousegroup: "The Warehouse Group"};
 var CREG = {};
 function ckey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function canonC(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; if(w) return w.name; var t = String(n || "").trim(); if(!k) return t; if(!CREG[k] || (CREG[k] === CREG[k].toLowerCase() && t !== t.toLowerCase())) CREG[k] = t; return CREG[k]; }
@@ -250,12 +250,17 @@ function canonC(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CL
 var ISROOT = null, ISCUST = "", ISL = [], CUSTS = {};
 function fakeDoc(id, d){ return {id: id, exists: true, data: function(){ return JSON.parse(JSON.stringify(d)); }, metadata: {fromCache: false}}; }
 function isFilter(c, q){
-  if(!ISCUST || !q) return q;
-  var docs;
-  if(c === "is_ext") docs = q.docs.filter(function(d){ var x = d.data() || {}; return canonC(x.customer) === canonC(ISCUST); });
-  else if(c === "is_extday") docs = q.docs.map(function(d){ var x = d.data() || {}, o = {}; Object.keys(x).forEach(function(k){ if(k !== "cust") o[k] = x[k]; }); var cu = x.cust || {}; o.cust = {}; Object.keys(cu).forEach(function(k){ if(canonC(k) === canonC(ISCUST)) o.cust[k] = cu[k]; }); return fakeDoc(d.id, o); });
-  else if(c === "is_int") docs = q.docs.filter(function(d){ var x = d.data() || {}; return x.customer && canonC(x.customer) === canonC(ISCUST); });
-  else if(c === "is_hist") docs = [];
+  if(!q) return q;
+  var K = ISCUST ? canonC(ISCUST) : "", docs;
+  if(c === "is_ext" || c === "is_int"){
+    // one name per customer everywhere in the Inspection Summary (ATC/Atc, JLY HOME/JLA Home…)
+    docs = []; q.docs.forEach(function(d){ var x = d.data() || {}, cn = x.customer ? canonC(x.customer) : x.customer;
+      if(K && cn !== K) return;
+      docs.push(cn !== x.customer ? fakeDoc(d.id, Object.assign({}, x, {customer: cn})) : d); });
+    if(!K && docs.length === q.docs.length && docs.every(function(d, i){ return d === q.docs[i]; })) return q;
+  }
+  else if(c === "is_extday"){ if(!K) return q; docs = q.docs.map(function(d){ var x = d.data() || {}, o = {}; Object.keys(x).forEach(function(k){ if(k !== "cust") o[k] = x[k]; }); var cu = x.cust || {}; o.cust = {}; Object.keys(cu).forEach(function(k){ if(canonC(k) === K) o.cust[k] = cu[k]; }); return fakeDoc(d.id, o); }); }
+  else if(c === "is_hist"){ if(!K) return q; docs = []; }
   else return q;
   return {docs: docs, empty: !docs.length, size: docs.length, metadata: {fromCache: false}, forEach: function(f){ docs.forEach(f); }};
 }
@@ -415,6 +420,7 @@ function homeCss(){
   "#yqHome .ring,#yqHome .ring svg{width:124px;height:124px}#yqHome .ring .c b{font-size:25px}#yqHome .ring .c span{font-size:10.5px}#yqHome .rleg{gap:6px;font-size:12px;min-width:150px}#yqHome .big{margin-top:12px;gap:10px}#yqHome .big div{padding:8px 12px;border-radius:13px}#yqHome .big span{font-size:10.5px}#yqHome .big b{font-size:22px;margin-top:2px}#yqHome .big i{font-size:11px}",
   "#yqHome .tiles{gap:10px;margin:12px 0}#yqHome .tl{padding:10px 12px;border-radius:14px;gap:10px}#yqHome .tl .ic{width:36px;height:36px;border-radius:11px;font-size:14px}#yqHome .tl b{font-size:14.5px}#yqHome .tl span{font-size:12px}#yqHome .tl select{padding:7px 9px;font-size:13px}#yqHome .ub{padding:8px 12px;font-size:12.5px}",
   "#yqHome .yqsec{margin:6px 2px 8px;font-size:11.5px}#yqHome .kp{gap:10px;margin-bottom:12px}#yqHome .k{padding:9px 12px 9px;border-radius:13px}#yqHome .k b{font-size:20px;margin-top:2px}#yqHome .k span{font-size:11.5px}#yqHome .k i{font-size:11px}#yqHome .g2{gap:12px;margin-bottom:12px}#yqHome .cd{padding:12px 14px;border-radius:14px;margin-bottom:12px}#yqHome .cd h3{font-size:14.5px;margin-bottom:8px}#yqHome td{padding:6px 8px}#yqHome th{padding:5px 8px}",
+  "#yqHome select{color-scheme:light}#yqHome select option{color:#1f2d17;background:#fff;font:600 13.5px Manrope,system-ui,sans-serif;padding:6px}#yqHome select option:checked{background:#dcefc6;color:#10260f}",
   "#yqHome .att{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}#yqHome .att>div{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e1e8d8;border-left:4px solid var(--ac,#c0392b);border-radius:12px;padding:7px 11px;font-size:12.5px;box-shadow:0 4px 12px rgba(30,60,20,.05)}#yqHome .att>div[data-go]{cursor:pointer}#yqHome .att b{font-weight:800}#yqHome .att .ati{font-size:15px}",
   "#yqTip{position:fixed;z-index:2147483600;pointer-events:none;max-width:320px;background:#10260f;color:#eaf5df;border-radius:12px;padding:9px 11px;font:12.5px/1.45 Manrope,system-ui,sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.3);display:none;white-space:pre-line}#yqTip b{color:#a6dd5e}",
   "@keyframes yqIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}#yqHome.anim .k,#yqHome.anim .cd,#yqHome.anim .tl{animation:yqIn .45s ease both}",
@@ -465,7 +471,7 @@ function renderHome(){
   var top = '<div class="htop"><div class="brand"><span class="lp q" data-ei="logoQ">' + LOGO_Q + '</span></div><div class="umenu"><span class="who"><i>' + esc((EMAIL || "?").charAt(0).toUpperCase()) + '</i><span><b>' + esc(EMAIL) + '</b><em>' + (OWNER ? "Owner · full access" : "View only") + '</em></span></span>' + (OWNER ? '<button id="yqEd">✎ Edit page</button><button id="yqAm2">Admin</button>' : '') + '<button id="yqSo2">Sign out</button></div></div>' + (fromC ? '<div class="upd">Updating…</div>' : '');
   var head = top + '<div class="hrow"><div class="hl"><h1><span data-ek="h1a">Quality</span> <em data-ek="h1b">Intelligence</em></h1><div class="hsub">' + (HCUST ? esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div><div class="chips">' + per +
     '<label>Day <input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || HDAYS[0] || today) : "") + '"></label><label>From <input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"></label><label>To <input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></label></div></div>';
-  var tiles = '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:110px"><b data-ek="t1">Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' : '') + '</div>' +
+  var tiles = '<div class="tiles"><div class="tl"><div class="ic">C</div><div style="flex:1;min-width:110px"><b data-ek="t1">Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><select id="yqCs"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">' + (ckey(HCUST) === "bedsure" ? "More detail ›" : "All inspections ›") + '</button>' : '') + '</div>' +
     '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b data-ek="t2">Inspection Summary</b><span data-ek="t2d">Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
     (OWNER ? '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b data-ek="t3">Upload inspections</b><span data-ek="t3d">Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div>' : '<div class="tl"><div class="ic">👁</div><div style="flex:1;min-width:140px"><b>View only</b><span>You can see all data. Only the owner can change it.</span></div></div>') + '</div>' + (HMSG ? '<div class="cd msgb">' + HMSG + '</div>' : '');
   if(!HD || !EXT){ h.innerHTML = '<div class="hw"><div class="hero">' + head + '<div class="ring"></div></div><div class="big"><div><span>Loading</span><b>…</b><i>all customers</i></div></div></div>' + tiles + '<div class="cd em"><img class="leaf" src="' + LEAF + '" alt="" style="margin:0 auto 8px">Loading all customers…</div></div>'; applyEdits(h); bindHome(); return; }
@@ -621,6 +627,7 @@ function hcSave(){ clearTimeout(HCT); HCT = setTimeout(function(){ try{ if(!wind
 function hcLoad(){ try{ if(!window.caches) return Promise.resolve(null); return caches.open("yqi-home-v1").then(function(c){ return c.match(hcKey()); }).then(function(r){ return r ? r.json() : null; }).then(function(o){ if(o && o.ext && Date.now() - o.at < 14 * 864e5) HC = o; return HC; }).catch(function(){ return null; }); }catch(e){ return Promise.resolve(null); } }
 function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
+  if(ckey(n) !== "bedsure"){ HCUST = n; return openIS("register"); }
   var w = CLIST.filter(function(x){ return x.name === n; })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
   var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ ssSet("yqi_lc", ""); openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
@@ -659,11 +666,13 @@ function bindHome(){
   if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Shipping plan,Date,Program,Article,Colour,Size,Lot,Qty,Result,Reason,Remarks\n" + (HCUST || "Bedsure") + ",202611PKEU009," + ymd(new Date()) + ",Washed Zip,Duvet Cover Set-Washed Cotton-Zip,Simply Taupe,200x200CM,A65094,48,Passed - 1st Go,,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
 }
 // Inspection Summary opens on demand: the app behind it only starts the first time it is needed
-function openIS(){
-  if(HCUST && HCUST !== ISCUST) setCust(HCUST);
+function openIS(route){
+  if((HCUST || "") !== (ISCUST || "")) setCust(HCUST);
   showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
   if(!started){ showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
-  var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
+  var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); if(route) goRoute(route); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
+}
+function goRoute(r){ var n = 0; (function f(){ var a = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ var d = fr.contentDocument; if(d && d.getElementById("nav")) a = d.querySelector('a[data-r="' + r + '"]') || a; }catch(e){} }); if(a){ a.click(); return; } if(++n < 80) setTimeout(f, 150); })();
 }
 // ----- upload: one file, rows go into each customer's article list automatically -----
 function normKey(s){ return String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, ""); }
