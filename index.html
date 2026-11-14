@@ -3,6 +3,21 @@
 <head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><script>/* YQI company edition — login, customer workspaces, Firebase storage. Developed by Hamza Khan. */
 (function(){
 "use strict";
+// ---------- phone back button: one step back inside the app instead of closing it ----------
+window.YQBACK = (function(){
+  var st = [], pend = [], purging = false;
+  function push(fn, tag){ st.push({f: fn, t: tag || "", dead: false}); try{ history.pushState({yqb: st.length}, ""); }catch(e){} }
+  window.addEventListener("popstate", function(){ var x = st.pop();
+    if(purging){ if(st.length && st[st.length - 1].dead){ try{ history.back(); }catch(e){} } else purging = false; return; }
+    if(!x) return; if(x.dead){ if(st.length) try{ history.back(); }catch(e){} return; }
+    try{ x.f(); }catch(e){} });
+  var g = function(){ if(!pend.length) return; var p = pend; pend = []; p.forEach(function(x){ push(x.f, x.t); }); };
+  window.addEventListener("click", g, true); window.addEventListener("touchend", g, true);
+  return {push: push, onGesture: function(fn, tag){ pend.push({f: fn, t: tag}); }, back: function(){ if(st.length){ try{ history.back(); }catch(e){} return true; } return false; },
+    has: function(tag){ return st.some(function(x){ return x.t === tag && !x.dead; }); }, count: function(tag){ return st.filter(function(x){ return x.t === tag && !x.dead; }).length; },
+    killTag: function(tag){ st.forEach(function(x){ if(x.t === tag) x.dead = true; }); }, purge: function(){ if(st.length && st[st.length - 1].dead && !purging){ purging = true; try{ history.back(); }catch(e){ purging = false; } } }, depth: function(){ return st.length; }};
+})();
+try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function(e){ if(e.data && e.data.yqUpdate && !document.getElementById("yqUpd")){ var b = document.createElement("button"); b.id = "yqUpd"; b.textContent = "New version ready · tap to update"; b.style.cssText = "position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483600;border:0;border-radius:20px;padding:9px 16px;background:#16230f;color:#fff;font:700 13px Manrope,system-ui,sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.3)"; b.onclick = function(){ location.reload(); }; document.body.appendChild(b); setTimeout(function(){ try{ b.remove(); }catch(x){} }, 15000); } }); }catch(e){}
 // ======= 1) PASTE YOUR FIREBASE CONFIG HERE (Firebase console → Project settings → Your apps → Web app) =======
 var FIREBASE_CONFIG = {
   apiKey: "AIzaSyDuYarXV14aENaqjRA-G3nKk_HgrFYgOho",
@@ -96,7 +111,8 @@ function yqIntro(){
   var img = new Image(); img.src = YQ_QLEAF;
   var sd = 11; function rnd(){ sd = (sd * 16807) % 2147483647; return sd / 2147483647; }
   var lv = DEPTS.map(function(n, i){ return {n: n, x: .1 + ((i * .37) % 1) * .8, d: .2 + i * .19 + rnd() * .12, sp: 3.8 + rnd() * 1.0, s: 24 + rnd() * 10, sw: 14 + rnd() * 22, ph: rnd() * 6.3, r0: (rnd() - .5) * 1.4, vr: (rnd() - .5) * 2}; });
-  var QD = 1.6, QL = 3.6, t0 = performance.now(), done = false, landed = false;
+  var TD = new Date().toDateString(), FAST = lsGet("yqi_introd") === TD; lsSet("yqi_introd", TD); if(FAST) lv.forEach(function(o){ o.d *= .22; o.sp *= .5; });
+  var QD = FAST ? .15 : 1.6, QL = FAST ? 1.3 : 3.6, t0 = performance.now(), done = false, landed = false;
   function cl(x){ return Math.max(0, Math.min(1, x)); } function ease(x){ x = cl(x); return 1 - Math.pow(1 - x, 3); } function sm(x){ x = cl(x); return x * x * (3 - 2 * x); }
   function leaf(x, y, w, rot, a, glow){ if(!img.naturalWidth || a <= 0) return; var h = w * img.naturalHeight / img.naturalWidth; cx.save(); cx.globalAlpha = a; cx.translate(x, y); cx.rotate(rot);
     if(glow){ cx.shadowColor = "rgba(200,250,120," + Math.min(1, glow) + ")"; cx.shadowBlur = 30 * glow + 4; } cx.drawImage(img, -w / 2, -h / 2, w, h); cx.restore(); }
@@ -123,7 +139,7 @@ function yqIntro(){
   requestAnimationFrame(frame);
   function close(){ if(done) return; d.style.opacity = "0"; setTimeout(function(){ done = true; d.remove(); st.remove(); }, 650); }
   d.querySelector(".yqSk").onclick = close;
-  setTimeout(close, 9400);
+  setTimeout(close, FAST ? 2700 : 9400);
 }
 
 // ---------- activity form: live camera in the installed app ----------
@@ -890,6 +906,7 @@ function bindHome(){
 function openIS(route){
   if((HCUST || "") !== (ISCUST || "")) setCust(HCUST);
   showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
+  try{ if(!YQBACK.has("is")) YQBACK.push(function(){ if(HOMEON){ YQBACK.back(); return; } showHome(true); }, "is"); }catch(e){}
   if(!started){ showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
   var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); if(route) goRoute(route); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
 }
@@ -1211,7 +1228,7 @@ function installClaude(){
 function openWs(w){
   try{ performance.mark("yq-openws"); }catch(e){}
   WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
-  if(WS !== "_all"){ EARLY = false; if(HOMEON) showHome(false); }
+  if(WS !== "_all"){ EARLY = false; if(HOMEON) showHome(false); if(HASALL) try{ YQBACK.onGesture(function(){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); showGate('<h1>Opening all customers…</h1>'); location.reload(); }, "ws"); }catch(e){} }
   showGate('<h1>Opening ' + esc(WSNAME) + '…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
   Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
     var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
@@ -1222,7 +1239,7 @@ function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
   p.innerHTML = '<b>' + esc(WSNAME) + '</b><span>' + (ROLE === "viewer" ? "view only" : ROLE) + '</span><a id="yqSw">' + (HASALL ? (WS === "_all" ? "customers" : "home") : "switch") + '</a>' + (OWNER ? '<a id="yqAm">admin</a>' : '') + '<a id="yqSo">sign out</a>';
   document.body.appendChild(p);
-  $("yqSw").onclick = function(){ if(WS === "_all"){ showHome(true); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
+  $("yqSw").onclick = function(){ if(WS === "_all"){ if(YQBACK.has("is")) YQBACK.back(); else showHome(true); return; } if(YQBACK.has("ws")){ YQBACK.back(); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
   if($("yqAm")) $("yqAm").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_lc", ""); lsSet("yqi_admin", "1"); location.reload(); };
   $("yqSo").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); ssSet("yqi_lc", ""); AUTH.signOut().then(function(){ location.reload(); }); };
 }
@@ -1355,8 +1372,8 @@ function unb64(s){ var b = atob(s), u = new Uint8Array(b.length); for(var i = 0;
 function imgResize(f, max, q){ return createImageBitmap(f).then(function(bm){ var sc = Math.min(1, max / Math.max(bm.width, bm.height)), c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bm.width * sc)); c.height = Math.max(1, Math.round(bm.height * sc)); var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(bm, 0, 0, c.width, c.height); return {c: c, w: c.width, h: c.height}; }); }
 function canvasBlob(c, q){ return new Promise(function(r){ c.toBlob(function(b){ r(b); }, "image/jpeg", q || .82); }); }
 function thumbOf(f, max){ if(!window.createImageBitmap) return Promise.resolve(null); return imgResize(f, max || 360).then(function(o){ return {u: o.c.toDataURL("image/jpeg", .62), w: o.w, h: o.h}; }).catch(function(){ return null; }); }
-function shrink(f){ if(!/^image\/(jpeg|png|webp|heic|heif)$/.test(f.type) || !window.createImageBitmap) return Promise.resolve(f); if(f.size < 350000 && f.type === "image/jpeg") return Promise.resolve(f);
-  return imgResize(f, 1600).then(function(o){ return canvasBlob(o.c, .82); }).then(function(b){ return b && b.size < f.size ? b : f; }).catch(function(){ return f; }); }
+function shrink(f){ if(!/^image\/(jpeg|png|webp|heic|heif)$/.test(f.type) || !window.createImageBitmap) return Promise.resolve(f); if(f.size < 220000 && f.type === "image/jpeg") return Promise.resolve(f);
+  return imgResize(f, 1280).then(function(o){ return canvasBlob(o.c, .78); }).then(function(b){ return b && b.size < f.size ? b : f; }).catch(function(){ return f; }); }
 var MC = null; function mcache(){ if(MC !== null) return MC; try{ MC = window.caches ? caches.open("yqc-media-v1") : Promise.resolve(null); }catch(e){ MC = Promise.resolve(null); } return MC; }
 function mcPut(id, blob){ mcache().then(function(c){ if(c) c.put("/yqc-media/" + id, new Response(blob)).catch(function(){}); }).catch(function(){}); }
 function mcGet(id){ return mcache().then(function(c){ return c ? c.match("/yqc-media/" + id) : null; }).then(function(r){ return r ? r.blob() : null; }).catch(function(){ return null; }); }
@@ -1387,7 +1404,8 @@ function start(o){
   var cacheMy = lsGet("yqc_my"); if(cacheMy !== MY){ ["yqc_p", "yqc_c"].forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} }); lsSet("yqc_my", MY); }
   PEOPLE = lsJ("yqc_p", {}); CHATS = lsJ("yqc_c", {}); ME = PEOPLE[MY] || null;
   css(); shell(); badge();
-  FS.collection("people").doc(MY).get().then(function(d){ if(d.exists){ ME = d.data(); PEOPLE[MY] = ME; live(); } else { ME = null; badge(); } }).catch(function(){ if(ME) live(); });
+  if(ME) live();
+  FS.collection("people").doc(MY).get().then(function(d){ if(d.exists){ ME = d.data(); PEOPLE[MY] = ME; live(); } else if(!LIVE){ ME = null; badge(); } }).catch(function(){ if(ME) live(); });
 }
 var LIVE = false;
 function live(){
@@ -1431,14 +1449,25 @@ function shell(){
   b.onclick = function(){ panelOpen() ? closePanel() : openPanel(); }; document.body.appendChild(b);
   var p = document.createElement("div"); p.id = "ycP"; p.innerHTML = '<div class="ycBg"></div><div class="ycW" id="ycW"></div>'; document.body.appendChild(p);
   p.querySelector(".ycBg").onclick = function(){ closePanel(); };
-  window.addEventListener("popstate", function(){ if(!panelOpen()) return; if(closeSheet()) { pushH(); return; } if(VIEW !== "home" || STACK.length){ navBack(); pushH(); } else closePanel(true); });
 }
-function pushH(){ try{ history.pushState({yqc: 1}, ""); }catch(e){} }
+var BK = window.YQBACK || {push: function(){}, back: function(){ return false; }, killTag: function(){}, purge: function(){}, count: function(){ return 0; }};
+function pushH(){ BK.push(chatBack, "chat"); }
+// one step back: overlay → sheet → previous screen → close chat
+function chatBack(){
+  var v = document.querySelector(".ycView"); if(v){ v.remove(); return; }
+  if(SV){ closeStory(); return; }
+  if(closeSheet()) return;
+  if(!panelOpen()){ BK.back(); return; }
+  if(ME && (STACK.length || VIEW !== "home")){ navBack(); return; }
+  closeNow(); BK.killTag("chat"); BK.purge();
+}
+function uiBack(){ if(BK.count("chat") > 0) BK.back(); else chatBack(); }
 function panelOpen(){ var p = $("ycP"); return !!(p && p.classList.contains("on")); }
 function openPanel(){ var p = $("ycP"); if(!p) return; ac(); p.classList.add("on"); p.classList.toggle("dk", DARK); document.documentElement.classList.add("ycLock"); pushH(); if(!ME){ VIEW = "profile"; STACK = []; PARAM = {setup: 1}; } paint(); askNotif(); }
-function closePanel(fromPop){ var p = $("ycP"); if(!p) return; p.classList.remove("on"); document.documentElement.classList.remove("ycLock"); stopMsgs(); OPEN = null; VIEW = ME ? "home" : "profile"; STACK = []; if(!fromPop && history.state && history.state.yqc) try{ history.back(); }catch(e){} }
+function closeNow(){ var p = $("ycP"); if(!p) return; closeSheet(); p.classList.remove("on"); document.documentElement.classList.remove("ycLock"); stopMsgs(); OPEN = null; VIEW = ME ? "home" : "profile"; STACK = []; PARAM = {}; }
+function closePanel(){ closeNow(); BK.killTag("chat"); BK.purge(); }
 function askNotif(){ try{ if(window.Notification && Notification.permission === "default") Notification.requestPermission(); }catch(e){} }
-function go(v, param){ STACK.push({v: VIEW, p: PARAM, o: OPEN}); VIEW = v; PARAM = param || {}; paint(true); }
+function go(v, param){ STACK.push({v: VIEW, p: PARAM, o: OPEN}); pushH(); VIEW = v; PARAM = param || {}; paint(true); }
 function navBack(){ var s = STACK.pop(); closeSheet(); if(VIEW === "chat"){ stopMsgs(); REPLY = null; } if(!s){ VIEW = "home"; PARAM = {}; OPEN = null; } else { VIEW = s.v; PARAM = s.p; if(s.v === "chat" && s.o){ return openChat(s.o, true); } OPEN = s.v === "chat" ? s.o : (s.v === "info" ? s.o : null); } paint(true); }
 var RPT = 0; function repaint(){ if(!panelOpen()) return; clearTimeout(RPT); RPT = setTimeout(function(){ paint(false); }, 60); }
 function paint(full){
@@ -1467,7 +1496,7 @@ var BACKB = function(){ return ib("back", IC.back, "Back"); };
 
 // ---------- home: chats / updates / calls ----------
 function homeView(w){
-  var h = bar('', '<b class="ycBrand">YQI <em>Chat</em></b>', '', ib("search", IC.search, "Search") + ib("menu", IC.dots, "Menu"), "home");
+  var h = bar('', '<b class="ycBrand">YQI <em>Chat</em></b>', '', ib("search", IC.search, "Search") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
   if(PARAM.search){ h = bar(ib("unsearch", IC.back, "Back"), '<input id="ycQ" class="ycQin" placeholder="Search chats, people, messages" value="' + esc(SEARCHQ) + '">', '', '', "home"); }
   h += '<div class="ycTabs">' + ["chats:Chats", "updates:Updates", "calls:Calls"].map(function(t){ var a = t.split(":"); return '<button data-c="tab" data-t="' + a[0] + '" class="' + (TAB === a[0] ? "on" : "") + '">' + a[1] + '<i id="ycTabN_' + a[0] + '" class="ycTn" style="display:none"></i></button>'; }).join("") + '</div><div class="ycScroll" id="ycList">';
   if(TAB === "updates") h += updatesList(); else if(TAB === "calls") h += callsList(); else h += chatsList();
@@ -1489,7 +1518,7 @@ function chatRow(c){
   var tick = l.by === MY && l.k !== "sys" ? tickOf(c, l.at) : "";
   var who = c.type === "group" && l.by && l.by !== MY && l.k !== "sys" ? esc(first(l.by)) + ": " : "";
   var icons = (c.mu && c.mu[MY] ? '<i class="ycMi">' + IC.mute + '</i>' : '') + (c.pn && c.pn[MY] ? '<i class="ycMi">' + IC.pin + '</i>' : '');
-  return '<button class="ycRow" data-c="open" data-id="' + c.id + '" data-lp="chat">' + avC(c, 50) + '<div class="ycRm"><div class="ycR1"><b>' + esc(t) + '</b><time class="' + (n ? "nw" : "") + '">' + shortT(l.at || c.at) + '</time></div><div class="ycR2"><span class="' + (typing ? "ycTy" : "") + '">' + (typing ? esc(typing) : tick + who + esc(prev)) + '</span>' + icons + (n ? '<i class="ycN' + (c.mu && c.mu[MY] ? " mu" : "") + '">' + n + '</i>' : '') + '</div></div></button>';
+  return '<button class="ycRow" data-c="open" data-id="' + c.id + '" data-lp="chat">' + (c.type === "group" ? avC(c, 50) : '<span class="ycAvT" data-c="pcard" data-u="' + chatOther(c) + '">' + avC(c, 50) + '</span>') + '<div class="ycRm"><div class="ycR1"><b>' + esc(t) + '</b><time class="' + (n ? "nw" : "") + '">' + shortT(l.at || c.at) + '</time></div><div class="ycR2"><span class="' + (typing ? "ycTy" : "") + '">' + (typing ? esc(typing) : tick + who + esc(prev)) + '</span>' + icons + (n ? '<i class="ycN' + (c.mu && c.mu[MY] ? " mu" : "") + '">' + n + '</i>' : '') + '</div></div></button>';
 }
 function chatsList(){
   var q = (SEARCHQ || "").toLowerCase().trim(), h = "";
@@ -1505,7 +1534,7 @@ function chatsList(){
   if(!list.length && !q) h += '<div class="ycEmpty">' + (FILTER === "all" ? '<b>Start chatting</b><span>Tap the green button to message a colleague, make a group or start a meeting.</span>' : '<span>Nothing here.</span>') + '</div>';
   return h;
 }
-function personRow(u){ var p = PEOPLE[u] || {}; return '<button class="ycRow" data-c="dm" data-u="' + u + '">' + avU(u, 46, true) + '<div class="ycRm"><div class="ycR1"><b>' + esc(p.name) + '</b><time>' + (isOn(p) ? '<em>online</em>' : '') + '</time></div><div class="ycR2"><span>' + esc(p.about || ("@" + (p.uname || "") + (p.dept ? " · " + p.dept : ""))) + '</span></div></div></button>'; }
+function personRow(u){ var p = PEOPLE[u] || {}; return '<button class="ycRow" data-c="dm" data-u="' + u + '"><span class="ycAvT" data-c="pcard" data-u="' + u + '">' + avU(u, 46, true) + '</span>' + '<div class="ycRm"><div class="ycR1"><b>' + esc(p.name) + '</b><time>' + (isOn(p) ? '<em>online</em>' : '') + '</time></div><div class="ycR2"><span>' + esc(p.about || ("@" + (p.uname || "") + (p.dept ? " · " + p.dept : ""))) + '</span></div></div></button>'; }
 function typers(c){ var t = c.ty || {}, a = Object.keys(t).filter(function(u){ return u !== MY && now() - t[u] < 6000; }); if(!a.length) return ""; return c.type === "group" ? first(a[0]) + " is typing…" : "typing…"; }
 function tickOf(c, at){ var oth = (c.members || []).filter(function(u){ return u !== MY; }), rd = c.rd || {}, dl = c.dl || {};
   var seen = oth.length && oth.every(function(u){ return (rd[u] || 0) >= at; }), got = oth.length && oth.every(function(u){ return (dl[u] || rd[u] || 0) >= at || isOn(PEOPLE[u]); });
@@ -1543,7 +1572,7 @@ var SV = null;
 function viewStatus(uid){
   var list = STATUS.filter(function(s){ return s.by === uid; }); if(!list.length) return;
   var i = uid === MY ? 0 : Math.max(0, list.findIndex(unseen)); if(i < 0) i = 0;
-  var x = document.createElement("div"); x.id = "ycSV"; document.body.appendChild(x); SV = {list: list, i: i, el: x, uid: uid, t0: 0, raf: 0, paused: false};
+  pushH(); var x = document.createElement("div"); x.id = "ycSV"; document.body.appendChild(x); SV = {list: list, i: i, el: x, uid: uid, t0: 0, raf: 0, paused: false};
   showStory();
 }
 function showStory(){
@@ -1636,7 +1665,7 @@ function openDm(u, draft){
     .then(function(){ CHATS[id] = CHATS[id] || {id: id, type: "dm", members: [MY, u].sort(), at: now(), by: MY, n: {}, rd: {}}; after(); }).catch(function(e){ toast("Could not open chat: " + (e.code || e.message)); });
 }
 function openChat(id, keepStack){
-  if(!keepStack){ if(VIEW !== "chat") STACK.push({v: VIEW, p: PARAM, o: OPEN}); }
+  if(!keepStack){ if(VIEW !== "chat"){ STACK.push({v: VIEW, p: PARAM, o: OPEN}); pushH(); } }
   OPEN = id; VIEW = "chat"; PARAM = {}; REPLY = null; MSGLIM = 60;
   MSGS = lsJ("yqc_m_" + id, []); stopMsgs(); paint(true); listenMsgs(id); readNow(id);
 }
@@ -1770,9 +1799,9 @@ function play(btn){
     a.onended = function(){ btn.textContent = "▶"; bars.forEach(function(b){ b.classList.remove("p"); }); PLAYING = null; }; a.play().catch(function(){ btn.textContent = "▶"; toast("Could not play"); }); }).catch(function(){ btn.textContent = "▶"; toast("Voice note missing"); });
 }
 function download(id, name){ fileUrl(id).then(function(u){ var a = document.createElement("a"); a.href = u; a.download = name || "file"; document.body.appendChild(a); a.click(); a.remove(); }).catch(function(){ toast("File missing"); }); }
-function viewImg(id, th){ var v = document.createElement("div"); v.className = "ycView"; v.innerHTML = '<img src="' + (BU[id] || th || "") + '"><div class="ycViewT"><button data-v="dl">⬇</button><button data-v="x">✕</button></div>'; document.body.appendChild(v);
+function viewImg(id, th){ pushH(); var v = document.createElement("div"); v.className = "ycView"; v.innerHTML = '<img src="' + (BU[id] || th || "") + '"><div class="ycViewT"><button data-v="dl">⬇</button><button data-v="x">✕</button></div>'; document.body.appendChild(v);
   if(!BU[id]) fileUrl(id).then(function(u){ var im = v.querySelector("img"); if(im) im.src = u; }).catch(function(){});
-  v.onclick = function(e){ var b = e.target.closest("[data-v]"); if(b && b.getAttribute("data-v") === "dl"){ download(id, "photo.jpg"); return; } v.remove(); }; }
+  v.onclick = function(e){ var b = e.target.closest("[data-v]"); if(b && b.getAttribute("data-v") === "dl"){ download(id, "photo.jpg"); return; } uiBack(); }; }
 
 // ---------- message actions (long press) ----------
 function msgById(id){ for(var i = 0; i < MSGS.length; i++) if(MSGS[i].id === id) return MSGS[i]; return null; }
@@ -1817,8 +1846,8 @@ function chatMenu(id){
 }
 function sheet(html, onAct){
   closeSheet(); var s = document.createElement("div"); s.id = "ycSheet"; s.className = DARK ? "dk" : ""; s.innerHTML = '<div class="ycShBg"></div><div class="ycShIn">' + html + '</div>'; document.body.appendChild(s);
-  setTimeout(function(){ s.classList.add("on"); }, 10);
-  s.querySelector(".ycShBg").onclick = closeSheet;
+  setTimeout(function(){ s.classList.add("on"); }, 10); pushH();
+  s.querySelector(".ycShBg").onclick = uiBack;
   s.querySelectorAll("[data-a]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var a = b.getAttribute("data-a"); closeSheet(); onAct(a, b); }; });
 }
 function closeSheet(){ var s = $("ycSheet"); if(!s) return false; s.remove(); return true; }
@@ -1849,8 +1878,8 @@ function profileView(w){
   var nm = PARAM.nm != null ? PARAM.nm : me.name || EMAIL.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); });
   var un = PARAM.un != null ? PARAM.un : me.uname || EMAIL.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 20);
   var h = bar(setup ? '' : BACKB(), '<b>' + (setup ? "Welcome to YQI Chat" : "Profile") + '</b>', setup ? "Set up your profile" : "", setup ? ib("close", "✕", "Close") : "");
-  h += '<div class="ycScroll"><div class="ycCover" data-c="setcover" style="' + (me.cvt ? "background-image:url(" + me.cvt + ")" : "") + '"><span class="ycCoverB">' + IC.cam + ' ' + (me.cvt ? "Change cover" : "Add cover photo") + '</span></div>';
-  h += '<div class="ycProf"><div class="ycProfAv" data-c="setphoto">' + avImg(nm, MY, 110, me.pt) + '<span class="ycCamB">' + IC.cam + '</span></div>';
+  h += '<div class="ycScroll"><div class="ycCover" data-c="' + (setup ? "noop" : "mycover") + '" style="' + (me.cvt ? "background-image:url(" + me.cvt + ")" : "") + '"><span class="ycCoverB">' + IC.cam + ' ' + (me.cvt ? "Change cover" : "Add cover photo") + '</span></div>';
+  h += '<div class="ycProf"><div class="ycProfAv" data-c="' + (setup ? "noop" : "mycard") + '">' + avImg(nm, MY, 110, me.pt) + '<span class="ycCamB">' + IC.cam + '</span></div>';
   h += '<div class="ycForm"><label>Full name</label><input id="ycNm" maxlength="40" value="' + esc(nm) + '"><label>Username</label><div class="ycAt"><i>@</i><input id="ycUn" maxlength="20" value="' + esc(un) + '"></div><label>About</label><input id="ycAb" maxlength="120" placeholder="e.g. Available · QA Bedsure" value="' + esc(PARAM.ab != null ? PARAM.ab : me.about || "") + '"><label>Department / role</label><input id="ycDp" maxlength="40" placeholder="e.g. QA, Stitching, Planning" value="' + esc(PARAM.dp != null ? PARAM.dp : me.dept || "") + '"><div class="ycErr" id="ycErr"></div><button class="ycPb" data-c="saveme">' + (setup ? "Start chatting" : "Save profile") + '</button></div></div>';
   if(!setup){ h += '<div class="ycSec">Settings</div>' +
     '<button class="ycRow" data-c="tsnd"><span class="ycSi">🔔</span><div class="ycRm"><div class="ycR1"><b>Message sound</b><time>' + (lsGet("yqc_snd") === "0" ? "Off" : "On") + '</time></div></div></button>' +
@@ -1878,13 +1907,36 @@ function saveMe(){
     .catch(function(e){ er.textContent = (e && e.message && /taken/.test(e.message)) ? e.message : "Could not save: " + (e && (e.code || e.message) || e); });
 }
 
+
+// ---------- photo card: see the picture first, then actions ----------
+function photoCard(o){
+  pushH(); var v = document.createElement("div"); v.className = "ycView ycCard";
+  v.innerHTML = '<div class="ycCardT"><button data-k="x">' + IC.back + '</button><div><b>' + esc(o.title) + '</b><span>' + esc(o.sub || "") + '</span></div></div><div class="ycCardI">' + (o.pt || o.ph ? '<img src="' + (BU[o.ph] || o.pt || "") + '" alt="">' : avImg(o.title, o.key, 220, "")) + '</div><div class="ycCardA">' + (o.acts || []).map(function(a){ return '<button data-k="' + a[0] + '">' + a[1] + '<small>' + a[2] + '</small></button>'; }).join("") + '</div>';
+  document.body.appendChild(v);
+  if(o.ph && !BU[o.ph]) fileUrl(o.ph).then(function(u){ var im = v.querySelector(".ycCardI img"); if(im) im.src = u; }).catch(function(){});
+  v.addEventListener("click", function(e){ var b = e.target.closest("[data-k]"); if(!b){ return; } var k = b.getAttribute("data-k"); v.remove(); if(k !== "x" && o.on) o.on(k); });
+}
+function personCard(u){
+  var p = person(u) || {}, me = u === MY;
+  photoCard({title: me ? (p.name || "You") : p.name || "Someone", sub: me ? "Your profile photo" : (p.about || "@" + (p.uname || "") + (p.dept ? " · " + p.dept : "")), pt: p.pt, ph: p.ph, key: u,
+    acts: me ? [["edit", IC.cam, p.pt ? "Change photo" : "Add photo"], ["prof", "✎", "Edit profile"]].concat(p.pt ? [["rm", IC.trash, "Remove"]] : []) : [["msg", IC.chat, "Message"], ["call", IC.call, "Voice"], ["vid", IC.video, "Video"], ["info", "ⓘ", "Info"]],
+    on: function(k){
+      if(k === "edit"){ if(VIEW !== "profile"){ go("profile", {}); } setTimeout(function(){ pickPhoto("photo"); }, 0); }
+      else if(k === "prof"){ if(VIEW !== "profile") go("profile", {}); }
+      else if(k === "rm"){ if(confirm("Remove your profile photo?")) FS.collection("people").doc(MY).set({pt: "", ph: ""}, {merge: true}).then(function(){ ME.pt = ""; ME.ph = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); }
+      else if(k === "msg") openDm(u); else if(k === "call") openDmThenCall(u, false); else if(k === "vid") openDmThenCall(u, true);
+      else if(k === "info"){ var id = dmId(MY, u); if(CHATS[id]){ if(OPEN !== id || VIEW !== "chat") openChat(id); go("info", {}); } else openDm(u); }
+    }});
+}
+function coverCard(){ var me = ME || {}; photoCard({title: "Cover photo", sub: me.name || "", pt: me.cvt, ph: me.cv, key: MY, acts: [["edit", IC.cam, me.cvt ? "Change cover" : "Add cover"]].concat(me.cvt ? [["rm", IC.trash, "Remove"]] : []), on: function(k){ if(k === "edit") pickPhoto("cover"); else if(k === "rm" && confirm("Remove cover photo?")) FS.collection("people").doc(MY).set({cvt: "", cv: ""}, {merge: true}).then(function(){ ME.cvt = ""; ME.cv = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); } }); }
+function groupCard(){ var c = CHATS[OPEN]; if(!c) return; var adm = (c.admins || []).indexOf(MY) >= 0; photoCard({title: c.title || "Group", sub: (c.members || []).length + " members", pt: c.pt, ph: c.ph, key: c.id, acts: adm ? [["edit", IC.cam, c.pt ? "Change photo" : "Add photo"]] : [], on: function(k){ if(k === "edit") groupPhoto("photo"); } }); }
 // ---------- contact / group info ----------
 function infoView(w){
   var c = CHATS[OPEN]; if(!c){ VIEW = "home"; return homeView(w); }
   var g = c.type === "group", oth = chatOther(c), p = person(oth) || {}, t = chatTitle(c), adm = (c.admins || []).indexOf(MY) >= 0;
   var cov = g ? "" : p.cvt;
   var h = bar(BACKB(), '<b>' + (g ? "Group info" : "Contact info") + '</b>', "") + '<div class="ycScroll">';
-  h += '<div class="ycCover sm" style="' + (cov ? "background-image:url(" + cov + ")" : "") + '"' + (g && adm ? ' data-c="gcover"' : '') + '></div><div class="ycProf"><div class="ycProfAv"' + (g && adm ? ' data-c="gphoto2"' : (p.ph ? ' data-c="viewph" data-f="' + p.ph + '"' : '')) + '>' + (g ? avImg(t, c.id, 110, c.pt) : avU(oth, 110, true)) + (g && adm ? '<span class="ycCamB">' + IC.cam + '</span>' : '') + '</div><h2>' + esc(t) + '</h2>' +
+  h += '<div class="ycCover sm" style="' + (cov ? "background-image:url(" + cov + ")" : "") + '"' + (g && adm ? ' data-c="gcover"' : '') + '></div><div class="ycProf"><div class="ycProfAv" data-c="' + (g ? "gcard" : "pcard") + '" data-u="' + oth + '">' + (g ? avImg(t, c.id, 110, c.pt) : avU(oth, 110, true)) + (g && adm ? '<span class="ycCamB">' + IC.cam + '</span>' : '') + '</div><h2>' + esc(t) + '</h2>' +
     (g ? '<span>Group · ' + (c.members || []).length + ' members</span>' + (c.desc ? '<p>' + esc(c.desc) + '</p>' : '') : '<span>@' + esc(p.uname || "") + (p.dept ? " · " + esc(p.dept) : "") + '</span>' + (p.about ? '<p>' + esc(p.about) + '</p>' : '') + '<span>' + esc(p.email || "") + '</span><span class="ycSoft">' + esc(lastSeen(p)) + '</span>') +
     '<div class="ycActs">' + (oth !== MY || g ? '<button data-c="call">' + IC.call + '<span>' + (g ? "Meet" : "Voice") + '</span></button><button data-c="vcall">' + IC.video + '<span>Video</span></button>' : '') + '<button data-c="back">' + IC.chat + '<span>Message</span></button><button data-c="ifind">' + IC.search + '<span>Search</span></button></div></div>';
   var media = MSGS.filter(function(m){ return m.k === "img" && !m.del; }).slice(-30).reverse(), files = MSGS.filter(function(m){ return m.k === "file" && !m.del; }).slice(-10).reverse();
@@ -1956,7 +2008,7 @@ function act(a, el){
   var id = el && el.getAttribute("data-id"), u = el && el.getAttribute("data-u");
   switch(a){
   case "close": return closePanel();
-  case "back": return navBack();
+  case "back": return uiBack();
   case "noop": return;
   case "tab": TAB = el.getAttribute("data-t"); SEARCHQ = ""; PARAM = {}; return paint(true);
   case "filter": FILTER = el.getAttribute("data-f"); var l = $("ycList"); if(l){ l.innerHTML = chatsList(); bind(l); } return;
@@ -1966,6 +2018,10 @@ function act(a, el){
   case "me": return go("profile", {});
   case "saveme": return saveMe();
   case "setphoto": return pickPhoto("photo");
+  case "mycard": return personCard(MY);
+  case "mycover": return coverCard();
+  case "pcard": return personCard(u);
+  case "gcard": return groupCard();
   case "setcover": return pickPhoto("cover");
   case "open": return openChat(id);
   case "dm": return openDm(u);
@@ -2265,6 +2321,8 @@ function css(){
   ".ycToast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:#16230f;color:#fff;padding:10px 16px;border-radius:12px;font:600 13.5px Manrope,system-ui,sans-serif;z-index:2147483500;opacity:0;transition:all .3s;max-width:86vw;text-align:center;pointer-events:none}.ycToast.on{opacity:1;transform:translate(-50%,0)}",
   ".ycPop{position:fixed;top:12px;left:50%;transform:translate(-50%,-150%);width:min(430px,calc(100% - 24px));background:#fff;border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.28);display:flex;gap:12px;align-items:center;padding:12px 14px;z-index:2147483200;transition:transform .35s cubic-bezier(.2,1.2,.4,1);cursor:pointer;font-family:Manrope,system-ui,sans-serif}.ycPop.on{transform:translate(-50%,0)}.ycPop div{display:flex;flex-direction:column;min-width:0}.ycPop b{font-size:15px;color:#16230f}.ycPop span{font-size:13.5px;color:#5d6b54;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
   ".ycView{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:2147483300;display:grid;place-items:center}.ycView img{max-width:100vw;max-height:92vh;object-fit:contain}.ycViewT{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;display:flex;gap:8px}.ycViewT button{width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:19px;cursor:pointer}",
+  ".ycAvT{display:inline-grid;flex:none}.ycCard{display:flex!important;flex-direction:column;place-items:stretch!important;color:#fff;font-family:Manrope,system-ui,sans-serif}.ycCardT{display:flex;align-items:center;gap:8px;padding:10px;padding-top:max(10px,env(safe-area-inset-top))}.ycCardT button{border:0;background:none;color:#fff;width:44px;height:44px;cursor:pointer}.ycCardT div{display:flex;flex-direction:column}.ycCardT b{font-size:17px}.ycCardT span{font-size:12.5px;opacity:.75}",
+  ".ycCardI{flex:1;display:grid;place-items:center;min-height:0;overflow:hidden}.ycCardI img{max-width:100vw;max-height:100%;width:min(100vw,560px);object-fit:contain}.ycCardA{display:flex;justify-content:space-around;padding:14px 10px max(22px,env(safe-area-inset-bottom));background:#111;flex:none}.ycCardA button{border:0;background:none;color:#a6dd5e;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:20px;cursor:pointer;min-width:64px}.ycCardA small{font:700 12px Manrope,system-ui,sans-serif;color:#fff}",
   "#ycSheet{position:fixed;inset:0;z-index:2147483250;font-family:Manrope,system-ui,sans-serif}#ycSheet .ycShBg{position:absolute;inset:0;background:rgba(0,0,0,.35);opacity:0;transition:opacity .2s}#ycSheet.on .ycShBg{opacity:1}",
   "#ycSheet .ycShIn{position:absolute;left:0;right:0;bottom:0;margin:0 auto;width:min(460px,100%);background:#fff;color:#16230f;border-radius:20px 20px 0 0;padding:10px 8px max(12px,env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.9,.3,1);max-height:80vh;overflow:auto}#ycSheet.on .ycShIn{transform:none}#ycSheet.dk .ycShIn{background:#162415;color:#e5efdc}",
   "#ycSheet .ycShT{font-weight:800;font-size:15px;padding:8px 14px 10px;color:#5d6b54}#ycSheet .ycAct{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;padding:13px 14px;font:600 15.5px inherit;font-family:inherit;color:inherit;text-align:left;border-radius:12px;cursor:pointer}#ycSheet .ycAct:hover{background:rgba(127,127,127,.12)}#ycSheet .ycAct span{width:26px;display:grid;place-items:center;font-size:18px;color:#3d9a1f}#ycSheet .ycAct.red{color:#d0393f}#ycSheet .ycAct.red span{color:#d0393f}",
