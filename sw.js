@@ -2,10 +2,17 @@
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v7").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
 // The app page opens instantly from the copy kept on the phone, and is refreshed in the background for next time.
-const PAGE = "yqi-page-v1", PKEY = "/__yqi_page";
+const PAGE = "yqi-page-v1", PKEY = "/__yqi_page", LIB = "yqi-lib-v1";
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== "GET" || u.origin !== location.origin) return;
+  if (e.request.method !== "GET") return;
+  // libraries (Firebase, charts, fonts) are versioned: keep a copy so YQI also starts without internet
+  if (u.origin !== location.origin) {
+    if (/(^|\.)gstatic\.com$|cdnjs\.cloudflare\.com$|cdn\.jsdelivr\.net$|fonts\.googleapis\.com$|unpkg\.com$/.test(u.hostname) && !/firestore|googleapis\.com\/v1|identitytoolkit|securetoken/.test(u.href)) {
+      e.respondWith(caches.open(LIB).then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => { if (r.ok || r.type === "opaque") c.put(e.request, r.clone()).catch(() => {}); return r; }))));
+    }
+    return;
+  }
   const isPage = e.request.mode === "navigate" || u.pathname === self.registration.scope.replace(location.origin, "") || /\/index\.html$/.test(u.pathname);
   if (!isPage || u.searchParams.has("nc")) { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); return; }
   e.respondWith(caches.open(PAGE).then(c => c.match(PKEY).then(hit => {

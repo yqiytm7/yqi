@@ -4,5 +4,5 @@
   "webDir": "www",
   "backgroundColor": "#0e240e",
   "server": { "url": "https://yqiytm7.github.io/yqi/", "cleartext": false, "allowNavigation": ["yqiytm7.github.io", "*.firebaseapp.com", "*.googleapis.com", "*.gstatic.com"] },
-  "android": { "backgroundColor": "#0e240e", "adjustMarginsForEdgeToEdge": "force", "allowMixedContent": false, "captureInput": false, "webContentsDebuggingEnabled": false }
+  "android": { "backgroundColor": "#0e240e", "adjustMarginsForEdgeToEdge": "disable", "allowMixedContent": false, "captureInput": false, "webContentsDebuggingEnabled": false }
 }

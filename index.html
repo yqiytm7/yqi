@@ -20,6 +20,10 @@
   document.addEventListener("click", function(e){ var a = e.target && e.target.closest && e.target.closest("a[download]"); if(a && /^(blob:|data:)/.test(a.href || "")){ e.preventDefault(); e.stopPropagation(); save(a.getAttribute("download"), a.href); } }, true);
 })();
 
+// ---------- offline banner ----------
+(function(){ function upd(){ var b = document.getElementById("yqOffB"); if(navigator.onLine){ if(b) b.remove(); return; } if(b) return; b = document.createElement("div"); b.id = "yqOffB"; b.textContent = "No internet · showing saved data"; b.style.cssText = "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483500;background:#3a3f36;color:#fff;font:600 12.5px Manrope,system-ui,sans-serif;padding:7px 14px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none"; (document.body || document.documentElement).appendChild(b); }
+  window.addEventListener("online", upd); window.addEventListener("offline", upd); if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", upd); else upd(); })();
+
 // ---------- in-app dialog (replaces the browser's "yqiytm7.github.io says" boxes) ----------
 window.yqAsk = function(msg, o){ o = o || {}; return new Promise(function(res){
   if(!document.getElementById("yqAskCss")){ var st = document.createElement("style"); st.id = "yqAskCss"; st.textContent = "#yqAsk{position:fixed;inset:0;z-index:2147483640;display:grid;place-items:center;background:rgba(6,19,10,.55);font-family:Manrope,Inter,system-ui,sans-serif;animation:yqAskF .15s}@keyframes yqAskF{from{opacity:0}}#yqAsk .bx{width:min(360px,calc(100% - 40px));background:#fff;color:#16230f;border-radius:20px;padding:22px 20px 14px;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:yqAskP .2s cubic-bezier(.2,1.3,.4,1)}@keyframes yqAskP{from{transform:scale(.9);opacity:0}}#yqAsk h3{margin:0 0 6px;font-size:17px;font-weight:800}#yqAsk p{margin:0;font-size:15px;line-height:1.45;color:#3d4a36;white-space:pre-wrap}#yqAsk input,#yqAsk textarea{width:100%;box-sizing:border-box;margin-top:12px;border:1.5px solid #dbe6cf;background:#f8fbf4;border-radius:12px;padding:11px 12px;font:500 15px Manrope,system-ui,sans-serif;outline:0;color:#16230f}#yqAsk input:focus,#yqAsk textarea:focus{border-color:#5BA32A;background:#fff}#yqAsk .bt{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}#yqAsk .bt button{border:0;border-radius:12px;padding:11px 18px;font:800 14.5px Manrope,system-ui,sans-serif;cursor:pointer;background:#eef3e8;color:#2F5A1A}#yqAsk .bt .ok{background:linear-gradient(135deg,#4c8a2a,#2F5A1A);color:#fff}#yqAsk .bt .ok.red{background:#e5484d}"; document.head.appendChild(st); }
@@ -222,7 +226,10 @@ function verifyScreen(u){
 
 // ---------- workspaces ----------
 var EDITORS = [], ISED = false;
-function loadEditors(){ return FS.collection("meta").doc("editors").get().then(function(d){ EDITORS = (d.exists && d.data().emails) || []; }).catch(function(){ EDITORS = []; }).then(function(){ ISED = OWNER || EDITORS.indexOf(EMAIL) >= 0; try{ window.__RO = !ISED; }catch(e){} }); }
+var LOCKS = [];
+function lockOk(){ return OWNER || ISED || LOCKS.indexOf(EMAIL) >= 0; }
+function lockMsg(what){ yqAsk("Only the owner, editors and people the owner allows can open this. Ask Hamza Khan for access.", {title: "🔒 " + what + " is locked", alert: 1}); }
+function loadEditors(){ FS.collection("meta").doc("locks").get().then(function(d){ LOCKS = ((d.exists && d.data().emails) || []).map(function(x){ return String(x).toLowerCase(); }); homeSoon(); }).catch(function(){}); return FS.collection("meta").doc("editors").get().then(function(d){ EDITORS = (d.exists && d.data().emails) || []; }).catch(function(){ EDITORS = []; }).then(function(){ ISED = OWNER || EDITORS.indexOf(EMAIL) >= 0; try{ window.__RO = !ISED; }catch(e){} }); }
 function listMyWs(){
   OWNER = EMAIL === OWNER_EMAIL;
   return loadEditors().then(function(){ return listWs2(OWNER ? "owner" : ISED ? "editor" : "viewer"); });
@@ -282,6 +289,7 @@ function adminScreen(selId){
       h += '<label>Customer</label><select id="yqSel">' + L.map(function(w){ return '<option value="' + esc(w.id) + '"' + (cur && w.id === cur.id ? " selected" : "") + '>' + esc(w.x.name || w.id) + '</option>'; }).join("") + '</select>';
       h += '<label>Editors · people who can add and change data</label><table>' + (EDITORS.length ? EDITORS.slice().sort().map(function(e){ return '<tr><td>' + esc(e) + '</td><td><span style="color:#2f7d1f;font-weight:700">can edit</span></td><td><button class="x" data-rm="' + esc(e) + '">Remove</button></td></tr>'; }).join("") : '<tr><td style="color:#8a967f">No editors yet. Only you (owner) can change data.</td></tr>') + '</table>';
       h += '<div class="row" style="flex-wrap:nowrap;margin-top:6px"><input id="yqMe" type="email" placeholder="name@' + CO_DOMAIN + '"><button id="yqMa" style="margin-top:0">Add editor</button></div><div class="sub" style="margin:4px 0 0">Everyone with an <b>@' + CO_DOMAIN + '</b> email can sign up and <b>view</b> all customers without being added. Add here only people who should edit.</div>';
+      h += '<label>🔒 Locked items (Inspection Summary + Monthly CEO report) · extra people who can open them</label><textarea id="yqLk" rows="3" placeholder="one email per line"></textarea><button class="g" id="yqLs">Save locked access</button><div class="sub" style="margin:4px 0 0">You and editors can always open them. Everyone else sees them locked.</div>';
       h += '<label>Programs of this customer (one per line)</label><textarea id="yqPg" rows="4" placeholder="Solid&#10;Waffle&#10;Pillowcase"></textarea><button class="g" id="yqPs">Save programs</button>';
       h += '<label>Load data into this customer</label><div class="sub" style="margin:0">Use the file from <b>Export all data</b> (home page of the Claude version of YQI).</div><input id="yqIf" type="file" accept=".json,application/json"><div class="row"><button class="g" id="yqEx">Download backup of this customer</button></div>';
       h += '<div class="row"><button id="yqGo">Open ' + esc(cur.x.name || cur.id) + '</button><button class="g" id="yqO">Sign out</button></div>';
@@ -297,6 +305,8 @@ function adminScreen(selId){
     if(!cur) return;
     var wref = FS.collection("ws").doc(cur.id);
     $("yqSel").onchange = function(){ adminScreen(this.value); };
+    FS.collection("meta").doc("locks").get().then(function(d){ $("yqLk").value = ((d.exists && d.data().emails) || []).join("\n"); }).catch(function(){});
+    $("yqLs").onclick = function(){ var v = $("yqLk").value.split(/[\s,;]+/).map(function(x){ return x.trim().toLowerCase(); }).filter(function(x){ return /@/.test(x); }); FS.collection("meta").doc("locks").set({emails: v}).then(function(){ LOCKS = v; msg("Locked access saved (" + v.length + ")."); }).catch(function(e){ msg(errTxt(e), 1); }); };
     wref.collection("seed").doc("PROGS").get().then(function(d){ var v = d.exists ? dec(d.data().v) : []; $("yqPg").value = (v || []).join("\n"); }).catch(function(){});
     $("yqPs").onclick = function(){ var v = $("yqPg").value.split("\n").map(function(x){ return x.trim(); }).filter(Boolean); if(!v.length) v = ["General"]; wref.collection("seed").doc("PROGS").set({v: v}).then(function(){ msg("Programs saved (" + v.length + ")."); }).catch(function(e){ msg(errTxt(e), 1); }); };
     gate.querySelectorAll("[data-r]").forEach(function(s){ s.onchange = function(){ var u = {}; u["members"] = Object.assign({}, cur.x.members); u.members[s.dataset.r] = s.value; wref.update(u).then(function(){ msg("Saved."); }).catch(function(e){ msg(errTxt(e), 1); }); }; });
@@ -536,7 +546,7 @@ function homeCss(){
   "#yqHome .ring{position:relative;width:170px;height:170px;flex:none}#yqHome .ring svg{width:170px;height:170px;transform:rotate(-90deg)}#yqHome .ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}#yqHome .ring .c b{font:800 34px Manrope,sans-serif}#yqHome .ring .c span{font-size:11.5px;color:#cfe3bf;font-weight:700}",
   "#yqHome .rleg{display:flex;flex-direction:column;gap:8px;justify-content:center;font-size:12.5px;color:#e3f0d8;min-width:170px}#yqHome .rleg div{display:flex;align-items:center;gap:8px;cursor:pointer}#yqHome .rleg i{width:11px;height:11px;border-radius:4px;flex:none}#yqHome .rleg b{margin-left:auto;font-weight:800;color:#fff}",
   "#yqHome .big{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}#yqHome .big div{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:12px 14px;backdrop-filter:blur(4px)}#yqHome .big span{font-size:11.5px;color:#cfe3bf;font-weight:700;text-transform:uppercase;letter-spacing:.06em}#yqHome .big b{display:block;font:800 28px Manrope,sans-serif;margin-top:4px;color:#fff}#yqHome .big i{font-style:normal;font-size:12px;color:#cfe3bf}",
-  "#yqHome .tiles{display:grid;grid-template-columns:1.3fr 1fr 1.15fr;gap:14px;margin:16px 0}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:18px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap;box-shadow:0 4px 14px rgba(30,60,20,.05)}#yqHome button.tl{cursor:pointer;transition:.15s}#yqHome button.tl:hover{transform:translateY(-2px);border-color:#7DB82E;box-shadow:0 10px 24px rgba(63,125,31,.14)}",
+  "#yqHome .tiles{display:grid;grid-template-columns:1.3fr 1fr 1.15fr;gap:14px;margin:16px 0}#yqHome .tl.lk{opacity:.8}#yqHome .tl.lk .ic{background:#eef0ea!important}#yqHome .tl{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8d8;border-radius:18px;padding:14px 16px;text-align:left;font:inherit;color:inherit;flex-wrap:wrap;box-shadow:0 4px 14px rgba(30,60,20,.05)}#yqHome button.tl{cursor:pointer;transition:.15s}#yqHome button.tl:hover{transform:translateY(-2px);border-color:#7DB82E;box-shadow:0 10px 24px rgba(63,125,31,.14)}",
   "#yqHome .tl .ic{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#8ccb3c,#2F5A1A);display:grid;place-items:center;color:#fff;font:800 16px Manrope,sans-serif;flex:none}#yqHome .tl b{font:800 16px Manrope,system-ui,sans-serif;display:block}#yqHome .tl span{color:#62705a;font-size:12.5px}#yqHome .tl select{font:700 14px Manrope,system-ui,sans-serif;border:1px solid #cfd8c4;border-radius:10px;padding:9px 10px;min-width:150px;flex:1;background:#fbfdf8}",
   "#yqHome .ub{background:linear-gradient(135deg,#3d7322,#2F5A1A);color:#fff;border:0;border-radius:10px;padding:10px 15px;font:800 13px Manrope,system-ui,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 6px 14px rgba(47,90,26,.25)}#yqHome .tp{white-space:nowrap;color:#2F5A1A;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline}#yqHome .msgb{font-size:13px;line-height:1.5}",
   "#yqHome .yqsec{display:flex!important;justify-content:flex-start!important;align-items:center;gap:8px;font:800 12.5px Manrope,system-ui,sans-serif;color:#4c5d43;text-transform:uppercase;letter-spacing:.08em;margin:8px 2px 10px}#yqHome .yqsec:before{content:'';width:4px;height:16px;border-radius:3px;background:#5BA32A}",
@@ -635,11 +645,11 @@ function renderHome(){
   var nk = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
   if(HCUST && !(HCUST in names) && HD && EXT) HCUST = "";
   var per = [["day", "Day"], ["3d", "Last 3 days"], ["m", "This month"], ["all", HSTART ? "All (since " + mName(HSTART) + ")" : "All"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("");
-  var top = '<div class="htop"><div class="brand"><span class="lp q" data-ei="logoQ">' + LOGO_Q + '</span></div><div class="umenu"><span class="who"><i>' + esc((EMAIL || "?").charAt(0).toUpperCase()) + '</i><span><b>' + esc(EMAIL) + '</b><em>' + (OWNER ? "Owner · full access" : ISED ? "Editor · can change data" : "View only") + '</em></span></span>' + (INSTP ? '<button id="yqIns">⬇ Install app</button>' : '') + (OWNER ? '<button id="yqEd">✎ Edit page</button><button id="yqAm2">Admin</button>' : '') + '<button id="yqDk" title="Dark / light">' + (lsGet("yqi_dark") === "1" ? "☀ Light" : "🌙 Dark") + '</button><button id="yqSo2">Sign out</button></div></div>' + (fromC ? '<div class="upd">Updating…</div>' : '');
+  var top = '<div class="htop"><div class="brand"><span class="lp q" data-ei="logoQ">' + LOGO_Q + '</span></div><div class="umenu"><span class="who"><i>' + esc((EMAIL || "?").charAt(0).toUpperCase()) + '</i><span><b>' + esc(EMAIL) + '</b><em>' + (OWNER ? "Owner · full access" : ISED ? "Editor · can change data" : "View only") + '</em></span></span>' + (INSTP ? '<button id="yqIns">⬇ Install app</button>' : '') + (OWNER ? '<button id="yqEd">✎ Edit page</button><button id="yqAm2">Admin</button>' : '') + '' + (window.YQNATIVE ? '' : '<button id="yqOff" title="Keep a copy on this device so YQI opens without internet">' + (lsGet("yqi_off") === "1" ? "✓ Offline copy" : "Offline copy") + '</button>') + '<button id="yqDk" title="Dark / light">' + (lsGet("yqi_dark") === "1" ? "☀ Light" : "🌙 Dark") + '</button><button id="yqSo2">Sign out</button></div></div>' + (fromC ? '<div class="upd">Updating…</div>' : '');
   var head = top + '<div class="hrow"><div class="hl"><h1><span data-ek="h1a">Quality</span> <em data-ek="h1b">Intelligence</em></h1><div class="hsub">' + (HCUST ? clogo(HCUST) + esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div><div class="chips">' + per +
     '<label>Day <input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || HDAYS[0] || today) : "") + '"></label><label>From <input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"></label><label>To <input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></label></div></div>';
   var tiles = '<div class="tiles"><div class="tl">' + (HCUST ? clogo(HCUST, 1) : '<div class="ic">C</div>') + '<div style="flex:1;min-width:110px"><b data-ek="t1">Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><button class="cpk" id="yqCpk">' + (HCUST ? clogo(HCUST) : '<span class="clg" style="--h:95"><b>All</b></span>') + '<span class="t">' + esc(HCUST || "All customers") + '</span>▾</button><select id="yqCs" style="display:none"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' + (OWNER ? '<button class="ub b2" id="yqShr">🔗 Buyer link</button>' : '') : '') + '</div>' +
-    '<button class="tl" id="yqTi"><div class="ic">IS</div><div style="flex:1"><b data-ek="t2">Inspection Summary</b><span data-ek="t2d">Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
+    '<button class="tl' + (lockOk() ? '' : ' lk') + '" id="yqTi"><div class="ic">' + (lockOk() ? 'IS' : '🔒') + '</div><div style="flex:1"><b data-ek="t2">Inspection Summary</b><span data-ek="t2d">Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
     (ISED ? '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b data-ek="t3">Upload inspections</b><span data-ek="t3d">Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div>' : '<div class="tl"><div class="ic">👁</div><div style="flex:1;min-width:140px"><b>View only</b><span>You can see all data. Only the owner can change it.</span></div></div>') + '</div>' + (HMSG ? '<div class="cd msgb">' + HMSG + '</div>' : '');
   if(!HD || !EXT){ h.innerHTML = '<div class="hw"><div class="hero">' + head + '<div class="ring"></div></div><div class="big"><div><span>Loading</span><b>…</b><i>all customers</i></div></div></div>' + tiles + '<div class="cd em"><img class="leaf" src="' + LEAF + '" alt="" style="margin:0 auto 8px">Loading all customers…</div></div>'; applyEdits(h); bindHome(); return; }
   var inR = function(d){ return d && d >= rg.from && d <= rg.to; }, isC = function(c){ return !HCUST || canonC(c) === HCUST; };
@@ -676,7 +686,7 @@ function renderHome(){
   if(it.n && it.p / it.n < .9) att.push('<div style="--ac:#c0392b"' + tip(it.f + " of " + it.n + " floor inspections failed") + '><span class="ati">▼</span><span>Internal pass <b>' + pc(it.p, it.n) + '</b> is under 90%</span></div>');
   if(!att.length) att.push('<div style="--ac:#5BA32A"><span class="ati">✓</span><span>Nothing needs attention in ' + esc(rg.lbl) + '</span></div>');
   if(!HCUST){ var lm = new Date(); lm.setDate(0); var lmd = ymd(lm), lmn = mName(lmd), fresh = new Date().getDate() <= 7;
-    att.unshift('<div class="mrep' + (fresh ? ' new' : '') + '" style="--ac:#2F5A1A"><span class="ati">📊</span><span>' + (fresh ? '<b>New:</b> ' : '') + 'Monthly CEO report · <b>' + lmn + '</b></span><button data-mrep="' + lmd + '" data-dl="0">Preview</button><button data-mrep="' + lmd + '" data-dl="1">⬇ PPT</button></div>'); }
+    att.unshift('<div class="mrep' + (fresh ? ' new' : '') + '" style="--ac:#2F5A1A"><span class="ati">📊</span><span>' + (fresh ? '<b>New:</b> ' : '') + 'Monthly CEO report · <b>' + lmn + '</b></span>' + (lockOk() ? '<button data-mrep="' + lmd + '" data-dl="0">Preview</button><button data-mrep="' + lmd + '" data-dl="1">⬇ PPT</button>' : '<button data-mrep="' + lmd + '" data-dl="0">🔒 Locked</button>') + '</div>'); }
   x += '<div class="att">' + att.join("") + '</div>';
   x += '<div class="yqsec" data-ek="s1">External inspections</div><div class="kp">' +
     kpi("Inspections", nAll, "#2F5A1A", (ri ? "incl. " + ri + " re-inspections" : esc(rg.lbl)), "Every external inspection in " + rg.lbl, "") +
@@ -920,7 +930,7 @@ function bindHome(){
   var cs = $("yqCs"); if(cs) cs.onchange = function(){ setHC(cs.value); };
   var ctr = document.querySelectorAll("#yqHome .ctab tr.cl"); if(ctr.length > 12 && !HALLC){ for(var ci = 12; ci < ctr.length; ci++) ctr[ci].style.display = "none"; var mb = document.createElement("button"); mb.className = "morec"; mb.textContent = "Show all " + ctr.length + " customers ▾"; mb.onclick = function(){ HALLC = true; renderHome(); }; $("yqList").appendChild(mb); }
   else if(ctr.length > 12){ var lb = document.createElement("button"); lb.className = "morec"; lb.textContent = "Show top 12 ▴"; lb.onclick = function(){ HALLC = false; renderHome(); }; $("yqList").appendChild(lb); }
-  document.querySelectorAll("[data-mrep]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); monthReport(b.dataset.mrep, b.dataset.dl === "1"); }; });
+  document.querySelectorAll("[data-mrep]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); if(!lockOk()) return lockMsg("Monthly CEO report"); monthReport(b.dataset.mrep, b.dataset.dl === "1"); }; });
   if($("yqShr")) $("yqShr").onclick = function(){ buyerShare(HCUST); };
   var ck2 = $("yqCpk"); if(ck2) ck2.onclick = function(e){ e.stopPropagation(); custPick(ck2); };
   if($("yqFull")) $("yqFull").onclick = function(){ openCustName(HCUST); };
@@ -928,6 +938,7 @@ function bindHome(){
   if($("yqEd")) $("yqEd").onclick = function(){ editOn(); };
   if($("yqIns")) $("yqIns").onclick = function(){ var p = INSTP; if(!p) return; p.prompt(); (p.userChoice || Promise.resolve()).then(function(){ INSTP = null; renderHome(); }); };
   if($("yqAm2")) $("yqAm2").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_lc", ""); lsSet("yqi_admin", "1"); location.reload(); };
+  if($("yqOff")) $("yqOff").onclick = function(){ var on = lsGet("yqi_off") !== "1"; yqAsk(on ? "YQI will keep the data you open on this device, so you can still see it without internet. It refreshes when you are online." : "YQI will stop keeping data on this device.", {title: on ? "Turn on offline copy?" : "Turn off offline copy?", ok: on ? "Turn on" : "Turn off"}).then(function(y){ if(!y) return; lsSet("yqi_off", on ? "1" : ""); location.reload(); }); };
   if($("yqDk")) $("yqDk").onclick = function(){ var on = lsGet("yqi_dark") !== "1"; lsSet("yqi_dark", on ? "1" : ""); h.classList.add("dkt"); h.classList.toggle("dk", on); this.textContent = on ? "☀ Light" : "🌙 Dark"; var cp = $("yqCP"); if(cp) cp.classList.toggle("dk", on); setTimeout(function(){ h.classList.remove("dkt"); }, 600); };
   if($("yqSo2")) $("yqSo2").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); ssSet("yqi_lc", ""); var go = function(){ location.reload(); }; if(AUTH) AUTH.signOut().then(go, go); else go(); };
   if($("yqUpB")) $("yqUpB").onclick = function(){ if(!OWNER){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
@@ -936,6 +947,7 @@ function bindHome(){
 }
 // Inspection Summary opens on demand: the app behind it only starts the first time it is needed
 function openIS(route){
+  if(!lockOk()) return lockMsg("Inspection Summary");
   if((HCUST || "") !== (ISCUST || "")) setCust(HCUST);
   showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
   try{ if(!YQBACK.has("is")) YQBACK.push(function(){ if(HOMEON){ YQBACK.back(); return; } showHome(true); }, "is"); }catch(e){}
@@ -1258,6 +1270,7 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
   WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
   if(WS !== "_all"){ EARLY = false; if(HOMEON) showHome(false); if(HASALL) try{ YQBACK.onGesture(function(){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); showGate('<h1>Opening all customers…</h1>'); location.reload(); }, "ws"); }catch(e){} }
@@ -1304,7 +1317,7 @@ function boot(){
     AUTH = firebase.auth(); FS = firebase.firestore();
     try{ FS.settings({ignoreUndefinedProperties: true, merge: true}); }catch(e){}
     // no offline copy of the database: it grew big with photos and made every start slow. Photos are cached separately.
-    if(/[?&]offline=1/.test(location.search)){ try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
+    if(/[?&]offline=1/.test(location.search) || window.YQNATIVE || lsGet("yqi_off") === "1"){ try{ FS.settings({ignoreUndefinedProperties: true, merge: true, cacheSizeBytes: 60 * 1048576}); }catch(e){} try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
     AUTH.onAuthStateChanged(function(u){
       if(started){ if(!u) location.reload(); return; }
       if(!u) return loginScreen();
@@ -1347,6 +1360,12 @@ function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; 
 function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
 function lsJ(k, d){ try{ var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
 function isOn(p){ return p && p.at && now() - p.at < 150000; }
+function blkMap(){ return (ME && ME.bl) || {}; }
+function iBlocked(u){ return !!blkMap()[u]; }
+function blockedMe(u){ var p = PEOPLE[u]; return !!(p && p.bl && p.bl[MY]); }
+function setBlock(u, on){ var x = {}; if(on){ x["bl." + u] = now(); } else x["bl." + u] = FV.delete();
+  return FS.collection("people").doc(MY).update(x).then(function(){ ME = ME || {}; ME.bl = ME.bl || {}; if(on) ME.bl[u] = now(); else delete ME.bl[u]; MKEY = ""; var w = $("ycW"); if(w) w.removeAttribute("data-v"); paint(true); toast(on ? fullName(u) + " blocked" : fullName(u) + " unblocked"); }).catch(function(e){ toast(e.code || e.message); }); }
+function askBlock(u){ if(iBlocked(u)) return setBlock(u, false); ask("Blocked contacts cannot call you or send you messages.", {title: "Block " + fullName(u) + "?", ok: "Block", danger: 1}).then(function(y){ if(y) setBlock(u, true); }); }
 function person(uid){ return PEOPLE[uid] || (uid === MY && ME) || null; }
 function pname(uid){ var p = person(uid); return uid === MY ? "You" : p ? p.name : "Someone"; }
 function fullName(uid){ var p = person(uid); return p ? p.name : "Someone"; }
@@ -1362,6 +1381,8 @@ function avC(c, size){ if(c.type === "group") return avImg(c.title || "G", c.id,
 function toast(t){ var e = document.createElement("div"); e.className = "ycToast"; e.textContent = t; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 2600); }
 var IC = {
   back: '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  callO: '<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M8.2 3.5H5.5a2 2 0 00-2 2.2c.9 8 6.8 13.9 14.8 14.8a2 2 0 002.2-2v-2.7a1 1 0 00-.8-1l-3.3-.8a1 1 0 00-1 .3l-1.6 1.6a12 12 0 01-5.4-5.4l1.6-1.6a1 1 0 00.3-1l-.8-3.3a1 1 0 00-1-.8z"/></svg>',
+  videoO: '<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="2.8" y="6" width="13" height="12" rx="2.5"/><path d="M15.8 10.2l5.4-3.2v10l-5.4-3.2z"/></svg>',
   call: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>',
   video: '<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/></svg>',
   dots: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>',
@@ -1389,6 +1410,38 @@ var IC = {
   doc: '<svg viewBox="0 0 24 24" width="26" height="26"><path fill="#fff" d="M6 2h8l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm7 1.5V9h5.5L13 3.5z"/></svg>',
   gal: '<svg viewBox="0 0 24 24" width="26" height="26"><path fill="#fff" d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm1 13h14l-4.5-6-3.5 4.5-2.5-3L5 17z"/></svg>',
   meet: '<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M16 11a3 3 0 100-6 3 3 0 000 6zm-8 0a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>'
+};
+
+var WLOGO = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgLTM2IDEyNCA5OCIgd2lkdGg9IjYyMCIgaGVpZ2h0PSI0OTAiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxMSI+PHBhdGggZD0iTTggNiBMMjYgMjkgTDQ0IDYiLz48cGF0aCBkPSJNMjYgMjggTDI2IDUyIi8+PGNpcmNsZSBjeD0iNzUiIGN5PSIyOCIgcj0iMTYuNSIvPjxwYXRoIGQ9Ik0xMDcgNiBMMTA3IDUwIi8+PC9nPjxwYXRoIGQ9Ik03OSAzNCBMOTIgNTIiIHN0cm9rZT0iIzdEQjgyRSIgc3Ryb2tlLXdpZHRoPSI4IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4NyAtMzMpIHNjYWxlKDAuMzMzMzMzMzMzMzMzMzMzMykiPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZzEiIHgxPSIwIiB5MT0iMSIgeDI9IjEiIHkyPSIwIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM3REI4MkUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNCOURDNEYiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iZzIiIHgxPSIwIiB5MT0iMSIgeDI9IjEiIHkyPSIwIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM4Q0MzMzgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNDNkUzNkEiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHBhdGggZD0iTTMwIDExMCBDMTAgODIgMTQgMzggODggNCBDODAgNDIgNjIgNzQgMzQgMTAwIFoiIGZpbGw9InVybCgjZzEpIi8+CjxwYXRoIGQ9Ik0yNyA5OCBDMjAgNzIgMzIgNDIgNjYgMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii44IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8cGF0aCBkPSJNMzMgMTA2IEM1MiA3NiA3OCA1OCAxMDcgNTAgQzk4IDg0IDY4IDEwNCAzMyAxMDYgWiIgZmlsbD0idXJsKCNnMikiLz4KPHBhdGggZD0iTTQwIDEwMCBDNTggODQgNzYgNzIgOTggNjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii43IiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvc3ZnPg==";
+function li(d, w){ return '<svg viewBox="0 0 24 24" width="' + (w || 22) + '" height="' + (w || 22) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>'; }
+var IL = {
+  info: li('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+  search: li('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>'),
+  media: li('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8.5"/>'),
+  wall: li('<path d="M12 3.5a8.5 8.5 0 100 17c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-1 .8-1.7 1.7-1.7h2a4.5 4.5 0 004.5-4.5c0-3.7-4-6.7-9-6.7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.8" r="1"/>'),
+  bell: li('<path d="M6 16.5V11a6 6 0 0112 0v5.5l1.5 1.5h-15L6 16.5zM10 20.5a2 2 0 004 0"/>'),
+  bellOff: li('<path d="M9 5.3A6 6 0 0118 11v4M6 11v5.5L4.5 18H17M10 20.5a2 2 0 004 0M3 3l18 18"/>'),
+  archive: li('<rect x="3" y="4" width="18" height="4.5" rx="1"/><path d="M5 8.5V19a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0019 19V8.5M10 12.5h4"/>'),
+  trash: li('<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l.8 12a1.5 1.5 0 001.5 1.4h6.4a1.5 1.5 0 001.5-1.4l.8-12M10 11v6M14 11v6"/>'),
+  block: li('<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>'),
+  users: li('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.5-3.3 3-5 6-5s5.5 1.7 6 5"/><path d="M15.5 5.5a3 3 0 010 6M17.5 14.6c2 .6 3.2 2.3 3.5 4.9"/>'),
+  cal: li('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h3M8 17h6"/>'),
+  star: li('<path d="M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.8l-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/>'),
+  user: li('<circle cx="12" cy="8.5" r="4"/><path d="M4.5 20c.8-3.8 3.7-6 7.5-6s6.7 2.2 7.5 6"/>'),
+  close: li('<path d="M6 6l12 12M18 6L6 18"/>'),
+  copy: li('<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7.5a2 2 0 002 2h2.5"/>'),
+  fwd: li('<path d="M14 5l6 6-6 6M20 11H10a6 6 0 00-6 6v1"/>'),
+  reply: li('<path d="M10 5l-6 6 6 6M4 11h10a6 6 0 016 6v1"/>'),
+  edit: li('<path d="M15.5 4.5l4 4L8 20H4v-4L15.5 4.5z"/>'),
+  pin: li('<path d="M9 3.5h6M10 3.5v6L6.5 13v1.5h11V13L14 9.5v-6M12 14.5V21"/>'),
+  check: li('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>'),
+  moon: li('<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>'),
+  agenda: li('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'),
+  notes: li('<path d="M6 3.5h9l4 4V20a.5.5 0 01-.5.5h-12A.5.5 0 016 20V3.5z"/><path d="M14.5 3.5V8h4.5M9 12h7M9 15.5h7"/>'),
+  exit: li('<path d="M14 4.5h4.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H14M10 16l4-4-4-4M14 12H3.5"/>'),
+  smile: li('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.2c.8 1.3 2 2 3.5 2s2.7-.7 3.5-2M9 9.8h.01M15 9.8h.01"/>', 18),
+  plus: li('<path d="M12 5v14M5 12h14"/>'),
+  lock: li('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/>')
 };
 
 // ---------- sounds ----------
@@ -1453,7 +1506,7 @@ function live(){
   FS.collection("inbox").doc(MY).onSnapshot(function(d){ var r = d.exists ? d.data().ring : null; if(r) onRing(r); }, function(){});
   FS.collection("calls").where("members", "array-contains", MY).onSnapshot(function(q){ CALLS = q.docs.map(function(d){ var x = d.data(); x.id = d.id; return x; }).sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 80); if(TAB === "calls") repaint(); }, function(){});
   FS.collection("status").where("at", ">", now() - 864e5).onSnapshot(function(q){ STATUS = q.docs.map(function(d){ var x = d.data(); x.id = d.id; return x; }).filter(function(s){ return now() - s.at < 864e5; }).sort(function(a, b){ return a.at - b.at; }); badge(); if(TAB === "updates") repaint(); }, function(){});
-  FS.collection("meets").where("members", "array-contains", MY).onSnapshot(function(q){ MEETS = {}; q.docs.forEach(function(d){ var x = d.data(); x.id = d.id; MEETS[d.id] = x; }); if(TAB === "calls") repaint(); }, function(){});
+  FS.collection("meets").where("members", "array-contains", MY).onSnapshot(function(q){ MEETS = {}; q.docs.forEach(function(d){ var x = d.data(); x.id = d.id; MEETS[d.id] = x; }); if($("ycNotes")) notesFeed(); if(VIEW === "meet") repaintMeet(); else if(TAB === "calls") repaint(); }, function(){});
   setInterval(meetReminders, 30000);
   var cq = /[?&]chat=([^&]*)/.exec(location.search); if(cq) setTimeout(function(){ openPanel(); var id = decodeURIComponent(cq[1] || ""); if(id) openChat(id); }, 1500);
 }
@@ -1466,6 +1519,7 @@ function badge(){ var b = $("ycFabN"); if(!b) return; if(!ME){ b.textContent = "
   var su = STATUS.filter(function(s){ return s.by !== MY && !(s.v && s.v[MY]); }).length, ns = $("ycTabN_updates"); if(ns){ ns.style.display = su ? "" : "none"; }
 }
 function notifyMsg(c){
+  if(c.type !== "group" && iBlocked(c.last && c.last.by)) return;
   var l = c.last, who = fullName(l.by), title = c.type === "group" ? (c.title || "Group") : who, body = (c.type === "group" ? who.split(" ")[0] + ": " : "") + (l.t || "");
   msgSound();
   if(document.hidden && window.Notification && Notification.permission === "granted"){ try{ navigator.serviceWorker.getRegistration().then(function(r){ if(r) r.showNotification(title, {body: body, icon: "icon-192.png", badge: "icon-192.png", tag: "c_" + c.id, renotify: true, data: {cid: c.id}}); }); }catch(e){} return; }
@@ -1507,7 +1561,7 @@ function paint(full){
   if(!panelOpen()) return; var w = $("ycW"); if(!w) return; $("ycP").classList.toggle("dk", DARK);
   if(!ME && VIEW !== "profile"){ VIEW = "profile"; PARAM = {setup: 1}; }
   var key = VIEW + ":" + (OPEN || "") + ":" + TAB;
-  if(!full && w.getAttribute("data-v") === key){ if(VIEW === "chat") return chatUpdate(); if(VIEW === "profile" || VIEW === "newgroup" || VIEW === "meetnew" || VIEW === "stext") return; }
+  if(!full && w.getAttribute("data-v") === key){ if(VIEW === "chat") return chatUpdate(); if(VIEW === "profile" || VIEW === "newgroup" || VIEW === "meetnew" || VIEW === "stext" || VIEW === "meet") return; }
   w.setAttribute("data-v", key);
   var sc = w.querySelector(".ycScroll"), top = sc && !full ? sc.scrollTop : 0;
   if(VIEW === "home") homeView(w);
@@ -1520,6 +1574,7 @@ function paint(full){
   else if(VIEW === "archived") archivedView(w);
   else if(VIEW === "starred") starredView(w);
   else if(VIEW === "stext") statusTextView(w);
+  else if(VIEW === "meet") meetView(w);
   else { VIEW = "home"; homeView(w); }
   var sc2 = w.querySelector(".ycScroll"); if(sc2 && top) sc2.scrollTop = top;
 }
@@ -1529,7 +1584,7 @@ var BACKB = function(){ return ib("back", IC.back, "Back"); };
 
 // ---------- home: chats / updates / calls ----------
 function homeView(w){
-  var h = bar('', '<b class="ycBrand">YQI <em>Chat</em></b>', '', ib("search", IC.search, "Search") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
+  var h = bar('', '<b class="ycBrand"><img src="' + WLOGO + '" alt="YQI"><em>Chat</em></b>', '', ib("search", IC.search, "Search") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
   if(PARAM.search){ h = bar(ib("unsearch", IC.back, "Back"), '<input id="ycQ" class="ycQin" placeholder="Search chats, people, messages" value="' + esc(SEARCHQ) + '">', '', '', "home"); }
   h += '<div class="ycTabs">' + ["chats:Chats", "updates:Updates", "calls:Calls"].map(function(t){ var a = t.split(":"); return '<button data-c="tab" data-t="' + a[0] + '" class="' + (TAB === a[0] ? "on" : "") + '">' + a[1] + '<i id="ycTabN_' + a[0] + '" class="ycTn" style="display:none"></i></button>'; }).join("") + '</div><div class="ycScroll" id="ycList">';
   if(TAB === "updates") h += updatesList(); else if(TAB === "calls") h += callsList(); else h += chatsList();
@@ -1628,9 +1683,11 @@ function closeStory(){ if(!SV) return; cancelAnimationFrame(SV.raf); SV.el.remov
 
 // ---------- calls tab ----------
 function callsList(){
-  var h = '<div class="ycCallActs"><button data-c="meetnow"><span style="background:#3d9a1f">' + IC.meet + '</span>Start meeting</button><button data-c="meetnew"><span style="background:#2a5a8a">📅</span>Schedule</button><button data-c="newcall"><span style="background:#7a5a1a">' + IC.call + '</span>Call someone</button></div>';
+  var h = '<div class="ycCallActs"><button data-c="meetnow"><span style="background:#3d9a1f">' + IC.meet + '</span>Start meeting</button><button data-c="meetnew"><span style="background:#2a5a8a">' + IL.cal.replace('currentColor', '#fff') + '</span>Schedule</button><button data-c="newcall"><span style="background:#7a5a1a">' + IC.call + '</span>Call someone</button></div>';
   var up = Object.keys(MEETS).map(function(k){ return MEETS[k]; }).filter(function(m){ return (m.at || 0) + (m.dur || 60) * 60000 > now() && !m.done; }).sort(function(a, b){ return a.at - b.at; });
-  if(up.length) h += '<div class="ycSec">Upcoming meetings</div>' + up.map(function(m){ var soon = m.at - now() < 15 * 60000; return '<div class="ycRow"><span class="ycAv" style="width:46px;height:46px;background:#2a5a8a">📅</span><div class="ycRm"><div class="ycR1"><b>' + esc(m.title) + '</b><time>' + esc(dayLbl(m.at)) + ' ' + hm(m.at) + '</time></div><div class="ycR2"><span>' + (m.members || []).length + ' people · by ' + esc(first(m.by)) + (m.video ? " · video" : "") + '</span><button class="ycJoin' + (soon ? " hot" : "") + '" data-c="meetjoin" data-id="' + m.id + '">Join</button></div></div></div>'; }).join("");
+  if(up.length) h += '<div class="ycSec">Upcoming meetings</div>' + up.map(function(m){ var soon = m.at - now() < 15 * 60000; return '<div class="ycRow" data-c="meetinfo" data-id="' + m.id + '"><span class="ycAv ycCalIc" style="width:46px;height:46px">' + IL.cal + '</span><div class="ycRm"><div class="ycR1"><b>' + esc(m.title) + '</b><time>' + esc(dayLbl(m.at)) + ' ' + hm(m.at) + '</time></div><div class="ycR2"><span>' + (m.members || []).length + ' people · by ' + esc(first(m.by)) + (m.video ? " · video" : "") + '</span><button class="ycJoin' + (soon ? " hot" : "") + '" data-c="meetjoin" data-id="' + m.id + '">Join</button></div></div></div>'; }).join("");
+  var past = Object.keys(MEETS).map(function(k){ return MEETS[k]; }).filter(function(m){ return up.indexOf(m) < 0 && now() - (m.at || 0) < 30 * 864e5; }).sort(function(a, b){ return b.at - a.at; }).slice(0, 6);
+  if(past.length) h += '<div class="ycSec">Past meetings · minutes</div>' + past.map(function(m){ return '<button class="ycRow" data-c="meetinfo" data-id="' + m.id + '"><span class="ycAv ycCalIc" style="width:46px;height:46px">' + IL.notes + '</span><div class="ycRm"><div class="ycR1"><b>' + esc(m.title) + '</b><time>' + esc(shortT(m.at)) + '</time></div><div class="ycR2"><span>' + ((m.agenda || []).length + (m.pts || []).length) + ' agenda points · tap for minutes</span></div></div></button>'; }).join("");
   h += '<div class="ycSec">Recent</div>';
   var rows = CALLS.map(function(c){
     var out = c.by === MY, was = c.was && c.was[MY], missed = !out && !was && !c.group, oth = (c.members || []).filter(function(u){ return u !== MY; });
@@ -1713,13 +1770,14 @@ function readNow(id){ var c = CHATS[id]; if(!c || document.hidden || !panelOpen(
 function chatHead(){
   var c = CHATS[OPEN], g = c.type === "group", oth = chatOther(c), p = person(oth);
   var sub = typers(c) || (g ? (c.members || []).map(first).join(", ") : (oth === MY ? "Message yourself" : lastSeen(p)));
-  var acts = g ? ib("vcall", IC.video, "Video meeting") + ib("call", IC.call, "Voice meeting") : (oth === MY ? "" : ib("vcall", IC.video, "Video call") + ib("call", IC.call, "Voice call"));
+  var acts = g ? ib("vcall", IC.videoO, "Video meeting") + ib("call", IC.callO, "Voice meeting") : (oth === MY || iBlocked(oth) || blockedMe(oth) ? "" : ib("vcall", IC.videoO, "Video call") + ib("call", IC.callO, "Voice call"));
   return '<div id="ycHdW">' + bar(BACKB() + '<button class="ycIb ycHav" data-c="info">' + avC(c, 40) + '</button>', '<b data-c="info">' + esc(chatTitle(c)) + '</b>', '<span class="' + (typers(c) ? "ycTy" : "") + '" data-c="info">' + esc(sub) + '</span>', acts + ib("cmenu", IC.dots, "More"), "chat") +
     (CALL && CALL.cid === OPEN ? '<div class="ycLive" data-c="showcall">● Call in progress — tap to return</div>' : '') + (PARAM.find ? '<div class="ycSearch"><input id="ycFind" placeholder="Search in this chat" value="' + esc(PARAM.find === true ? "" : PARAM.find) + '"></div>' : '') + '</div>';
 }
 function chatView(w){
   MKEY = "";
-  w.innerHTML = chatHead() + '<div class="ycMsgs ycScroll ' + wallClass() + '" id="ycMsgs"></div><div id="ycReplyBar"></div><div class="ycIn" id="ycIn">' + inputBar() + '</div>' +
+  var cc = CHATS[OPEN] || {}, bo = cc.type !== "group" ? chatOther(cc) : "", blk = bo && bo !== MY && (iBlocked(bo) || blockedMe(bo));
+  w.innerHTML = chatHead() + '<div class="ycMsgs ycScroll ' + wallClass() + '" id="ycMsgs"></div><div id="ycReplyBar"></div>' + (blk ? '<div class="ycBlk">' + (iBlocked(bo) ? 'You blocked this contact. <button data-c="unblock" data-u="' + bo + '">Unblock</button>' : "You can't message this contact.") + '</div>' : '<div class="ycIn" id="ycIn">' + inputBar() + '</div>') +
     '<input type="file" id="ycFile" multiple hidden><input type="file" id="ycGal" accept="image/*,video/*" multiple hidden><input type="file" id="ycCam" accept="image/*" capture="environment" hidden>';
   bind(w); bindInput(); renderMsgs(); replyBar();
   $("ycFile").onchange = function(){ var fs = [].slice.call(this.files); this.value = ""; fs.forEach(function(f){ sendFile(f); }); };
@@ -1742,7 +1800,8 @@ function wallClass(){ return "ycWall-" + (lsGet("yqc_wall") || "leaf"); }
 var MKEY = "";
 function renderMsgs(){
   var box = $("ycMsgs"); if(!box) return; var c = CHATS[OPEN] || {}, g = c.type === "group", hid = c.hid && c.hid[MY] || 0, fq = typeof PARAM.find === "string" ? PARAM.find.toLowerCase() : "";
-  var list = MSGS.filter(function(m){ return m.at > hid && !(m.dm && m.dm[MY]); });
+  var bo = !g ? chatOther(c) : "", bat = bo && iBlocked(bo) ? blkMap()[bo] : 0;
+  var list = MSGS.filter(function(m){ return m.at > hid && !(m.dm && m.dm[MY]) && !(bat && m.by === bo && m.at > bat); });
   var key = list.map(function(m){ return m.id + (m.pend ? "p" : "") + (m.del ? "d" : "") + JSON.stringify(m.re || 0) + (m.st && m.st[MY] ? "s" : ""); }).join(",") + "|" + JSON.stringify(c.rd || {}) + JSON.stringify(c.dl || {}) + "|" + Object.keys(PEOPLE).length + "|" + fq;
   if(key === MKEY) return; MKEY = key;
   var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160 || !box.getAttribute("data-r");
@@ -1763,13 +1822,13 @@ function renderMsgs(){
       else if(m.k === "voice") body += '<div class="ycVn"><button class="ycPlay" data-c="play" data-f="' + m.f.id + '">▶</button><div class="ycWave">' + waveBars(m.id) + '</div><span>' + fmtDur(m.dur || 0) + '</span>' + avU(m.by, 34) + '</div>';
       else if(m.k === "file") body += '<button class="ycFile" data-c="dl" data-f="' + m.f.id + '" data-n="' + esc(m.f.name) + '"><span class="ycFic" style="background:' + fileCol(m.f.name) + '">' + esc(ext(m.f.name)) + '</span><span class="ycFn"><b>' + esc(m.f.name) + '</b><small>' + fmtSize(m.f.size) + ' · ' + esc(ext(m.f.name)) + '</small></span><span class="ycDlI">⬇</span></button>' + (m.t ? '<div class="ycTxt">' + linkify(m.t, fq) + '</div>' : '');
       else if(m.k === "call") body += '<div class="ycCallM" data-c="' + (m.video ? "vcall" : "call") + '"><span class="ycCallIc' + (/Missed|no one|declined|Busy/i.test(m.t) ? " miss" : "") + '">' + (m.video ? IC.video : IC.call) + '</span><span><b>' + esc(m.t) + '</b><small>' + (m.dur ? fmtDur(m.dur) : "Tap to call back") + '</small></span></div>';
-      else if(m.k === "meet") body += '<div class="ycMeetM"><b>📅 ' + esc(m.t) + '</b><small>' + esc(dayLbl(m.mat) + " at " + hm(m.mat)) + '</small><button data-c="meetjoin" data-id="' + esc(m.mid) + '">Join meeting</button></div>';
+      else if(m.k === "meet") body += '<div class="ycMeetM"><b>' + IL.cal + ' ' + esc(m.t) + '</b><small>' + esc(dayLbl(m.mat) + " at " + hm(m.mat)) + '</small><div class="ycMeetB"><button data-c="meetinfo" data-id="' + esc(m.mid) + '" class="gh">Agenda & minutes</button><button data-c="meetjoin" data-id="' + esc(m.mid) + '">Join</button></div></div>';
       else body += '<div class="ycTxt' + (/^\p{Extended_Pictographic}{1,3}$/u.test(m.t || "") ? " big" : "") + '">' + linkify(m.t, fq) + '</div>';
     }
     var meta = media && !m.t && !m.del && m.k === "img" ? "" : '<span class="ycMeta">' + (m.st && m.st[MY] ? '<i class="ycStar">' + IC.star + '</i>' : '') + (m.ed ? "edited " : "") + hm(m.at) + (mine && !m.del ? " " + (m.pend ? '<i class="ycTk">🕓</i>' : tickOf(c, m.at)) : "") + '</span>';
     var re = m.re && Object.keys(m.re).length ? '<div class="ycRe" data-c="reinfo" data-id="' + m.id + '">' + reacts(m.re) + '</div>' : "";
     var who = g && !mine && firstOf ? '<div class="ycWho" style="color:' + colorOf(m.by) + '">' + esc(fullName(m.by)) + '</div>' : "";
-    h += '<div class="ycMsg ' + (mine ? "me" : "th") + (firstOf ? " f" : "") + (re ? " hasre" : "") + '" id="m_' + m.id + '">' + (g && !mine ? '<span class="ycMav">' + (firstOf ? avU(m.by, 28) : "") + '</span>' : '') + '<div class="ycB' + (media ? " media" : "") + (m.k === "voice" ? " vn" : "") + '" data-lp="msg" data-id="' + m.id + '">' + who + body + meta + re + '</div></div>';
+    h += '<div class="ycMsg ' + (mine ? "me" : "th") + (firstOf ? " f" : "") + (re ? " hasre" : "") + '" id="m_' + m.id + '">' + (g && !mine ? '<span class="ycMav">' + (firstOf ? avU(m.by, 28) : "") + '</span>' : '') + '<div class="ycB' + (media ? " media" : "") + (m.k === "voice" ? " vn" : "") + '" data-lp="msg" data-id="' + m.id + '">' + who + body + meta + re + '</div>' + (m.del || m.pend ? '' : '<button class="ycReB" data-c="reactpick" data-id="' + m.id + '" title="React">' + IL.smile + '</button>') + '<i class="ycSwR">' + IL.reply + '</i></div>';
   });
   box.innerHTML = h; box.setAttribute("data-r", "1");
   box.querySelectorAll(".ycImg img").forEach(function(im){ var id = im.getAttribute("data-f"); if(!BU[id]) fileUrl(id).then(function(u){ im.src = u; }).catch(function(){}); });
@@ -1839,14 +1898,28 @@ function viewImg(id, th){ pushH(); var v = document.createElement("div"); v.clas
 // ---------- message actions (long press) ----------
 function msgById(id){ for(var i = 0; i < MSGS.length; i++) if(MSGS[i].id === id) return MSGS[i]; return null; }
 function preview(m){ return m.k === "img" ? "📷 Photo" + (m.t ? " " + m.t : "") : m.k === "voice" ? "🎤 Voice note" : m.k === "file" ? "📄 " + (m.f && m.f.name || "File") : m.k === "call" ? "📞 " + m.t : (m.t || "").slice(0, 120); }
-function msgMenu(id){
+var EMO = ["👍", "❤️", "😂", "😮", "😢", "🙏"], EMOALL = "👍 👎 ❤️ 😂 😮 😢 🙏 ✅ ❌ 🔥 👏 💯 😊 😍 🤝 👌 🎉 😅 🤔 😡 😴 🙌 💪 ⭐ ⚠️ 📌 🧵 🪡 👕 🛏️ 📦 🚚 ✔️ ⏰ 📊 💡".split(" ");
+function msgMenu(id, reactOnly){
   var m = msgById(id); if(!m || m.pend || m.k === "sys") return; var mine = m.by === MY, c = CHATS[OPEN];
-  var h = '<div class="ycReact">' + ["👍", "❤️", "😂", "😮", "🙏", "✅"].map(function(e){ return '<button data-a="re" data-e="' + e + '" class="' + (m.re && m.re[MY] === e ? "on" : "") + '">' + e + '</button>'; }).join("") + '</div>';
   var acts = [];
-  if(!m.del){ acts.push(["reply", IC.reply, "Reply"]); if(m.t) acts.push(["copy", "⧉", "Copy"]); acts.push(["fwd", "↪", "Forward"]); acts.push(["star", IC.star, m.st && m.st[MY] ? "Unstar" : "Star"]); if(mine && m.k === "text" && now() - m.at < 15 * 60000) acts.push(["edit", "✎", "Edit"]); if(mine) acts.push(["info", "ⓘ", "Info"]); }
-  acts.push(["delme", IC.trash, "Delete for me"]); if(mine && !m.del && now() - m.at < 48 * 3600000) acts.push(["delall", IC.trash, "Delete for everyone"]);
-  h += acts.map(function(a){ return '<button class="ycAct' + (/del/.test(a[0]) ? " red" : "") + '" data-a="' + a[0] + '"><span>' + a[1] + '</span>' + a[2] + '</button>'; }).join("");
-  sheet(h, function(a, el){
+  if(!m.del){ acts.push(["reply", IL.reply, "Reply"]); if(m.t) acts.push(["copy", IL.copy, "Copy"]); acts.push(["fwd", IL.fwd, "Forward"]); acts.push(["star", IL.star, m.st && m.st[MY] ? "Unstar" : "Star"]); if(mine && m.k === "text" && now() - m.at < 15 * 60000) acts.push(["edit", IL.edit, "Edit"]); if(mine) acts.push(["info", IL.info, "Info"]); }
+  acts.push(["delme", IL.trash, "Delete for me"]); if(mine && !m.del && now() - m.at < 48 * 3600000) acts.push(["delall", IL.trash, "Delete for everyone"]);
+  closeSheet(); var s = document.createElement("div"); s.id = "ycSheet"; s.className = "ycMsgOv" + (DARK ? " dk" : "");
+  var pill = m.del ? "" : '<div class="ycPill2">' + EMO.map(function(e){ return '<button data-a="re" data-e="' + e + '" class="' + (m.re && m.re[MY] === e ? "on" : "") + '">' + e + '</button>'; }).join("") + '<button data-a="more" class="pl">' + IL.plus + '</button></div>';
+  s.innerHTML = '<div class="ycShBg"></div>' + pill + (reactOnly ? "" : '<div class="ycMenu ycMact">' + acts.map(function(a){ return '<button class="ycMi' + (/del/.test(a[0]) ? " red" : "") + '" data-a="' + a[0] + '">' + a[1] + '<span>' + a[2] + '</span></button>'; }).join("") + '</div>');
+  document.body.appendChild(s);
+  var b = document.querySelector('#m_' + id + ' .ycB'), r = b ? b.getBoundingClientRect() : {top: innerHeight / 2, bottom: innerHeight / 2, left: 20, right: innerWidth - 20};
+  if(b) b.classList.add("ycPick");
+  var P = s.querySelector(".ycPill2"), A = s.querySelector(".ycMact"), W = innerWidth;
+  var place = function(el, top){ if(!el) return; var w = el.offsetWidth; var x = mine ? Math.min(W - w - 8, r.right - w) : Math.max(8, r.left); el.style.left = Math.max(8, Math.min(W - w - 8, x)) + "px"; el.style.top = Math.max(8, Math.min(innerHeight - el.offsetHeight - 8, top)) + "px"; };
+  var ph = P ? P.offsetHeight : 0, ah = A ? A.offsetHeight : 0;
+  if(P) place(P, r.top - ph - 8 > 60 ? r.top - ph - 8 : r.bottom + 8);
+  if(A){ var below = r.bottom + 8 + (P && r.top - ph - 8 <= 60 ? ph + 8 : 0); place(A, below + ah < innerHeight - 8 ? below : Math.max(8, r.top - ah - 8 - (P && r.top - ph - 8 > 60 ? ph + 8 : 0))); }
+  setTimeout(function(){ s.classList.add("on"); }, 10); pushH();
+  var done = function(){ if(b) b.classList.remove("ycPick"); };
+  s.querySelector(".ycShBg").onclick = function(){ done(); uiBack(); };
+  var doAct = function(a, el){
+
     var ref = FS.collection("chats").doc(OPEN).collection("m").doc(id), u = {};
     if(a === "re"){ var e = el.getAttribute("data-e"); u["re." + MY] = m.re && m.re[MY] === e ? FV.delete() : e; ref.update(u).catch(function(x){ toast(x.code || x.message); }); }
     else if(a === "reply"){ REPLY = {id: m.id, by: m.by, t: preview(m)}; replyBar(); var t = $("ycTx"); if(t) t.focus(); }
@@ -1858,17 +1931,21 @@ function msgMenu(id){
     else if(a === "info"){ var oth = (c.members || []).filter(function(x){ return x !== MY; }); ask("Read by: " + (oth.filter(function(x){ return (c.rd || {})[x] >= m.at; }).map(fullName).join(", ") || "no one yet") + "\nSent: " + new Date(m.at).toLocaleString(), {title: "Message info", alert: 1}); }
     else if(a === "delme"){ u["dm." + MY] = 1; ref.update(u).catch(function(){}); m.dm = m.dm || {}; m.dm[MY] = 1; MKEY = ""; renderMsgs(); }
     else if(a === "delall"){ ask("Everyone in this chat will see “This message was deleted”.", {title: "Delete for everyone?", ok: "Delete", danger: 1}).then(function(y){ if(y) ref.update({del: 1, t: "", f: null, th: "", rp: null}).then(function(){ if(c.last && c.last.at === m.at){ FS.collection("chats").doc(OPEN).update({"last.t": "🚫 Message deleted"}).catch(function(){}); } }).catch(function(x){ toast(x.code || x.message); }); }); }
-  });
+    };
+  s.querySelectorAll("[data-a]").forEach(function(btn){ btn.onclick = function(e){ e.stopPropagation(); var a = btn.getAttribute("data-a");
+    if(a === "more"){ var g2 = document.createElement("div"); g2.className = "ycEmoG"; g2.innerHTML = EMOALL.map(function(x){ return '<button data-e="' + x + '">' + x + '</button>'; }).join(""); if(A) A.remove(); s.appendChild(g2); var gw = Math.min(330, W - 16); g2.style.width = gw + "px"; g2.style.left = Math.round((W - gw) / 2) + "px"; g2.style.top = Math.max(8, Math.min(innerHeight - g2.offsetHeight - 8, (P ? P.getBoundingClientRect().bottom : r.bottom) + 8)) + "px";
+      g2.querySelectorAll("button").forEach(function(x){ x.onclick = function(ev){ ev.stopPropagation(); done(); closeSheet(); doAct("re", x); }; }); return; }
+    done(); closeSheet(); doAct(a, btn); }; });
 }
 var FWD = null;
 function forwardTo(keys){ var m = FWD; if(!m) return; var targets = [];
   var p = keys.map(function(k){ if(k.indexOf("c:") === 0) return Promise.resolve(k.slice(2)); var u = k.slice(2), id = dmId(MY, u); if(CHATS[id]) return Promise.resolve(id); return FS.collection("chats").doc(id).set({type: "dm", members: [MY, u].sort(), at: now(), made: now(), by: MY, n: {}, rd: {}}, {merge: true}).then(function(){ CHATS[id] = CHATS[id] || {id: id, type: "dm", members: [MY, u].sort(), n: {}, rd: {}}; return id; }); });
-  Promise.all(p).then(function(ids){ var keep = OPEN; return Promise.all(ids.map(function(cid){ OPEN = cid; var x = {k: m.k, t: m.t || "", fw: 1}; ["f", "th", "w", "h", "dur"].forEach(function(f){ if(m[f] != null) x[f] = m[f]; }); var pr = post(x, preview(m)); OPEN = keep; return pr; })); })
+  Promise.all(p).then(function(ids){ var keep = OPEN; return Promise.all(ids.map(function(cid){ OPEN = cid; var x = {k: m.k, t: m.t || ""}; if(!m.nofw) x.fw = 1; ["f", "th", "w", "h", "dur"].forEach(function(f){ if(m[f] != null) x[f] = m[f]; }); var pr = post(x, preview(m)); OPEN = keep; return pr; })); })
     .then(function(){ toast("Forwarded"); FWD = null; navBack(); }).catch(function(e){ toast(e.message || "Could not forward"); }); }
 function replyBar(){ var b = $("ycReplyBar"); if(!b) return; if(!REPLY){ b.innerHTML = ""; return; } b.innerHTML = '<div class="ycRb"><div class="ycQuote"><b style="color:' + colorOf(REPLY.by) + '">' + esc(REPLY.by === MY ? "You" : fullName(REPLY.by)) + '</b><span>' + esc(REPLY.t) + '</span></div><button class="ycIb" data-c="unreply">✕</button></div>'; bind(b); }
 function chatMenu(id){
   var c = CHATS[id]; if(!c) return; var ar = c.ar && c.ar[MY], pn = c.pn && c.pn[MY], mu = c.mu && c.mu[MY], n = unreadOf(c);
-  var acts = [["pin", IC.pin, pn ? "Unpin chat" : "Pin chat"], ["mute", IC.mute, mu ? "Unmute" : "Mute notifications"], ["arch", IC.arch, ar ? "Unarchive" : "Archive chat"], ["read", "✓", n ? "Mark as read" : "Mark as unread"], ["clear", IC.trash, "Delete chat"]];
+  var acts = [["pin", IL.pin, pn ? "Unpin chat" : "Pin chat"], ["mute", mu ? IL.bell : IL.bellOff, mu ? "Unmute" : "Mute notifications"], ["arch", IL.archive, ar ? "Unarchive" : "Archive chat"], ["read", IL.check, n ? "Mark as read" : "Mark as unread"], ["clear", IL.trash, "Delete chat"]];
   sheet('<div class="ycShT">' + esc(chatTitle(c)) + '</div>' + acts.map(function(a){ return '<button class="ycAct' + (a[0] === "clear" ? " red" : "") + '" data-a="' + a[0] + '"><span>' + a[1] + '</span>' + a[2] + '</button>'; }).join(""), function(a){
     var u = {}, ref = FS.collection("chats").doc(id);
     if(a === "pin") u["pn." + MY] = pn ? FV.delete() : now(); if(a === "mute") u["mu." + MY] = mu ? FV.delete() : 1; if(a === "arch"){ u["ar." + MY] = ar ? FV.delete() : 1; toast(ar ? "Chat unarchived" : "Chat archived"); }
@@ -1883,17 +1960,31 @@ function sheet(html, onAct){
   s.querySelector(".ycShBg").onclick = uiBack;
   s.querySelectorAll("[data-a]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var a = b.getAttribute("data-a"); closeSheet(); onAct(a, b); }; });
 }
-function closeSheet(){ var s = $("ycSheet"); if(!s) return false; s.remove(); return true; }
+function menu(anchor, items, onAct){
+  closeSheet(); var s = document.createElement("div"); s.id = "ycSheet"; s.className = "ycMenuW" + (DARK ? " dk" : "");
+  s.innerHTML = '<div class="ycShBg"></div><div class="ycMenu">' + items.map(function(a){ return '<button class="ycMi' + (a[3] ? " " + a[3] : "") + '" data-a="' + a[0] + '">' + (a[1] || "") + '<span>' + esc(a[2]) + '</span></button>'; }).join("") + '</div>';
+  document.body.appendChild(s); var m = s.querySelector(".ycMenu"), r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : {right: innerWidth - 8, bottom: 56, top: 56};
+  var top = r.bottom + 4; m.style.right = Math.max(6, innerWidth - r.right) + "px"; m.style.top = top + "px";
+  var mh = m.offsetHeight; if(top + mh > innerHeight - 8) m.style.top = Math.max(8, r.top - mh - 4) + "px";
+  setTimeout(function(){ s.classList.add("on"); }, 10); pushH();
+  s.querySelector(".ycShBg").onclick = uiBack;
+  s.querySelectorAll("[data-a]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var a = b.getAttribute("data-a"); closeSheet(); onAct(a, b); }; });
+}
+function closeSheet(){ document.querySelectorAll(".ycPick").forEach(function(x){ x.classList.remove("ycPick"); }); var s = $("ycSheet"); if(!s) return false; s.remove(); return true; }
 function attachSheet(){
   sheet('<div class="ycAttach">' + [["doc", IC.doc, "Document", "#7a4adb"], ["cam", IC.cam.replace('fill="currentColor"', 'fill="#fff"'), "Camera", "#d9435f"], ["gal", IC.gal, "Gallery", "#2a7ad9"], ["meet", IC.meet.replace('fill="currentColor"', 'fill="#fff"'), "Meeting", "#1f9a6a"]].map(function(a){ return '<button data-a="' + a[0] + '"><span style="background:' + a[3] + '">' + a[1] + '</span>' + a[2] + '</button>'; }).join("") + '</div>', function(a){
     if(a === "doc") $("ycFile").click(); else if(a === "cam") $("ycCam").click(); else if(a === "gal") $("ycGal").click(); else if(a === "meet") go("meetnew", {cid: OPEN}); });
 }
-function homeMenu(){
-  sheet([["newgroup0", "👥", "New group"], ["meetnew", "📅", "New meeting"], ["starred", "⭐", "Starred messages"], ["archived", "🗄", "Archived chats"], ["me", "👤", "Profile & settings"], ["close", "✕", "Close chat"]].map(function(a){ return '<button class="ycAct" data-a="' + a[0] + '"><span>' + a[1] + '</span>' + a[2] + '</button>'; }).join(""), function(a){ act(a); });
+function homeMenu(el){
+  menu(el, [["newgroup0", IL.users, "New group"], ["meetnew", IL.cal, "New meeting"], ["starred", IL.star, "Starred messages"], ["archived", IL.archive, "Archived chats"], ["me", IL.user, "Profile & settings"], ["close", IL.exit, "Close chat"]], function(a){ act(a); });
 }
-function chatMoreMenu(){
-  var c = CHATS[OPEN], g = c.type === "group";
-  sheet([["info", "ⓘ", g ? "Group info" : "View contact"], ["find", "🔍", "Search in chat"], ["media", "🖼", "Media, files"], ["wall", "🌿", "Wallpaper"], ["cmute", IC.mute, c.mu && c.mu[MY] ? "Unmute" : "Mute notifications"], ["carch", IC.arch, c.ar && c.ar[MY] ? "Unarchive" : "Archive chat"], ["cdel", IC.trash, "Delete chat"]].map(function(a){ return '<button class="ycAct' + (a[0] === "cdel" ? " red" : "") + '" data-a="' + a[0] + '"><span>' + a[1] + '</span>' + a[2] + '</button>'; }).join(""), function(a){
+function chatMoreMenu(el){
+  var c = CHATS[OPEN], g = c.type === "group", oth = chatOther(c);
+  var items = [["info", IL.info, g ? "Group info" : "View contact"], ["find", IL.search, "Search in chat"], ["media", IL.media, "Media, links and docs"], ["wall", IL.wall, "Wallpaper"], ["cmute", c.mu && c.mu[MY] ? IL.bell : IL.bellOff, c.mu && c.mu[MY] ? "Unmute notifications" : "Mute notifications"], ["carch", IL.archive, c.ar && c.ar[MY] ? "Unarchive chat" : "Archive chat"]];
+  if(!g && oth !== MY) items.push(["cblock", IL.block, iBlocked(oth) ? "Unblock" : "Block", "red"]);
+  items.push(["cdel", IL.trash, "Delete chat", "red"]);
+  menu(el, items, function(a){
+    if(a === "cblock") return askBlock(oth);
     if(a === "info" || a === "media") return go("info", {media: a === "media"});
     if(a === "find"){ PARAM.find = true; var w = $("ycW"); w.removeAttribute("data-v"); return paint(true); }
     if(a === "wall") return wallSheet();
@@ -1902,7 +1993,7 @@ function chatMoreMenu(){
     FS.collection("chats").doc(OPEN).update(u).then(function(){ if(a === "cdel" || a === "carch"){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); paint(true); } }).catch(function(e){ toast(e.code || e.message); });
   });
 }
-function wallSheet(){ sheet('<div class="ycShT">Chat wallpaper</div><div class="ycWalls">' + [["leaf", "YQI leaf"], ["weave", "Textile weave"], ["plain", "Plain"]].map(function(x){ return '<button data-a="' + x[0] + '" class="ycWall-' + x[0] + (wallClass() === "ycWall-" + x[0] ? " on" : "") + '"><b>' + x[1] + '</b></button>'; }).join("") + '</div><button class="ycAct" data-a="dark"><span>🌙</span>' + (DARK ? "Light chat theme" : "Dark chat theme") + '</button>', function(a){
+function wallSheet(){ sheet('<div class="ycShT">Chat wallpaper</div><div class="ycWalls">' + [["leaf", "YQI leaf"], ["weave", "Textile weave"], ["plain", "Plain"]].map(function(x){ return '<button data-a="' + x[0] + '" class="ycWall-' + x[0] + (wallClass() === "ycWall-" + x[0] ? " on" : "") + '"><b>' + x[1] + '</b></button>'; }).join("") + '</div><button class="ycAct" data-a="dark"><span>' + IL.moon + '</span>' + (DARK ? "Light chat theme" : "Dark chat theme") + '</button>', function(a){
   if(a === "dark"){ DARK = !DARK; lsSet("yqc_dark", DARK ? "1" : "0"); $("ycW").removeAttribute("data-v"); return paint(true); } lsSet("yqc_wall", a); var m = $("ycMsgs"); if(m) m.className = "ycMsgs ycScroll " + wallClass(); }); }
 
 // ---------- profile + settings ----------
@@ -2011,8 +2102,8 @@ function infoView(w){
     files.map(function(m){ return '<button class="ycRow" data-c="dl" data-f="' + m.f.id + '" data-n="' + esc(m.f.name) + '"><span class="ycFic" style="background:' + fileCol(m.f.name) + '">' + esc(ext(m.f.name)) + '</span><div class="ycRm"><div class="ycR1"><b>' + esc(m.f.name) + '</b><time>' + shortT(m.at) + '</time></div><div class="ycR2"><span>' + fmtSize(m.f.size) + '</span></div></div></button>'; }).join("") + (!media.length && !files.length ? '<div class="ycEmpty sm"><span>No media yet.</span></div>' : '');
   if(g){ h += '<div class="ycSec">' + (c.members || []).length + ' members</div>' + (adm ? '<button class="ycRow" data-c="addm"><span class="ycAv" style="width:46px;height:46px;background:#3d9a1f">' + IC.plus + '</span><div class="ycRm"><div class="ycR1"><b>Add members</b></div></div></button>' : '') +
     (c.members || []).map(function(u){ var pp = person(u) || {}; var isA = (c.admins || []).indexOf(u) >= 0; return '<button class="ycRow" data-c="' + (u === MY ? "noop" : "mem") + '" data-u="' + u + '">' + avU(u, 46, true) + '<div class="ycRm"><div class="ycR1"><b>' + esc(u === MY ? "You" : pp.name || "Someone") + '</b><time>' + (isA ? '<em class="adm">Group admin</em>' : '') + '</time></div><div class="ycR2"><span>' + esc(pp.about || "@" + (pp.uname || "")) + '</span></div></div></button>'; }).join("") +
-    '<button class="ycRow red" data-c="leave"><span class="ycSi">🚪</span><div class="ycRm"><div class="ycR1"><b>Exit group</b></div></div></button>'; }
-  else h += '<button class="ycRow red" data-c="cdel2"><span class="ycSi">' + IC.trash + '</span><div class="ycRm"><div class="ycR1"><b>Delete chat</b></div></div></button>';
+    '<button class="ycRow red" data-c="leave"><span class="ycSi">' + IL.exit + '</span><div class="ycRm"><div class="ycR1"><b>Exit group</b></div></div></button>'; }
+  else h += (oth !== MY ? '<button class="ycRow red" data-c="iblock" data-u="' + oth + '"><span class="ycSi">' + IL.block + '</span><div class="ycRm"><div class="ycR1"><b>' + (iBlocked(oth) ? "Unblock " : "Block ") + esc(fullName(oth)) + '</b></div></div></button>' : '') + '<button class="ycRow red" data-c="cdel2"><span class="ycSi">' + IL.trash + '</span><div class="ycRm"><div class="ycR1"><b>Delete chat</b></div></div></button>';
   w.innerHTML = h + '</div><input type="file" id="ycPhF" accept="image/*" hidden>'; bind(w);
 }
 function memberMenu(u){ var c = CHATS[OPEN], adm = (c.admins || []).indexOf(MY) >= 0, isA = (c.admins || []).indexOf(u) >= 0;
@@ -2040,14 +2131,15 @@ function meetNewView(w){
   var sel = PARAM.sel || (PARAM.sel = {}); if(PARAM.cid && CHATS[PARAM.cid] && !PARAM.init){ PARAM.init = 1; (CHATS[PARAM.cid].members || []).forEach(function(u){ if(u !== MY) sel["u:" + u] = 1; }); }
   var n = Object.keys(sel).length;
   w.innerHTML = bar(BACKB(), '<b>New meeting</b>', "") + '<div class="ycScroll"><div class="ycForm"><label>Title</label><input id="ycMt" maxlength="60" placeholder="e.g. Daily QA meeting, Bedsure final audit" value="' + esc(PARAM.title || "") + '"><label>Date & time</label><input id="ycMd" type="datetime-local" value="' + dt + '"><label>Length</label><select id="ycMl">' + [15, 30, 45, 60, 90, 120].map(function(m){ return '<option value="' + m + '"' + ((PARAM.dur || 30) == m ? " selected" : "") + '>' + m + ' minutes</option>'; }).join("") + '</select>' +
+    '<label>Agenda <small>(one point per line)</small></label><textarea id="ycMa" rows="4" placeholder="e.g.&#10;Bedsure final audit result&#10;Shade variation in lot 42&#10;Next week shipment plan">' + esc(PARAM.agenda || "") + '</textarea>' +
     '<label class="ycChk"><input type="checkbox" id="ycMv"' + (PARAM.video ? " checked" : "") + '> Video meeting (camera on)</label><div class="ycSec" style="padding-left:0">People (' + n + ')</div><div class="ycMemb">' + Object.keys(sel).map(function(k){ var u = k.slice(2); return '<span>' + avU(u, 40) + '<small>' + esc(first(u)) + '</small></span>'; }).join("") + '<span data-c="meetppl" class="ycAddP">' + IC.plus + '<small>Add</small></span></div></div></div>' +
     '<div class="ycFoot two"><button class="ycPb ghost" data-c="meetstart"' + (n ? "" : " disabled") + '>Start now</button><button class="ycPb" data-c="meetsave"' + (n ? "" : " disabled") + '>Schedule</button></div>';
-  bind(w); ["Mt:title", "Md:dt", "Ml:dur"].forEach(function(k){ var a = k.split(":"), el = $("yc" + a[0]); el.oninput = el.onchange = function(){ PARAM[a[1]] = el.value; }; }); $("ycMv").onchange = function(){ PARAM.video = this.checked; };
+  bind(w); ["Mt:title", "Md:dt", "Ml:dur", "Ma:agenda"].forEach(function(k){ var a = k.split(":"), el = $("yc" + a[0]); el.oninput = el.onchange = function(){ PARAM[a[1]] = el.value; }; }); $("ycMv").onchange = function(){ PARAM.video = this.checked; };
 }
 function meetSave(){
   var title = ($("ycMt").value || "").trim() || "Meeting", at = new Date($("ycMd").value).getTime(), dur = +$("ycMl").value || 30, mem = [MY].concat(Object.keys(PARAM.sel || {}).map(function(k){ return k.slice(2); }));
   if(!at || isNaN(at)) return toast("Pick a date and time");
-  var ref = FS.collection("meets").doc(), doc = {title: title, at: at, dur: dur, members: mem, by: MY, video: !!PARAM.video, made: now()};
+  var ref = FS.collection("meets").doc(), doc = {title: title, at: at, dur: dur, members: mem, by: MY, video: !!PARAM.video, made: now(), agenda: agendaOf($("ycMa").value)};
   ref.set(doc).then(function(){ var cid = PARAM.cid; var post2 = function(id){ var keep = OPEN; OPEN = id; var p = post({k: "meet", t: title, mid: ref.id, mat: at}, "📅 " + title + " · " + dayLbl(at) + " " + hm(at)); OPEN = keep; return p; };
     if(cid && CHATS[cid]) post2(cid); else if(mem.length === 2){ var u = mem[1], id = dmId(MY, u); (CHATS[id] ? Promise.resolve() : FS.collection("chats").doc(id).set({type: "dm", members: [MY, u].sort(), at: now(), made: now(), by: MY, n: {}, rd: {}}, {merge: true}).then(function(){ CHATS[id] = CHATS[id] || {id: id, type: "dm", members: [MY, u].sort(), n: {}, rd: {}}; })).then(function(){ post2(id); }); }
     toast("Meeting scheduled"); STACK = []; VIEW = "home"; TAB = "calls"; paint(true); }).catch(function(e){ toast("Could not save: " + (e.code || e.message)); });
@@ -2056,8 +2148,84 @@ function meetJoin(id){ var m = MEETS[id]; if(!m){ return toast("Meeting not foun
   if(m.call){ FS.collection("calls").doc(m.call).get().then(function(d){ if(d.exists && !d.data().ended){ joinCall({id: m.call, cid: d.data().cid}); } else startMeetCall(m); }).catch(function(){ startMeetCall(m); }); }
   else startMeetCall(m); }
 function startMeetCall(m){ startCall({members: m.members, group: true, title: m.title, cid: "meet_" + m.id, video: !!m.video, meet: m.id}); }
-function startAdhocMeeting(mem, video){ startCall({members: mem, group: true, title: "Meeting · " + fullName(MY).split(" ")[0], cid: "", video: !!video}); }
+function startAdhocMeeting(mem, video){ adhocMeet(mem, "Meeting · " + fullName(MY).split(" ")[0], !!video, []); }
+function agendaOf(t){ return String(t || "").split(/\n+/).map(function(x){ return x.replace(/^\s*[-•*\d.)]+\s*/, "").trim(); }).filter(Boolean).slice(0, 20); }
+function adhocMeet(mem, title, video, agenda){ mem = [MY].concat(mem).filter(function(u, i, a){ return a.indexOf(u) === i; });
+  var ref = FS.collection("meets").doc(), doc = {title: title, at: now(), dur: 60, members: mem, by: MY, video: !!video, made: now(), agenda: agenda || [], adhoc: 1};
+  ref.set(doc).catch(function(){}); doc.id = ref.id; MEETS[ref.id] = doc; startCall({members: mem, group: true, title: title, cid: "meet_" + ref.id, video: !!video, meet: ref.id}); }
 var REMIND = {}; function meetReminders(){ Object.keys(MEETS).forEach(function(k){ var m = MEETS[k], dt = m.at - now(); if(dt < 5 * 60000 && dt > -60000 && !REMIND[k]){ REMIND[k] = 1; msgSound(); var e = document.createElement("div"); e.className = "ycPop"; e.innerHTML = '<span class="ycAv" style="width:40px;height:40px;background:#2a5a8a">📅</span><div><b>' + esc(m.title) + '</b><span>Starts at ' + hm(m.at) + ' — tap to join</span></div>'; e.onclick = function(){ e.remove(); meetJoin(k); }; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 12000); } }); }
+
+// ---------- meeting details: agenda, points, live notes, minutes ----------
+function txOf(id){ var m = MEETS[id]; return ((m && m.tx) || []).slice().sort(function(a, b){ return a.at - b.at; }); }
+function watchTx(id){}
+function repaintMeet(){ var w = $("ycW"); if(w && VIEW === "meet"){ var sc = w.querySelector(".ycScroll"), t = sc ? sc.scrollTop : 0, f = $("ycPt"), v = f ? f.value : "", had = f && document.activeElement === f; meetView(w); var s2 = w.querySelector(".ycScroll"); if(s2) s2.scrollTop = t; var f2 = $("ycPt"); if(f2){ f2.value = v; if(had) f2.focus(); } } }
+function agendaAll(m){ return (m.agenda || []).map(function(t){ return {t: t, by: m.by}; }).concat((m.pts || []).map(function(p){ return {t: p.t, by: p.by, add: 1}; })); }
+var STOP = ("the and for are but not you all any can had her was one our out day get has him his how man new now old see two way who boy did its let put say she too use that with have this will your from they know want been good much some time very when come here just like long make many more only over such take than them well were what yes also into about after again could every there their these those then other which while would should shall being doing because kal aaj abhi bas bhai sahab sir ji haan han nahi nahin hai hain tha thi thay ho hon hoga hogi kar karo karna karen kiya kia raha rahi rahe wala wali wale aur ya bhi kya kyun kaise kab kahan yeh ye woh wo ap aap hum tum main mein mai mujhe hamein unka unki uska uski iska iski apna apni ka ki ke ko se par pe tak sab koi kuch acha achha theek thik okay okk please").split(" ");
+function toks(t){ var o = {}; String(t || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).forEach(function(w){ if(w.length >= 3 && STOP.indexOf(w) < 0) o[w.length > 5 ? w.slice(0, 5) : w] = 1; }); return Object.keys(o); }
+function minutes(m, tx){
+  var items = agendaAll(m).map(function(a){ return {t: a.t, k: toks(a.t), lines: []}; }), other = [], who = {};
+  tx.forEach(function(l){ who[l.by] = (who[l.by] || 0) + 1; var lt = toks(l.t), best = -1, bs = 0;
+    items.forEach(function(it, i){ var sc = 0; lt.forEach(function(w){ if(it.k.indexOf(w) >= 0) sc++; }); if(sc > bs){ bs = sc; best = i; } });
+    if(best >= 0) items[best].lines.push(l); else other.push(l); });
+  var span = function(ls){ if(!ls.length) return ""; var a = ls[0].at, b = ls[ls.length - 1].at; return hm(a) + (b - a > 60000 ? "–" + hm(b) + " (" + Math.max(1, Math.round((b - a) / 60000)) + " min)" : ""); };
+  return {items: items, other: other, who: who, start: tx.length ? tx[0].at : 0, end: tx.length ? tx[tx.length - 1].at : 0, span: span};
+}
+function minutesHtml(m, tx){
+  if(!tx.length) return '<div class="ycEmpty sm"><span>Minutes appear here once the meeting starts. Everyone\'s spoken words (auto notes) and typed notes are collected here.</span></div>';
+  var r = minutes(m, tx), line = function(l){ return '<div class="ycTxL"><time>' + hm(l.at) + '</time><b style="color:' + colorOf(l.by) + '">' + esc(first(l.by)) + '</b><span>' + (l.k === "n" ? '<i class="ycNt">note</i> ' : '') + esc(l.t) + '</span></div>'; };
+  var h = '<div class="ycMinHd"><span>' + hm(r.start) + ' – ' + hm(r.end) + ' · ' + Math.max(1, Math.round((r.end - r.start) / 60000)) + ' min</span><span>' + Object.keys(r.who).map(function(u){ return esc(first(u)) + " " + r.who[u]; }).join(" · ") + '</span></div>';
+  h += r.items.map(function(it, i){ return '<div class="ycMinI' + (it.lines.length ? "" : " no") + '"><div class="ycMinT"><b>' + (i + 1) + '. ' + esc(it.t) + '</b><em>' + (it.lines.length ? it.lines.length + (it.lines.length > 1 ? " points · " : " point · ") + r.span(it.lines) : "Not discussed") + '</em></div>' + it.lines.map(line).join("") + '</div>'; }).join("");
+  h += '<div class="ycMinI other"><div class="ycMinT"><b>Other discussion</b><em>' + (r.other.length ? r.other.length + (r.other.length > 1 ? " points · " : " point · ") + r.span(r.other) : "None") + '</em></div>' + r.other.map(line).join("") + '</div>';
+  return h;
+}
+function minutesText(m, tx){ var r = minutes(m, tx), o = "📝 Minutes — " + m.title + "\n" + dayLbl(r.start || m.at) + " " + hm(r.start || m.at) + (r.end ? "–" + hm(r.end) : "") + "\n";
+  r.items.forEach(function(it, i){ o += "\n" + (i + 1) + ". " + it.t + " — " + (it.lines.length ? r.span(it.lines) : "not discussed") + "\n" + it.lines.slice(0, 12).map(function(l){ return "   • " + first(l.by) + ": " + l.t; }).join("\n") + (it.lines.length ? "\n" : ""); });
+  if(r.other.length) o += "\nOther discussion — " + r.span(r.other) + "\n" + r.other.slice(0, 12).map(function(l){ return "   • " + first(l.by) + ": " + l.t; }).join("\n") + "\n";
+  return o.slice(0, 4900); }
+function meetView(w){
+  var m = MEETS[PARAM.id]; if(!m){ w.innerHTML = bar(BACKB(), '<b>Meeting</b>', "") + '<div class="ycEmpty"><span>Meeting not found.</span></div>'; bind(w); return; }
+  var tx = txOf(m.id), ag = agendaAll(m), live = m.call && !(m.done);
+  var h = bar(BACKB(), '<b>' + esc(m.title) + '</b>', esc(dayLbl(m.at) + " · " + hm(m.at) + " · " + (m.dur || 30) + " min")) + '<div class="ycScroll"><div class="ycMeetBox">';
+  h += '<div class="ycMemb">' + (m.members || []).map(function(u){ return '<span>' + avU(u, 38) + '<small>' + esc(first(u)) + '</small></span>'; }).join("") + '</div>';
+  h += '<div class="ycSec" style="padding-left:0">' + IL.agenda + ' Agenda</div>' + (ag.length ? '<ol class="ycAg">' + ag.map(function(a){ return '<li>' + esc(a.t) + (a.add ? ' <small>added by ' + esc(first(a.by)) + '</small>' : '') + '</li>'; }).join("") + '</ol>' : '<div class="ycSoft" style="padding:4px 0 8px">No agenda yet — add the first point.</div>');
+  h += '<div class="ycAddPt"><input id="ycPt" maxlength="140" placeholder="Add a point to the agenda"><button data-c="addpt">' + IL.plus + '</button></div>';
+  h += '<button class="ycPb" data-c="meetjoin" data-id="' + m.id + '" style="width:100%;margin:12px 0 4px">' + (live ? "Join meeting (in progress)" : "Start / join meeting") + '</button></div>';
+  h += '<div class="ycSec">' + IL.notes + ' Minutes</div><div class="ycMin">' + minutesHtml(m, tx) + '</div>';
+  if(tx.length) h += '<div style="padding:4px 14px 18px;display:flex;gap:8px"><button class="ycPb ghost" data-c="minshare" style="flex:1">Share minutes in chat</button><button class="ycPb ghost" data-c="mindl" style="flex:1">Download</button></div>';
+  w.innerHTML = h + '</div>'; bind(w);
+  var pt = $("ycPt"); if(pt) pt.onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); addPoint(); } };
+}
+function addPoint(){ var f = $("ycPt"), t = f && f.value.trim(); if(!t) return; var id = PARAM.id || (CALL && CALL.meet); if(!id) return; f.value = "";
+  FS.collection("meets").doc(id).update({pts: FV.arrayUnion({t: t.slice(0, 140), by: MY, at: now()})}).then(function(){ toast("Point added"); }).catch(function(e){ toast(e.code || e.message); }); }
+function addNote(id, t, k){ t = String(t || "").trim(); if(!t || !id) return Promise.resolve(); return FS.collection("meets").doc(id).update({tx: FV.arrayUnion({by: MY, t: t.slice(0, 600), at: now(), k: k || "s"})}).catch(function(e){ toast("Note not saved: " + (e.code || e.message)); }); }
+function shareMinutes(){ var m = MEETS[PARAM.id]; if(!m) return; var txt = minutesText(m, txOf(m.id));
+  var cid = (m.cid && CHATS[m.cid]) ? m.cid : null; var targets = Object.keys(CHATS).filter(function(k){ var c = CHATS[k]; return c.type === "group" && (m.members || []).every(function(u){ return (c.members || []).indexOf(u) >= 0; }); });
+  FWD = {k: "text", t: txt, nofw: 1}; go("pick", {mode: "fwd", sel: targets.length ? (function(o){ o["c:" + targets[0]] = 1; return o; })({}) : {}}); }
+function downloadMinutes(){ var m = MEETS[PARAM.id]; if(!m) return; var b = new Blob([minutesText(m, txOf(m.id)).replace(/\n/g, "\r\n")], {type: "text/plain"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "Minutes - " + m.title.replace(/[\\/:*?"<>|]/g, "_") + ".txt"; a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000); }
+
+// ---------- live notes during a meeting (speech → text, plus typed notes) ----------
+var SR = null;
+function srOk(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function srStart(){ if(!CALL || !CALL.meet || SR || !srOk()) return; var R = window.SpeechRecognition || window.webkitSpeechRecognition, r = new R(), mid = CALL.meet;
+  r.lang = lsGet("yqc_srl") || "en-IN"; r.continuous = true; r.interimResults = false;
+  r.onresult = function(e){ for(var i = e.resultIndex; i < e.results.length; i++){ if(e.results[i].isFinal){ var t = e.results[i][0].transcript; if(t && t.trim().split(/\s+/).length >= 2) addNote(mid, t, "s"); } } };
+  r.onerror = function(e){ if(e.error === "not-allowed" || e.error === "service-not-allowed"){ SR = null; lsSet("yqc_sron", "0"); notesHead(); } };
+  r.onend = function(){ if(SR === r && CALL && CALL.meet === mid && lsGet("yqc_sron") !== "0"){ try{ r.start(); }catch(x){ SR = null; } } else if(SR === r) SR = null; notesHead(); };
+  SR = r; try{ r.start(); }catch(x){ SR = null; } notesHead(); }
+function srStop(){ var r = SR; SR = null; if(r) try{ r.stop(); }catch(x){} notesHead(); }
+function notesPanel(){ if(!CALL || !CALL.meet) return; var x = $("ycCall"); if(!x) return; var n = $("ycNotes"); if(n){ n.remove(); return; } watchTx(CALL.meet);
+  n = document.createElement("div"); n.id = "ycNotes"; x.appendChild(n);
+  var m = MEETS[CALL.meet] || {}, ag = agendaAll(m);
+  n.innerHTML = '<div class="ycNh"><b>' + IL.notes + ' Meeting notes</b><button data-k="x">' + IL.close + '</button></div><div class="ycNsub" id="ycNsub"></div>' + (ag.length ? '<ol class="ycAg sm">' + ag.map(function(a){ return '<li>' + esc(a.t) + '</li>'; }).join("") + '</ol>' : '') + '<div class="ycNfeed" id="ycNfeed"></div><div class="ycAddPt"><input id="ycNin" maxlength="300" placeholder="Type a note or decision"><button data-k="add">' + IL.plus + '</button></div>';
+  n.addEventListener("click", function(e){ e.stopPropagation(); var b = e.target.closest("[data-k]"); if(!b) return; var k = b.getAttribute("data-k");
+    if(k === "x") n.remove(); if(k === "add"){ var f = $("ycNin"); addNote(CALL.meet, f.value, "n"); f.value = ""; }
+    if(k === "sr"){ if(SR){ lsSet("yqc_sron", "0"); srStop(); } else { lsSet("yqc_sron", "1"); srStart(); } }
+    if(k === "lang"){ lsSet("yqc_srl", (lsGet("yqc_srl") || "en-IN") === "en-IN" ? "ur-PK" : "en-IN"); if(SR){ srStop(); lsSet("yqc_sron", "1"); setTimeout(srStart, 300); } notesHead(); } });
+  $("ycNin").onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); addNote(CALL.meet, this.value, "n"); this.value = ""; } };
+  notesHead(); notesFeed(); }
+function notesHead(){ var s = $("ycNsub"); if(!s) return; var L = (lsGet("yqc_srl") || "en-IN") === "en-IN" ? "English / Roman Urdu" : "اردو";
+  s.innerHTML = srOk() ? '<button data-k="sr" class="' + (SR ? "on" : "") + '"><i></i>' + (SR ? "Auto notes ON — your words are written down" : "Auto notes OFF — tap to turn on") + '</button><button data-k="lang">' + L + '</button>' : '<span>Auto notes need Chrome (PC or phone browser). In this app, type notes below — they go into the minutes.</span>'; }
+function notesFeed(){ var f = $("ycNfeed"); if(!f || !CALL) return; var tx = txOf(CALL.meet).slice(-40); f.innerHTML = tx.map(function(l){ return '<div class="ycTxL"><time>' + hm(l.at) + '</time><b style="color:' + colorOf(l.by) + '">' + esc(first(l.by)) + '</b><span>' + (l.k === "n" ? '<i class="ycNt">note</i> ' : '') + esc(l.t) + '</span></div>'; }).join("") || '<div class="ycSoft">Nothing yet.</div>'; f.scrollTop = f.scrollHeight; }
 
 // ---------- one click / long-press handler ----------
 function bind(root){
@@ -2068,6 +2236,12 @@ function bind(root){
     el.addEventListener("touchmove", function(e){ var p = e.touches[0]; if(Math.abs(p.clientX - sx) > 10 || Math.abs(p.clientY - sy) > 10) clearTimeout(t); }, {passive: true});
     el.addEventListener("touchend", function(){ clearTimeout(t); }); el.addEventListener("touchcancel", function(){ clearTimeout(t); });
     el.addEventListener("contextmenu", function(e){ e.preventDefault(); clearTimeout(t); if(!el.__lpFired) fire(); });
+    if(el.getAttribute("data-lp") === "msg"){ var sw = 0, row = el.parentNode, ic = row.querySelector(".ycSwR"), swx = 0, swy = 0;
+      el.addEventListener("touchstart", function(e){ var p = e.touches[0]; swx = p.clientX; swy = p.clientY; sw = 0; row.style.transition = "none"; }, {passive: true});
+      el.addEventListener("touchmove", function(e){ var p = e.touches[0], dx = p.clientX - swx, dy = p.clientY - swy; if(!sw && dx > 14 && Math.abs(dx) > Math.abs(dy) * 1.6) sw = 1; if(sw){ clearTimeout(t); var d = Math.max(0, Math.min(84, dx * .75)); row.style.transform = "translateX(" + d + "px)"; if(ic){ ic.style.opacity = Math.min(1, d / 60); ic.style.transform = "scale(" + (d >= 56 ? 1.15 : .8) + ")"; } } }, {passive: true});
+      var swEnd = function(){ if(!sw) return; var d = parseFloat((row.style.transform.match(/-?[\d.]+/) || [0])[0]); row.style.transition = "transform .2s"; row.style.transform = ""; if(ic){ ic.style.opacity = 0; } sw = 0; el.__lpFired = 1; setTimeout(function(){ el.__lpFired = 0; }, 350);
+        if(d >= 56){ var m = msgById(el.getAttribute("data-id")); if(m && !m.del && !m.pend){ try{ navigator.vibrate && navigator.vibrate(15); }catch(x){} REPLY = {id: m.id, by: m.by, t: preview(m)}; replyBar(); var tx = $("ycTx"); if(tx) tx.focus(); } } };
+      el.addEventListener("touchend", swEnd); el.addEventListener("touchcancel", swEnd); }
     if(el.getAttribute("data-lp") === "msg") el.addEventListener("dblclick", function(e){ e.preventDefault(); var id = el.getAttribute("data-id"), m = msgById(id); if(!m || m.pend) return; var u = {}; u["re." + MY] = m.re && m.re[MY] === "👍" ? FV.delete() : "👍"; FS.collection("chats").doc(OPEN).collection("m").doc(id).update(u).catch(function(){}); });
   });
 }
@@ -2082,7 +2256,7 @@ function act(a, el){
   case "filter": FILTER = el.getAttribute("data-f"); var l = $("ycList"); if(l){ l.innerHTML = chatsList(); bind(l); } return;
   case "search": PARAM = {search: 1}; SEARCHQ = ""; TAB = "chats"; return paint(true);
   case "unsearch": PARAM = {}; SEARCHQ = ""; return paint(true);
-  case "menu": return homeMenu();
+  case "menu": return homeMenu(el);
   case "me": return go("profile", {});
   case "saveme": return saveMe();
   case "setphoto": return pickPhoto("photo");
@@ -2117,7 +2291,10 @@ function act(a, el){
   case "viewph": return viewImg(el.getAttribute("data-f"));
   case "info": return go("info", {});
   case "ifind": navBack(); PARAM.find = true; $("ycW").removeAttribute("data-v"); return paint(true);
-  case "cmenu": return chatMoreMenu();
+  case "cmenu": return chatMoreMenu(el);
+  case "unblock": return setBlock(u, false);
+  case "iblock": return askBlock(u);
+  case "reactpick": return msgMenu(id, true);
   case "addm": return go("pick", {mode: "add", sel: {}});
   case "mem": return memberMenu(u);
   case "leave": return leaveGroup();
@@ -2138,8 +2315,12 @@ function act(a, el){
   case "meetnow": return go("pick", {mode: "meet", sel: {}});
   case "meetppl": var keep = PARAM; return go("pick", {mode: "meetsel", sel: keep.sel, back: keep});
   case "meetsave": return meetSave();
-  case "meetstart": var mem = [MY].concat(Object.keys(PARAM.sel || {}).map(function(x){ return x.slice(2); })); var vid = !!PARAM.video, ttl = ($("ycMt").value || "").trim() || "Meeting"; STACK = []; VIEW = "home"; TAB = "calls"; paint(true); return startCall({members: mem, group: true, title: ttl, cid: "", video: vid});
+  case "meetstart": var mem = [MY].concat(Object.keys(PARAM.sel || {}).map(function(x){ return x.slice(2); })); var vid = !!PARAM.video, ttl = ($("ycMt").value || "").trim() || "Meeting"; var ag = agendaOf(($("ycMa") || {}).value); STACK = []; VIEW = "home"; TAB = "calls"; paint(true); return adhocMeet(mem, ttl, vid, ag);
   case "meetjoin": return meetJoin(id);
+  case "meetinfo": return go("meet", {id: id});
+  case "addpt": return addPoint();
+  case "minshare": return shareMinutes();
+  case "mindl": return downloadMinutes();
   case "callback": var cl = CALLS.filter(function(x){ return x.id === id; })[0]; if(!cl) return; if(cl.group){ if(cl.meet && MEETS[cl.meet]) return meetJoin(cl.meet); if(cl.cid && CHATS[cl.cid]) return startCallChat(cl.cid, !!cl.video); return startCall({members: cl.members, group: true, title: cl.title || "Meeting", cid: "", video: !!cl.video}); } var o = (cl.members || []).filter(function(x){ return x !== MY; })[0]; return openDmThenCall(o, !!cl.video);
   case "tsnd": lsSet("yqc_snd", lsGet("yqc_snd") === "0" ? "1" : "0"); $("ycW").removeAttribute("data-v"); return paint(true);
   case "notif": try{ Notification.requestPermission().then(function(){ $("ycW").removeAttribute("data-v"); paint(true); }); }catch(e){} return;
@@ -2178,7 +2359,7 @@ function startCall(o){
 }
 function ringAll(mem, t){ mem.forEach(function(u){ if(u !== MY && !(CALL.joined || {})[u]) FS.collection("inbox").doc(u).set({ring: {id: CALL.id, cid: CALL.cid, from: MY, name: ME.name, pt: ME.pt || "", group: CALL.group, video: CALL.video, title: CALL.group ? CALL.title : "", at: t || now()}}, {merge: true}).catch(function(){}); }); }
 var RINGING = null;
-function onRing(r){
+function onRing(r){ if(r && iBlocked(r.from)) return;
   if(!r || !r.id || r.from === MY) return; if(now() - (r.at || 0) > 50000) return; if(CALL && CALL.id === r.id) return; if(RINGING && RINGING.id === r.id) return;
   if(CALL){ FS.collection("calls").doc(r.id).collection("sig").add({f: MY, t: r.from, ty: "busy", at: now()}).catch(function(){}); return; }
   FS.collection("calls").doc(r.id).get().then(function(d){ if(!d.exists || d.data().ended) return; RINGING = r; incomingUi(r);
@@ -2247,7 +2428,7 @@ function attachMedia(u){ var P = CALL && CALL.pcs[u]; if(!P || !P.stream) return
 function meter(u, st){ try{ var a = ac(); if(!a) return; var src = a.createMediaStreamSource(st), an = a.createAnalyser(); an.fftSize = 256; src.connect(an); var buf = new Uint8Array(an.frequencyBinCount);
   (function lp(){ if(!CALL || !CALL.pcs[u]) return; an.getByteFrequencyData(buf); var s = 0; for(var i = 0; i < buf.length; i++) s += buf[i]; CALL.pcs[u].lvl = s / buf.length; setTimeout(lp, 150); })(); }catch(e){} }
 function endCall(why, remote){
-  var C0 = CALL; if(!C0) return; CALL = null; ringStop(); try{ if(window.YQNATIVE) window.YQNATIVE.callEnd(); }catch(e){} clearTimeout(C0.noAns); clearInterval(C0.tm);
+  var C0 = CALL; if(!C0) return; CALL = null; ringStop(); srStop(); try{ if(window.YQNATIVE) window.YQNATIVE.callEnd(); }catch(e){} clearTimeout(C0.noAns); clearInterval(C0.tm);
   try{ C0.unDoc && C0.unDoc(); }catch(e){} try{ C0.unSig && C0.unSig(); }catch(e){}
   Object.keys(C0.pcs).forEach(function(u){ var P = C0.pcs[u]; try{ P.pc.close(); }catch(e){} if(P.au){ try{ P.au.srcObject = null; P.au.remove(); }catch(e){} } });
   try{ C0.st.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
@@ -2269,6 +2450,7 @@ function logCall(cid, t, dur, video){ var c = CHATS[cid]; if(!c) return; var ref
 var SINK = "";
 function showCallUi(){ if(!CALL) return; var x = $("ycCall"); if(x){ x.classList.remove("min"); return; }
   x = document.createElement("div"); x.id = "ycCall"; document.body.appendChild(x); x.className = CALL.video ? "vid" : "";
+  if(CALL.meet){ watchTx(CALL.meet); if(lsGet("yqc_sron") !== "0") setTimeout(srStart, 1500); }
   if(window.YQNATIVE){ CALL.spkOn = !!CALL.video; try{ window.YQNATIVE.callStart({speaker: CALL.spkOn}); }catch(e){} }
   x.innerHTML = '<div class="ycCtop"><button data-k="min" title="Minimise">⌄</button><span>' + (CALL.video ? "Video" : "Voice") + (CALL.group ? " meeting" : " call") + ' · YQI</span></div><div class="ycStage" id="ycStage"></div><div class="ycCinfo"><b>' + esc(CALL.title) + '</b><span id="ycCs">Calling…</span></div><video id="ycSelf" autoplay playsinline muted></video><div class="ycCbar" id="ycCbar"></div>';
   x.querySelector('[data-k="min"]').onclick = function(e){ e.stopPropagation(); x.classList.add("min"); };
@@ -2279,7 +2461,7 @@ function showCallUi(){ if(!CALL) return; var x = $("ycCall"); if(x){ x.classList
 function ctrlBar(){ var b = $("ycCbar"); if(!b || !CALL) return; var hasV = CALL.st.getVideoTracks().length > 0, sinks = !!(HTMLMediaElement.prototype.setSinkId && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices);
   b.innerHTML = (hasV ? '<button data-k="flip" title="Switch camera">' + IC.flip + '<small>Flip</small></button><button data-k="cam" class="' + (CALL.camOff ? "on" : "") + '" title="Camera">' + (CALL.camOff ? IC.camoff : IC.video) + '<small>' + (CALL.camOff ? "Cam off" : "Camera") + '</small></button>' : '') +
     '<button data-k="mute" class="' + (CALL.muted ? "on" : "") + '">' + IC.mic + '<small>' + (CALL.muted ? "Unmute" : "Mute") + '</small></button>' + (window.YQNATIVE ? '<button data-k="ear" class="' + (CALL.spkOn ? "on" : "") + '">' + IC.spk + '<small>' + (CALL.spkOn ? "Speaker" : "Earpiece") + '</small></button>' : '') + (sinks && !/Android|iPhone|iPad/i.test(navigator.userAgent) ? '<button data-k="spk">' + IC.spk + '<small>Output</small></button>' : '') +
-    (CALL.group ? '<button data-k="ring" title="Ring everyone not here">' + IC.plus + '<small>Ring all</small></button>' : '') + '<button data-k="end" class="end">' + IC.hang + '<small>End</small></button>';
+    (CALL.meet ? '<button data-k="notes" class="' + (SR ? "on" : "") + '" title="Agenda and notes">' + IL.notes + '<small>Notes</small></button>' : '') + (CALL.group ? '<button data-k="ring" title="Ring everyone not here">' + IC.plus + '<small>Ring all</small></button>' : '') + '<button data-k="end" class="end">' + IC.hang + '<small>End</small></button>';
   b.querySelectorAll("[data-k]").forEach(function(el){ el.onclick = function(e){ e.stopPropagation(); var k = el.getAttribute("data-k"); if(!CALL) return;
     if(k === "end") return endCall("");
     if(k === "mute"){ CALL.muted = !CALL.muted; CALL.st.getAudioTracks().forEach(function(t){ t.enabled = !CALL.muted; }); }
@@ -2287,6 +2469,7 @@ function ctrlBar(){ var b = $("ycCbar"); if(!b || !CALL) return; var hasV = CALL
     if(k === "flip") return flipCam();
     if(k === "ring"){ ringAll(CALL.members); toast("Ringing everyone who is not in the meeting"); }
     if(k === "spk") return pickSink();
+    if(k === "notes") return notesPanel();
     if(k === "ear"){ CALL.spkOn = !CALL.spkOn; try{ window.YQNATIVE.setSpeaker({on: CALL.spkOn}); }catch(x){} }
     ctrlBar(); }; }); }
 function flipCam(){ var C0 = CALL; if(!C0) return; C0.face = C0.face === "user" ? "environment" : "user";
@@ -2398,6 +2581,27 @@ function css(){
   ".ycCropA{display:flex;gap:10px;padding:8px 14px max(18px,env(safe-area-inset-bottom));position:relative;z-index:2}.ycCropA button{flex:1;border:0;border-radius:14px;padding:14px 6px;background:rgba(255,255,255,.14);color:#fff;font:800 14.5px Manrope,system-ui,sans-serif;cursor:pointer}.ycCropA .ok{background:#3d9a1f}.ycCrop .ycCardT{position:relative;z-index:2}",
   "#ycSheet{position:fixed;inset:0;z-index:2147483250;font-family:Manrope,system-ui,sans-serif}#ycSheet .ycShBg{position:absolute;inset:0;background:rgba(0,0,0,.35);opacity:0;transition:opacity .2s}#ycSheet.on .ycShBg{opacity:1}",
   "#ycSheet .ycShIn{position:absolute;left:0;right:0;bottom:0;margin:0 auto;width:min(460px,100%);background:#fff;color:#16230f;border-radius:20px 20px 0 0;padding:10px 8px max(12px,env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.9,.3,1);max-height:80vh;overflow:auto}#ycSheet.on .ycShIn{transform:none}#ycSheet.dk .ycShIn{background:#162415;color:#e5efdc}",
+  "#ycP .ycBrand{display:flex!important;align-items:center;gap:8px}#ycP .ycBrand img{height:27px!important;width:auto!important;max-width:none!important;display:block}#ycP .ycBrand em{font-size:18px;font-weight:600;color:#cfe9ae;letter-spacing:.2px;padding-top:6px}",
+  "#ycSheet.ycMenuW .ycShBg{background:transparent}#ycSheet .ycMenu{position:fixed;min-width:224px;max-width:calc(100% - 16px);background:#fff;color:#1b2616;border-radius:14px;padding:6px 0;box-shadow:0 10px 32px rgba(10,30,10,.22),0 2px 6px rgba(0,0,0,.08);transform:scale(.92);transform-origin:top right;opacity:0;transition:transform .16s cubic-bezier(.2,.9,.3,1),opacity .12s}#ycSheet.on .ycMenu{transform:none;opacity:1}",
+  "#ycSheet .ycMi{display:flex;align-items:center;gap:16px;width:100%;border:0;background:none;padding:11px 20px 11px 18px;font:500 15px/1.2 Manrope,system-ui,sans-serif;color:inherit;text-align:left;cursor:pointer;white-space:nowrap}#ycSheet .ycMi svg{flex:none;color:#5f6f57}#ycSheet .ycMi:hover,#ycSheet .ycMi:active{background:#f1f6ec}#ycSheet .ycMi.red,#ycSheet .ycMi.red svg{color:#c8373d}",
+  "#ycSheet.dk .ycMenu,#ycSheet.dk .ycPill2,#ycSheet.dk .ycEmoG{background:#1f2e1d;color:#e5efdc}#ycSheet.dk .ycMi svg{color:#a9bb9f}#ycSheet.dk .ycMi:hover{background:#2a3b27}",
+  "#ycSheet.ycMsgOv .ycShBg{background:rgba(8,20,8,.28)}#ycSheet .ycPill2{position:fixed;display:flex;align-items:center;gap:2px;background:#fff;border-radius:999px;padding:5px 6px;box-shadow:0 8px 26px rgba(0,0,0,.2);transform:scale(.6);opacity:0;transition:transform .18s cubic-bezier(.2,1.4,.4,1),opacity .12s}#ycSheet.on .ycPill2{transform:none;opacity:1}",
+  "#ycSheet .ycPill2 button{width:42px;height:42px;border:0;background:none;border-radius:50%;font-size:25px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0;transition:transform .12s}#ycSheet .ycPill2 button:hover{transform:scale(1.2)}#ycSheet .ycPill2 button.on{background:#e2f0d3}#ycSheet .ycPill2 .pl{color:#5f6f57;background:#eef3ea;width:36px;height:36px;margin-left:2px}",
+  "#ycSheet .ycEmoG{position:fixed;display:grid;grid-template-columns:repeat(8,1fr);gap:2px;background:#fff;border-radius:16px;padding:8px;box-shadow:0 10px 30px rgba(0,0,0,.22)}#ycSheet .ycEmoG button{border:0;background:none;font-size:25px;height:40px;border-radius:10px;cursor:pointer;padding:0}#ycSheet .ycEmoG button:hover{background:#eef3ea}",
+  "#ycSheet .ycMact{transform-origin:top center}#ycP .ycB.ycPick{box-shadow:0 0 0 2.5px #8cc63f!important}",
+  "#ycP .ycMsg{position:relative}#ycP .ycReB{align-self:center;flex:none;width:30px;height:30px;border:0;border-radius:50%;background:rgba(255,255,255,.92);color:#5f6f57;display:grid;place-items:center;padding:0;cursor:pointer;opacity:0;transition:opacity .15s;box-shadow:0 1px 3px rgba(0,0,0,.12)}#ycP .ycMsg.me .ycReB{order:-1}#ycP .ycMsg:hover .ycReB{opacity:1}@media (hover:none){#ycP .ycReB{display:none}}",
+  "#ycP .ycSwR{position:absolute;left:-36px;top:50%;margin-top:-15px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.9);color:#4d6a3a;display:grid;place-items:center;opacity:0;pointer-events:none;transition:transform .12s}#ycP .ycSwR svg{width:18px;height:18px}",
+  "#ycP .ycBlk{flex:none;padding:14px 16px max(14px,env(safe-area-inset-bottom));text-align:center;background:#f4f7f1;color:#5d6b54;font-size:14px;border-top:1px solid #e0e8d8}#ycP .ycBlk button{border:0;background:none;color:#2f7d1f;font:700 14px inherit;font-family:inherit;cursor:pointer;margin-left:6px}#ycP.dk .ycBlk{background:#162415;color:#b9c8ad;border-color:#253624}",
+  "#ycP .ycForm textarea{width:100%;box-sizing:border-box;border:1.5px solid #d5dfcc;border-radius:12px;padding:10px 12px;font:15px/1.4 inherit;font-family:inherit;resize:vertical;min-height:90px;background:#fff;color:inherit}#ycP .ycForm label small{font-weight:500;color:#7b8a74}",
+  "#ycP .ycMeetBox{padding:12px 16px 4px}#ycP .ycSec svg{width:17px;height:17px;vertical-align:-3px;margin-right:4px}#ycP .ycAg{margin:2px 0 8px;padding-left:22px;font-size:15px;line-height:1.5}#ycP .ycAg li{padding:3px 0}#ycP .ycAg small{color:#7b8a74;font-size:12px}",
+  "#ycP .ycAddPt,#ycNotes .ycAddPt{display:flex;gap:8px;align-items:center}#ycP .ycAddPt input,#ycNotes .ycAddPt input{flex:1;min-width:0;border:1.5px solid #d5dfcc;border-radius:22px;padding:10px 14px;font:15px inherit;font-family:inherit;background:#fff;color:#16230f}#ycP .ycAddPt button,#ycNotes .ycAddPt button{width:42px;height:42px;border:0;border-radius:50%;background:#3d9a1f;color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}",
+  "#ycP .ycMin{padding:0 14px 6px}#ycP .ycMinHd{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;font-size:12.5px;color:#5d6b54;padding:2px 2px 10px}#ycP .ycMinI{background:#fff;border-radius:14px;padding:10px 12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.06);border-left:4px solid #7DB82E}#ycP .ycMinI.no{border-left-color:#d8c06a;opacity:.85}#ycP .ycMinI.other{border-left-color:#8aa0b8}",
+  "#ycP .ycMinT{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}#ycP .ycMinT b{font-size:15px}#ycP .ycMinT em{font-style:normal;font-size:12.5px;color:#6b7a63}",
+  ".ycTxL{display:flex;gap:6px;font-size:13.5px;line-height:1.4;padding:3px 0;align-items:baseline}.ycTxL time{color:#8a9783;font-size:11.5px;flex:none;width:36px}.ycTxL b{flex:none;font-size:13px}.ycTxL span{flex:1;min-width:0;overflow-wrap:anywhere}.ycNt{font-style:normal;font-size:10.5px;background:#eaf3df;color:#3d7a1f;border-radius:6px;padding:1px 5px;font-weight:700}",
+  "#ycP .ycMeetB{display:flex;gap:6px;margin-top:6px}#ycP .ycMeetB button{flex:1}#ycP .ycMeetB button.gh{background:transparent!important;color:#2f7d1f!important;border:1.5px solid #9bc77a!important}#ycP .ycMeetM b svg{width:17px;height:17px;vertical-align:-3px}#ycP .ycCalIc{background:#e6efdd!important;color:#2f6b1c!important;display:grid;place-items:center}#ycP .ycCalIc svg{width:24px;height:24px}#ycP .ycCallActs span svg{width:24px;height:24px}",
+  "#ycNotes{position:absolute;left:8px;right:8px;bottom:110px;max-height:58%;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.97);color:#16230f;border-radius:18px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:5;font-family:Manrope,system-ui,sans-serif}#ycNotes .ycNh{display:flex;align-items:center;justify-content:space-between}#ycNotes .ycNh b{display:flex;gap:6px;align-items:center;font-size:15px}#ycNotes .ycNh button{border:0;background:none;color:#5f6f57;cursor:pointer}",
+  "#ycNotes .ycNsub{display:flex;gap:6px;flex-wrap:wrap;font-size:12.5px;color:#5d6b54}#ycNotes .ycNsub button{border:1.5px solid #cfdcc3;background:#fff;border-radius:16px;padding:5px 10px;font:600 12.5px inherit;font-family:inherit;color:#3d5a2c;cursor:pointer;display:flex;align-items:center;gap:6px}#ycNotes .ycNsub button i{width:8px;height:8px;border-radius:50%;background:#aab4a3}#ycNotes .ycNsub button.on{border-color:#e05252;color:#b52a2a}#ycNotes .ycNsub button.on i{background:#e53935;animation:ycBl 1s infinite}@keyframes ycBl{50%{opacity:.3}}",
+  "#ycNotes .ycAg.sm{margin:0;padding-left:20px;font-size:13px;color:#3d4a36;max-height:80px;overflow:auto}#ycNotes .ycNfeed{flex:1;min-height:60px;overflow:auto;border-top:1px solid #e6ece0;padding-top:6px}",
   "#ycSheet .ycShT{font-weight:800;font-size:15px;padding:8px 14px 10px;color:#5d6b54}#ycSheet .ycAct{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;padding:13px 14px;font:600 15.5px inherit;font-family:inherit;color:inherit;text-align:left;border-radius:12px;cursor:pointer}#ycSheet .ycAct:hover{background:rgba(127,127,127,.12)}#ycSheet .ycAct span{width:26px;display:grid;place-items:center;font-size:18px;color:#3d9a1f}#ycSheet .ycAct.red{color:#d0393f}#ycSheet .ycAct.red span{color:#d0393f}",
   "#ycSheet .ycReact{display:flex;justify-content:space-around;padding:6px 6px 10px;border-bottom:1px solid rgba(127,127,127,.18);margin-bottom:4px}#ycSheet .ycReact button{border:0;background:rgba(127,127,127,.1);width:46px;height:46px;border-radius:50%;font-size:24px;cursor:pointer}#ycSheet .ycReact button.on{background:#dff3cf;box-shadow:0 0 0 2px #3d9a1f}",
   "#ycSheet .ycAttach{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px 6px 8px}#ycSheet .ycAttach button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:8px;font:700 13px inherit;font-family:inherit;color:inherit;cursor:pointer}#ycSheet .ycAttach span{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;box-shadow:0 4px 10px rgba(0,0,0,.15)}",
