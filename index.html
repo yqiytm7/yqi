@@ -191,6 +191,7 @@ function afterLogin(u){
   EMAIL = String(u.email || "").toLowerCase(); OWNER = EMAIL === OWNER_EMAIL;
   if(!allowedEmail(EMAIL)){ ssSet("yqi_lc", ""); var go = function(){ loginScreen({t: "Only @" + CO_DOMAIN + " emails can use YQI. " + EMAIL + " is not allowed.", bad: 1}); }; AUTH.signOut().then(go, go); return; }
   showGate('<h1>Loading…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
+  try{ if(window.YQCHAT) window.YQCHAT.start({fs: FS, auth: AUTH, user: u, email: EMAIL}); }catch(e){}
   var lc = null; try{ lc = JSON.parse(ssGet("yqi_lc") || "null"); }catch(e){}
   var fresh = listMyWs().then(function(r){ if(!r.first) ssSet("yqi_lc", JSON.stringify({v: 2, email: EMAIL, owner: OWNER, list: r.list, at: Date.now()})); return r; });
   var lp = (lc && lc.v === 2 && lc.email === EMAIL && lc.list && lc.list.length && Date.now() - lc.at < 6 * 3600e3) ? loadEditors().then(function(){ OWNER = EMAIL === OWNER_EMAIL; var rl = OWNER ? "owner" : ISED ? "editor" : "viewer"; return {list: lc.list.map(function(w){ return Object.assign({}, w, {role: rl}); }), cached: 1}; }) : fresh;
@@ -1265,6 +1266,515 @@ function boot(){
   }).catch(function(e){ showGate('<h1>No internet?</h1><div class="sub">' + esc(e.message) + '</div><button onclick="location.reload()">Try again</button>'); });
 }
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+</script><script>// ===================== YQI Chat: messages, groups, voice notes, voice calls and meetings =====================
+(function(){
+"use strict";
+var FS, AUTH, FV, MY = "", EMAIL = "", ME = null, started = false;
+var PEOPLE = {}, CHATS = {}, OPEN = null, VIEW = "list", TAB = "chats", MSGS = [], unMsgs = null, unChat = null;
+var LASTSEEN = {}, firstChats = true, TURN = window.YQ_TURN || [];
+var MAXF = 9 * 1024 * 1024, CHUNK = 700000;
+window.YQCHAT = {start: start};
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); }
+function now(){ return Date.now(); }
+function pad(n){ return (n < 10 ? "0" : "") + n; }
+function hm(t){ var d = new Date(t); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+function dayLbl(t){ var d = new Date(t), td = new Date(); td.setHours(0, 0, 0, 0); var x = new Date(t); x.setHours(0, 0, 0, 0); var df = Math.round((td - x) / 864e5);
+  return df === 0 ? "Today" : df === 1 ? "Yesterday" : d.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"}); }
+function shortT(t){ if(!t) return ""; var d = new Date(t), td = new Date(); return d.toDateString() === td.toDateString() ? hm(t) : (now() - t < 6 * 864e5 ? d.toLocaleDateString("en-GB", {weekday: "short"}) : d.toLocaleDateString("en-GB", {day: "2-digit", month: "2-digit"})); }
+function hex(n){ var s = ""; for(var i = 0; i < n; i++) s += "0123456789abcdef"[Math.floor(Math.random() * 16)]; return s; }
+var COLS = ["#2F5A1A", "#4c8a2a", "#1a7a6a", "#7a5a1a", "#5a3a8a", "#8a3a3a", "#2a5a8a", "#6a7a1a"];
+function colorOf(s){ var h = 0; s = String(s || ""); for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return COLS[h % COLS.length]; }
+function initials(n){ n = String(n || "?").trim().split(/\s+/); return ((n[0] || "?")[0] + (n.length > 1 ? n[n.length - 1][0] : "")).toUpperCase(); }
+function av(name, key, size, on){ size = size || 42; return '<span class="yqav" style="width:' + size + 'px;height:' + size + 'px;background:' + colorOf(key || name) + ';font-size:' + Math.round(size * .38) + 'px">' + esc(initials(name)) + (on ? '<i class="on"></i>' : '') + '</span>'; }
+function isOn(p){ return p && p.at && now() - p.at < 150000; }
+function pname(uid){ var p = PEOPLE[uid]; return p ? p.name : (uid === MY && ME ? ME.name : "Someone"); }
+function chatTitle(c){ if(!c) return ""; if(c.type === "group") return c.title || "Group"; var o = (c.members || []).filter(function(u){ return u !== MY; })[0]; return pname(o || MY); }
+function chatOther(c){ return (c.members || []).filter(function(u){ return u !== MY; })[0]; }
+function lastSeenTxt(p){ if(!p || !p.at) return ""; if(isOn(p)) return "online"; var t = p.at; return "last seen " + (new Date(t).toDateString() === new Date().toDateString() ? "today " + hm(t) : dayLbl(t) + " " + hm(t)); }
+function toast(t){ var e = document.createElement("div"); e.className = "yqct"; e.textContent = t; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 2600); }
+
+// ---------- sounds (made in the browser, no files) ----------
+var AC = null; function ac(){ try{ AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if(AC.state === "suspended") AC.resume(); }catch(e){} return AC; }
+function beep(f, d, v, when){ var a = ac(); if(!a) return; var o = a.createOscillator(), g = a.createGain(), t = a.currentTime + (when || 0); o.frequency.value = f; o.type = "sine"; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v || .15, t + .02); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + .05); }
+function msgSound(){ beep(880, .12, .12); beep(1320, .16, .1, .12); }
+var RINGT = null;
+function ringStart(kind){ ringStop(); var f = function(){ if(kind === "in"){ beep(740, .35, .2); beep(988, .35, .2, .4); try{ navigator.vibrate && navigator.vibrate([400, 200, 400]); }catch(e){} } else { beep(440, .9, .08); } }; f(); RINGT = setInterval(f, kind === "in" ? 1800 : 3000); }
+function ringStop(){ if(RINGT){ clearInterval(RINGT); RINGT = null; } try{ navigator.vibrate && navigator.vibrate(0); }catch(e){} }
+
+// ---------- files kept in Firestore pieces (works on the free plan) ----------
+function b64(u8){ var s = "", k = 0x8000; for(var i = 0; i < u8.length; i += k) s += String.fromCharCode.apply(null, u8.subarray(i, i + k)); return btoa(s); }
+function unb64(s){ var b = atob(s), u = new Uint8Array(b.length); for(var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+function shrink(f){ if(!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 300000 || !window.createImageBitmap) return Promise.resolve(f);
+  return createImageBitmap(f).then(function(bm){ var sc = Math.min(1, 1600 / Math.max(bm.width, bm.height)), c = document.createElement("canvas"); c.width = Math.round(bm.width * sc); c.height = Math.round(bm.height * sc); var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(bm, 0, 0, c.width, c.height);
+    return new Promise(function(r){ c.toBlob(function(b){ r(b && b.size < f.size ? b : f); }, "image/jpeg", .82); }); }).catch(function(){ return f; }); }
+function putFile(f, name){ return shrink(f).then(function(x){ return x.arrayBuffer().then(function(buf){
+  if(buf.byteLength > MAXF) throw new Error("File too big (max 9 MB)");
+  var id = hex(32), s = b64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), ps = [];
+  for(var i = 0; i < n; i++) ps.push(FS.collection("cblobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
+  var ct = x.type || f.type || "application/octet-stream";
+  return Promise.all(ps).then(function(){ return FS.collection("cblob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: now(), by: MY}); }).then(function(){ BU[id] = URL.createObjectURL(x); return {id: id, name: name || f.name || "file", ct: ct, size: buf.byteLength}; });
+}); }); }
+var BU = {}, BP = {};
+function fileUrl(id){ if(BU[id]) return Promise.resolve(BU[id]); if(BP[id]) return BP[id];
+  return (BP[id] = FS.collection("cblob").doc(id).get().then(function(d){ if(!d.exists) throw new Error("missing"); var m = d.data(), ps = []; for(var i = 0; i < (m.n || 1); i++) ps.push(FS.collection("cblobc").doc(id + "_" + i).get());
+    return Promise.all(ps).then(function(a){ var b = new Blob([unb64(a.map(function(x){ return x.exists ? x.data().d : ""; }).join(""))], {type: m.ct}); return (BU[id] = URL.createObjectURL(b)); }); })); }
+
+// ---------- start ----------
+function start(o){
+  if(started || !o || !o.fs || !o.user) return; started = true;
+  FS = o.fs; AUTH = o.auth; FV = firebase.firestore.FieldValue; MY = o.user.uid || ("u" + hex(12)); EMAIL = String(o.email || o.user.email || "").toLowerCase();
+  css(); fab();
+  FS.collection("people").doc(MY).get().then(function(d){ if(d.exists){ ME = d.data(); go(); } else { badge(); } }).catch(function(){ badge(); });
+}
+function go(){
+  presence(); setInterval(presence, 60000); document.addEventListener("visibilitychange", function(){ if(!document.hidden) presence(); });
+  FS.collection("people").onSnapshot(function(q){ PEOPLE = {}; q.docs.forEach(function(d){ PEOPLE[d.id] = d.data(); }); if(PEOPLE[MY]) ME = PEOPLE[MY]; paint(); }, function(){});
+  FS.collection("chats").where("members", "array-contains", MY).onSnapshot(function(q){
+    var old = CHATS; CHATS = {}; q.docs.forEach(function(d){ var c = d.data(); c.id = d.id; CHATS[d.id] = c; });
+    if(!firstChats) Object.keys(CHATS).forEach(function(id){ var c = CHATS[id], o2 = old[id], l = c.last; if(!l || l.by === MY) return; if(o2 && o2.last && o2.last.at >= l.at) return; if(OPEN === id && panelOpen() && !document.hidden) return; notifyMsg(c); });
+    firstChats = false; badge(); paint(); if(OPEN && CHATS[OPEN] && VIEW === "chat" && panelOpen()) readNow(OPEN);
+  }, function(){});
+  var cq = /[?&]chat=([^&]*)/.exec(location.search); if(cq) setTimeout(function(){ openPanel(); var id = decodeURIComponent(cq[1] || ""); if(id) openChat(id); }, 1800);
+  FS.collection("inbox").doc(MY).onSnapshot(function(d){ var r = d.exists ? d.data().ring : null; if(r) onRing(r); }, function(){});
+}
+function presence(){ if(!ME || document.hidden) return; FS.collection("people").doc(MY).set({at: now()}, {merge: true}).catch(function(){}); }
+function totalUnread(){ var n = 0; Object.keys(CHATS).forEach(function(id){ var c = CHATS[id]; n += (c.n && c.n[MY]) || 0; }); return n; }
+function badge(){ var b = $("yqcFabN"); if(!b) return; var n = ME ? totalUnread() : 1; b.textContent = ME ? (n > 99 ? "99+" : n) : "!"; b.style.display = n ? "" : "none"; }
+function notifyMsg(c){
+  var l = c.last, who = pname(l.by), title = c.type === "group" ? (c.title || "Group") : who, body = (c.type === "group" ? who + ": " : "") + (l.t || "");
+  msgSound();
+  if(document.hidden && window.Notification && Notification.permission === "granted"){ try{ navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function(r){ if(r) r.showNotification(title, {body: body, icon: "icon-192.png", badge: "icon-192.png", tag: "c_" + c.id, renotify: true, data: {cid: c.id}}); else new Notification(title, {body: body, icon: "icon-192.png"}); }) : new Notification(title, {body: body}); }catch(e){} }
+  else if(!panelOpen() || OPEN !== c.id){ var e = document.createElement("div"); e.className = "yqcpop"; e.innerHTML = av(chatTitle(c), c.type === "group" ? c.id : l.by, 36) + '<div><b>' + esc(title) + '</b><span>' + esc(body).slice(0, 90) + '</span></div>'; e.onclick = function(){ e.remove(); openPanel(); openChat(c.id); }; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 5000); }
+}
+if(navigator.serviceWorker) try{ navigator.serviceWorker.addEventListener("message", function(e){ var d = e.data || {}; if(d.yqcOpen){ openPanel(); if(d.cid) setTimeout(function(){ openChat(d.cid); }, 300); } }); }catch(e){}
+
+// ---------- shell ----------
+function fab(){
+  if($("yqcFab") || /[?&]buyer=/.test(location.search)) return;
+  var b = document.createElement("button"); b.id = "yqcFab"; b.title = "YQI Chat";
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26"><path fill="#fff" d="M12 3C6.9 3 3 6.5 3 10.9c0 2.4 1.2 4.6 3.1 6.1L5.4 21l4-2.1c.8.2 1.7.3 2.6.3 5.1 0 9-3.5 9-7.9S17.1 3 12 3z"/><circle cx="8.3" cy="11" r="1.2" fill="#2F5A1A"/><circle cx="12" cy="11" r="1.2" fill="#2F5A1A"/><circle cx="15.7" cy="11" r="1.2" fill="#2F5A1A"/></svg><b id="yqcFabN" style="display:none"></b>';
+  b.onclick = function(){ panelOpen() ? closePanel() : openPanel(); };
+  document.body.appendChild(b);
+  var p = document.createElement("div"); p.id = "yqcP"; p.innerHTML = '<div class="yqcbg"></div><div class="yqcw" id="yqcW"></div>'; document.body.appendChild(p);
+  p.querySelector(".yqcbg").onclick = closePanel;
+  window.addEventListener("popstate", function(){ if(panelOpen()){ if(VIEW === "chat" || VIEW === "group" || VIEW === "info" || VIEW === "people"){ VIEW = "list"; OPEN = null; stopMsgs(); paint(); } else closePanel(true); } });
+}
+function panelOpen(){ var p = $("yqcP"); return p && p.classList.contains("on"); }
+function openPanel(){ var p = $("yqcP"); if(!p) return; ac(); p.classList.add("on"); document.documentElement.classList.add("yqcLock"); try{ history.pushState({yqc: 1}, ""); }catch(e){} if(!ME) VIEW = "setup"; paint(); askNotif(); }
+function closePanel(fromPop){ var p = $("yqcP"); if(!p) return; p.classList.remove("on"); document.documentElement.classList.remove("yqcLock"); stopMsgs(); OPEN = null; VIEW = ME ? "list" : "setup"; }
+function askNotif(){ try{ if(window.Notification && Notification.permission === "default") Notification.requestPermission(); }catch(e){} }
+
+// ---------- views ----------
+function paint(){
+  if(!panelOpen()) return; var w = $("yqcW"); if(!w) return;
+  if(!(VIEW === "chat" && OPEN && CHATS[OPEN] && ME)) w.removeAttribute("data-v");
+  if(!ME || VIEW === "setup") return setupView(w);
+  if(VIEW === "chat" && OPEN && CHATS[OPEN]) return chatView(w);
+  if(VIEW === "group") return groupView(w);
+  if(VIEW === "info" && OPEN && CHATS[OPEN]) return infoView(w);
+  if(VIEW === "people") return peopleView(w, true);
+  VIEW = "list"; listView(w);
+}
+function head(left, title, sub, right){ return '<div class="yqch">' + left + '<div class="t"><b>' + title + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>' + (right || '') + '</div>'; }
+var BACK = '<button class="ib" data-c="back" title="Back"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+var CLOSE = '<button class="ib" data-c="close" title="Close">✕</button>';
+var CALLI = '<svg viewBox="0 0 24 24" width="21" height="21"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>';
+
+function setupView(w){
+  var nm = ME ? ME.name : "", un = ME ? ME.uname : "";
+  if(!nm){ var e = EMAIL.split("@")[0].replace(/[._-]+/g, " "); nm = e.replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
+  if(!un) un = EMAIL.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 20);
+  w.innerHTML = head('', 'YQI Chat', 'Set up your profile', CLOSE) + '<div class="yqcs"><div class="yqcsetup">' + av(nm, MY, 84) +
+    '<p>Your team will see this name. Pick a short @username so people can find you.</p><label>Full name</label><input id="yqcNm" maxlength="40" value="' + esc(nm) + '"><label>Username</label><div class="un"><i>@</i><input id="yqcUn" maxlength="20" value="' + esc(un) + '"></div><label>Department / role (optional)</label><input id="yqcDp" maxlength="40" placeholder="e.g. QA, Stitching, Planning" value="' + esc(ME && ME.dept || "") + '"><div class="err" id="yqcErr"></div><button class="pb" data-c="saveme">' + (ME ? 'Save' : 'Start chatting') + '</button></div></div>';
+  bind(w);
+}
+function saveMe(){
+  var nm = $("yqcNm").value.trim(), un = $("yqcUn").value.trim().toLowerCase().replace(/^@/, ""), dp = $("yqcDp").value.trim(), er = $("yqcErr");
+  if(nm.length < 2){ er.textContent = "Please write your name."; return; }
+  if(!/^[a-z0-9_]{3,20}$/.test(un)){ er.textContent = "Username: 3–20 letters, numbers or _ only."; return; }
+  er.textContent = "Saving…"; var old = ME && ME.uname;
+  var claim = un === old ? Promise.resolve() : FS.collection("unames").doc(un).get().then(function(d){ if(d.exists && d.data().uid !== MY) throw new Error("@" + un + " is taken. Try another."); return FS.collection("unames").doc(un).set({uid: MY}); });
+  claim.then(function(){ return FS.collection("people").doc(MY).set({uid: MY, email: EMAIL, name: nm, uname: un, dept: dp, at: now(), made: ME && ME.made || now()}, {merge: true}); })
+    .then(function(){ if(old && old !== un) FS.collection("unames").doc(old).delete().catch(function(){}); var first = !ME; ME = {uid: MY, email: EMAIL, name: nm, uname: un, dept: dp, at: now()}; VIEW = "list"; if(first) go(); paint(); badge(); })
+    .catch(function(e){ er.textContent = (e && e.message && /taken/.test(e.message)) ? e.message : "Could not save: " + (e && (e.code || e.message) || e); });
+}
+function listView(w){
+  var q = (w.querySelector("#yqcQ") || {}).value || "", hadF = document.activeElement && document.activeElement.id === "yqcQ", sc = (w.querySelector("#yqcList") || {}).scrollTop || 0;
+  var ids = Object.keys(CHATS).sort(function(a, b){ return (CHATS[b].at || 0) - (CHATS[a].at || 0); });
+  var h = head('', 'YQI Chat', esc(ME.name) + ' · @' + esc(ME.uname), '<button class="ib" data-c="me" title="My profile">' + av(ME.name, MY, 32) + '</button>' + CLOSE);
+  h += '<div class="yqctabs"><button data-c="tab" data-t="chats" class="' + (TAB === "chats" ? "on" : "") + '">Chats</button><button data-c="tab" data-t="people" class="' + (TAB === "people" ? "on" : "") + '">People</button></div>';
+  h += '<div class="yqcq"><input id="yqcQ" placeholder="Search name, @username, department" value="' + esc(q) + '"></div><div class="yqcs" id="yqcList">';
+  if(TAB === "people"){ h += peopleRows(q); }
+  else {
+    var rows = ids.filter(function(id){ var c = CHATS[id]; return !q || (chatTitle(c) + " " + (c.last && c.last.t || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; }).map(function(id){
+      var c = CHATS[id], t = chatTitle(c), l = c.last || {}, n = (c.n && c.n[MY]) || 0, oth = chatOther(c), on = c.type !== "group" && isOn(PEOPLE[oth]);
+      var typing = typers(c); var tick = l.by === MY ? tickOf(c, l.at) : "";
+      return '<button class="yqcr" data-c="open" data-id="' + id + '">' + av(t, c.type === "group" ? id : oth, 48, on) + '<div class="m"><div class="r1"><b>' + esc(t) + '</b><time class="' + (n ? "nw" : "") + '">' + shortT(l.at || c.at) + '</time></div><div class="r2"><span class="' + (typing ? "ty" : "") + '">' + (typing ? esc(typing) : tick + (c.type === "group" && l.by && l.by !== MY ? esc(pname(l.by).split(" ")[0]) + ": " : "") + esc(l.t || (c.type === "group" ? "Group created" : "Say hello 👋"))) + '</span>' + (n ? '<i class="n">' + n + '</i>' : '') + '</div></div></button>';
+    }).join("");
+    h += rows || '<div class="yqcempty"><b>No chats yet</b><span>Open <u data-c="tab" data-t="people">People</u> to message a colleague, or make a group.</span></div>';
+  }
+  h += '</div><div class="yqcfoot"><button class="pb sm" data-c="newgroup">＋ New group</button></div>';
+  w.innerHTML = h; bind(w); if($("yqcList")) $("yqcList").scrollTop = sc;
+  var qi = $("yqcQ"); if(hadF){ qi.focus(); try{ qi.setSelectionRange(q.length, q.length); }catch(e){} } qi.oninput = function(){ var p = qi.selectionStart; listView(w); var n = $("yqcQ"); n.focus(); try{ n.setSelectionRange(p, p); }catch(e){} };
+}
+function peopleRows(q){
+  q = (q || "").toLowerCase();
+  var ids = Object.keys(PEOPLE).filter(function(u){ return u !== MY; }).filter(function(u){ var p = PEOPLE[u]; return !q || (p.name + " @" + p.uname + " " + (p.dept || "") + " " + p.email).toLowerCase().indexOf(q) >= 0; })
+    .sort(function(a, b){ var pa = PEOPLE[a], pb = PEOPLE[b]; return (isOn(pb) - isOn(pa)) || String(pa.name).localeCompare(pb.name); });
+  return ids.map(function(u){ var p = PEOPLE[u]; return '<button class="yqcr" data-c="dm" data-u="' + u + '">' + av(p.name, u, 44, isOn(p)) + '<div class="m"><div class="r1"><b>' + esc(p.name) + '</b><time>' + (isOn(p) ? '<em>online</em>' : '') + '</time></div><div class="r2"><span>@' + esc(p.uname) + (p.dept ? ' · ' + esc(p.dept) : '') + '</span></div></div></button>'; }).join("") ||
+    '<div class="yqcempty"><b>No one here yet</b><span>Colleagues show up after they open YQI Chat once.</span></div>';
+}
+function typers(c){ var t = c.ty || {}, a = Object.keys(t).filter(function(u){ return u !== MY && now() - t[u] < 6000; }); if(!a.length) return ""; return c.type === "group" ? pname(a[0]).split(" ")[0] + " is typing…" : "typing…"; }
+function tickOf(c, at){ var oth = (c.members || []).filter(function(u){ return u !== MY; }), rd = c.rd || {}; var all = oth.length && oth.every(function(u){ return (rd[u] || 0) >= at; });
+  return '<i class="tk' + (all ? " sn" : "") + '">✓✓</i> '; }
+
+// ---------- open / create chats ----------
+function dmId(a, b){ return "dm_" + [a, b].sort().join("_"); }
+function openDm(u){
+  var id = dmId(MY, u);
+  if(CHATS[id]) return openChat(id);
+  FS.collection("chats").doc(id).get().catch(function(){ return {exists: false}; }).then(function(d){
+    if(d.exists) return; return FS.collection("chats").doc(id).set({type: "dm", members: [MY, u].sort(), at: now(), made: now(), by: MY, n: {}, rd: {}});
+  }).then(function(){ CHATS[id] = CHATS[id] || {id: id, type: "dm", members: [MY, u].sort(), at: now(), n: {}, rd: {}}; openChat(id); }).catch(function(e){ toast("Could not open chat: " + (e.code || e.message)); });
+}
+function openChat(id){
+  OPEN = id; VIEW = "chat"; MSGS = []; stopMsgs(); paint();
+  unMsgs = FS.collection("chats").doc(id).collection("m").orderBy("at", "desc").limit(150).onSnapshot(function(q){ MSGS = q.docs.map(function(d){ var m = d.data(); m.id = d.id; return m; }).reverse(); if(VIEW === "chat" && OPEN === id) renderMsgs(true); readNow(id); }, function(e){ toast("Messages could not load: " + (e.code || e.message)); });
+  readNow(id);
+}
+function stopMsgs(){ if(unMsgs){ try{ unMsgs(); }catch(e){} unMsgs = null; } }
+function readNow(id){ var c = CHATS[id]; if(!c || document.hidden) return; var u = {}; if((c.n && c.n[MY]) || !(c.rd && c.rd[MY] >= (c.last && c.last.at || 0))){ u["n." + MY] = 0; u["rd." + MY] = now(); FS.collection("chats").doc(id).update(u).catch(function(){}); } }
+
+function chatHead(){
+  var c = CHATS[OPEN], t = chatTitle(c), oth = chatOther(c), p = PEOPLE[oth];
+  var sub = typers(c) || (c.type === "group" ? (c.members || []).map(function(u){ return u === MY ? "You" : pname(u).split(" ")[0]; }).join(", ") : lastSeenTxt(p));
+  var live = CALL && CALL.cid === OPEN;
+  return '<div id="yqcHd">' + head(BACK + '<button class="ib av" data-c="info">' + av(t, c.type === "group" ? OPEN : oth, 38, c.type !== "group" && isOn(p)) + '</button>', '<span data-c="info">' + esc(t) + '</span>', '<span class="' + (typers(c) ? "ty" : "") + '">' + esc(sub) + '</span>',
+    '<button class="ib call" data-c="call" title="' + (c.type === "group" ? "Start meeting" : "Voice call") + '">' + CALLI + (c.type === "group" ? '<small>Meet</small>' : '') + '</button>') +
+    (live ? '<div class="yqclive" data-c="showcall">● Call in progress — tap to return</div>' : '') + '</div>';
+}
+function chatView(w){
+  if(w.getAttribute("data-v") === "chat:" + OPEN && $("yqcHd")){ var hd = $("yqcHd"), nh = chatHead(); if(hd.outerHTML !== nh){ var tmp = document.createElement("div"); tmp.innerHTML = nh; hd.replaceWith(tmp.firstChild); bind($("yqcHd")); } renderMsgs(true); return; }
+  w.setAttribute("data-v", "chat:" + OPEN); MKEY = "";
+  w.innerHTML = chatHead() + '<div class="yqcmsgs" id="yqcMsgs"></div><div class="yqcin"><button class="ib" data-c="attach" title="Photo or file">📎</button><button class="ib" data-c="cam" title="Camera">📷</button><textarea id="yqcTx" rows="1" placeholder="Message"></textarea><button class="snd" id="yqcSend" data-c="send" title="Send"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg></button><button class="snd mic" id="yqcMic" data-c="mic" title="Voice note"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-2.1A7 7 0 0019 12h-2z"/></svg></button></div>' +
+    '<input type="file" id="yqcFile" multiple hidden><input type="file" id="yqcCam" accept="image/*" capture="environment" hidden>';
+  bind(w); renderMsgs(false);
+  var tx = $("yqcTx"); tx.oninput = function(){ tx.style.height = "auto"; tx.style.height = Math.min(120, tx.scrollHeight) + "px"; sendMode(); typing(); };
+  tx.onkeydown = function(e){ if(e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)){ e.preventDefault(); send(); } };
+  $("yqcFile").onchange = function(){ var fs = [].slice.call(this.files); this.value = ""; fs.forEach(function(f){ sendFile(f); }); };
+  $("yqcCam").onchange = function(){ var f = this.files[0]; this.value = ""; if(f) sendFile(f, "Photo " + hm(now()) + ".jpg"); };
+  sendMode();
+}
+function sendMode(){ var tx = $("yqcTx"), has = tx && tx.value.trim(); if($("yqcSend")) $("yqcSend").style.display = has || REC ? "" : "none"; if($("yqcMic")) $("yqcMic").style.display = has || REC ? "none" : ""; }
+var tyT = 0; function typing(){ if(now() - tyT < 3500 || !OPEN) return; tyT = now(); var u = {}; u["ty." + MY] = now(); FS.collection("chats").doc(OPEN).update(u).catch(function(){}); }
+var MKEY = "";
+function renderMsgs(keep){
+  var box = $("yqcMsgs"); if(!box) return; var c = CHATS[OPEN] || {};
+  var key = MSGS.map(function(m){ return m.id + (m.pend ? "p" : ""); }).join(",") + "|" + JSON.stringify(c.rd || {}) + "|" + Object.keys(PEOPLE).length; if(keep && key === MKEY) return; MKEY = key; var atBottom = !keep || box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  var h = "", lastDay = "", lastBy = "";
+  MSGS.forEach(function(m){
+    var d = dayLbl(m.at); if(d !== lastDay){ h += '<div class="dsep"><span>' + d + '</span></div>'; lastDay = d; lastBy = ""; }
+    if(m.k === "sys"){ h += '<div class="dsep sys"><span>' + esc(m.t) + '</span></div>'; lastBy = ""; return; }
+    var mine = m.by === MY, grp = c.type === "group", first = lastBy !== m.by; lastBy = m.by;
+    var body = "";
+    if(m.k === "img") body = '<img class="ph" data-f="' + m.f.id + '"' + (BU[m.f.id] ? ' src="' + BU[m.f.id] + '"' : '') + ' alt="photo" data-c="view">' + (m.t ? '<div class="tx">' + linkify(m.t) + '</div>' : '');
+    else if(m.k === "voice") body = '<div class="vn"><button class="pl" data-c="play" data-f="' + m.f.id + '">▶</button><div class="vbar"><i></i></div><span>' + fmtDur(m.dur || 0) + '</span></div>';
+    else if(m.k === "file") body = '<button class="fl" data-c="dl" data-f="' + m.f.id + '" data-n="' + esc(m.f.name) + '"><span class="ic">' + fileIc(m.f.name) + '</span><span class="fn"><b>' + esc(m.f.name) + '</b><small>' + fmtSize(m.f.size) + ' · tap to open</small></span></button>';
+    else if(m.k === "call") body = '<div class="cl">' + CALLI + '<span><b>' + esc(m.t) + '</b>' + (m.dur ? '<small>' + fmtDur(m.dur) + '</small>' : '') + '</span></div>';
+    else body = '<div class="tx">' + linkify(m.t) + '</div>';
+    h += '<div class="bm ' + (mine ? "me" : "th") + (first ? " f" : "") + '" data-id="' + m.id + '">' + (grp && !mine && first ? '<div class="who" style="color:' + colorOf(m.by) + '">' + esc(pname(m.by)) + '</div>' : '') + body + '<div class="mt">' + hm(m.at) + (mine ? " " + tickOf(c, m.at) : "") + '</div></div>';
+  });
+  if(!MSGS.length) h = '<div class="yqcempty sm"><span>Messages are only for Yunus Textile staff using YQI.</span></div>';
+  box.innerHTML = h;
+  box.querySelectorAll("img.ph:not([src])").forEach(function(im){ fileUrl(im.getAttribute("data-f")).then(function(u){ im.src = u; im.onload = function(){ if(atBottom) box.scrollTop = box.scrollHeight; }; }).catch(function(){ im.alt = "photo missing"; }); });
+  if(atBottom) box.scrollTop = box.scrollHeight;
+  bind(box);
+}
+function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g, "<br>"); }
+function fmtDur(s){ s = Math.round(s || 0); return Math.floor(s / 60) + ":" + pad(s % 60); }
+function fmtSize(b){ return b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB"; }
+function fileIc(n){ var e = String(n).split(".").pop().toLowerCase(); return {pdf: "📕", xlsx: "📗", xls: "📗", csv: "📗", doc: "📘", docx: "📘", ppt: "📙", pptx: "📙", zip: "🗜"}[e] || "📄"; }
+
+// ---------- sending ----------
+function post(m, preview){
+  var id = OPEN, c = CHATS[id]; if(!c) return Promise.reject(new Error("no chat"));
+  m.by = MY; m.at = now(); var ref = FS.collection("chats").doc(id).collection("m").doc();
+  var u = {at: m.at, last: {t: preview, by: MY, at: m.at, k: m.k}}; u["ty." + MY] = 0; u["rd." + MY] = m.at;
+  (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
+  MSGS.push(Object.assign({id: ref.id, pend: 1}, m)); renderMsgs(false);
+  return ref.set(m).then(function(){ return FS.collection("chats").doc(id).update(u); }).then(function(){ pushNote(c, preview); }).catch(function(e){ toast("Not sent: " + (e.code || e.message)); });
+}
+function send(){ var tx = $("yqcTx"); if(!tx) return; var t = tx.value.trim(); if(!t) return; tx.value = ""; tx.style.height = "auto"; sendMode(); post({k: "text", t: t.slice(0, 4000)}, t.slice(0, 120)); tx.focus(); }
+function sendFile(f, name){
+  var img = /^image\//.test(f.type); toast(img ? "Sending photo…" : "Sending file…");
+  putFile(f, name).then(function(r){ return post({k: img ? "img" : "file", t: "", f: r}, img ? "📷 Photo" : "📄 " + r.name); }).catch(function(e){ toast(e.message || "Could not send"); });
+}
+// voice notes
+var REC = null;
+function micToggle(){
+  if(REC){ REC.stop(); return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ toast("Voice notes are not supported on this phone."); return; }
+  navigator.mediaDevices.getUserMedia({audio: true}).then(function(st){
+    var ch = [], t0 = now(), mt = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+    var r = new MediaRecorder(st, mt ? {mimeType: mt} : undefined); REC = r;
+    var mic = $("yqcMic"), tx = $("yqcTx"); if(mic){ mic.classList.add("rec"); } if(tx){ tx.disabled = true; tx.placeholder = "Recording… tap ■ to send"; }
+    var tick = setInterval(function(){ var tx2 = $("yqcTx"); if(tx2) tx2.placeholder = "● Recording " + fmtDur((now() - t0) / 1000) + " — tap ■ to send"; }, 500);
+    if(mic) mic.innerHTML = '<span style="color:#fff;font-size:18px">■</span>';
+    r.ondataavailable = function(e){ if(e.data && e.data.size) ch.push(e.data); };
+    r.onstop = function(){ clearInterval(tick); st.getTracks().forEach(function(x){ x.stop(); }); REC = null; var dur = (now() - t0) / 1000; if(OPEN) chatView($("yqcW"));
+      if(dur < 1){ toast("Hold on a little longer to record."); return; }
+      var b = new Blob(ch, {type: r.mimeType || "audio/webm"}); putFile(b, "voice.webm").then(function(f){ return post({k: "voice", t: "", f: f, dur: Math.round(dur)}, "🎤 Voice note"); }).catch(function(e){ toast(e.message); }); };
+    r.start(); sendMode();
+  }).catch(function(){ toast("Microphone permission is needed for voice notes."); });
+}
+var PLAYING = null;
+function play(btn){
+  var id = btn.getAttribute("data-f"); if(PLAYING && PLAYING.btn === btn){ PLAYING.a.pause(); btn.textContent = "▶"; PLAYING = null; return; }
+  if(PLAYING){ PLAYING.a.pause(); PLAYING.btn.textContent = "▶"; }
+  btn.textContent = "…"; fileUrl(id).then(function(u){ var a = new Audio(u), bar = btn.parentNode.querySelector(".vbar i"); PLAYING = {a: a, btn: btn}; btn.textContent = "❚❚";
+    a.ontimeupdate = function(){ if(a.duration && isFinite(a.duration)) bar.style.width = (100 * a.currentTime / a.duration) + "%"; };
+    a.onended = function(){ btn.textContent = "▶"; bar.style.width = "0"; PLAYING = null; }; a.play().catch(function(){ btn.textContent = "▶"; }); }).catch(function(){ btn.textContent = "▶"; toast("Voice note missing"); });
+}
+function download(id, name){ fileUrl(id).then(function(u){ var a = document.createElement("a"); a.href = u; a.download = name || "file"; document.body.appendChild(a); a.click(); a.remove(); }).catch(function(){ toast("File missing"); }); }
+function viewImg(src){ var v = document.createElement("div"); v.className = "yqcview"; v.innerHTML = '<img src="' + src + '"><button>✕</button>'; v.onclick = function(){ v.remove(); }; document.body.appendChild(v); }
+
+// ---------- groups ----------
+var GSEL = {};
+function groupView(w){
+  var q = (w.querySelector("#yqcGq") || {}).value || "", nm = (w.querySelector("#yqcGn") || {}).value || "", adding = !!(OPEN && CHATS[OPEN] && VIEW === "group" && GADD);
+  var ids = Object.keys(PEOPLE).filter(function(u){ return u !== MY && (!adding || (CHATS[OPEN].members || []).indexOf(u) < 0); }).filter(function(u){ var p = PEOPLE[u]; return !q || (p.name + " " + p.uname + " " + (p.dept || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; }).sort(function(a, b){ return String(PEOPLE[a].name).localeCompare(PEOPLE[b].name); });
+  var n = Object.keys(GSEL).length;
+  w.innerHTML = head(BACK, adding ? "Add members" : "New group", n + " selected", "") + (adding ? "" : '<div class="yqcq"><input id="yqcGn" maxlength="40" placeholder="Group name, e.g. QA Team, Bedsure team" value="' + esc(nm) + '"></div>') +
+    '<div class="yqcq"><input id="yqcGq" placeholder="Search people" value="' + esc(q) + '"></div><div class="yqcs">' +
+    (ids.map(function(u){ var p = PEOPLE[u]; return '<button class="yqcr sel' + (GSEL[u] ? " on" : "") + '" data-c="gsel" data-u="' + u + '">' + av(p.name, u, 42) + '<div class="m"><div class="r1"><b>' + esc(p.name) + '</b></div><div class="r2"><span>@' + esc(p.uname) + (p.dept ? " · " + esc(p.dept) : "") + '</span></div></div><i class="ck">' + (GSEL[u] ? "✓" : "") + '</i></button>'; }).join("") || '<div class="yqcempty"><span>No colleagues found.</span></div>') +
+    '</div><div class="yqcfoot"><button class="pb" data-c="' + (adding ? "gadd" : "gmake") + '"' + (n ? "" : " disabled") + '>' + (adding ? "Add to group" : "Create group") + '</button></div>';
+  bind(w); var gq = $("yqcGq"); gq.oninput = function(){ var p = gq.selectionStart; groupView(w); var x = $("yqcGq"); x.focus(); try{ x.setSelectionRange(p, p); }catch(e){} };
+}
+var GADD = false;
+function makeGroup(){
+  var nm = ($("yqcGn") || {}).value || ""; nm = nm.trim(); if(!nm){ toast("Write a group name"); $("yqcGn").focus(); return; }
+  var mem = [MY].concat(Object.keys(GSEL)), ref = FS.collection("chats").doc("g_" + hex(16)), t = now();
+  ref.set({type: "group", title: nm, members: mem, admins: [MY], at: t, made: t, by: MY, n: {}, rd: {}, last: {t: ME.name.split(" ")[0] + " created the group", by: MY, at: t, k: "sys"}}).then(function(){
+    return ref.collection("m").add({k: "sys", t: ME.name + " created “" + nm + "”", by: MY, at: t}); }).then(function(){ GSEL = {}; CHATS[ref.id] = CHATS[ref.id] || {id: ref.id, type: "group", title: nm, members: mem, admins: [MY], at: t, n: {}, rd: {}}; openChat(ref.id); }).catch(function(e){ toast("Could not create group: " + (e.code || e.message)); });
+}
+function addMembers(){ var id = OPEN, add = Object.keys(GSEL); if(!add.length) return; FS.collection("chats").doc(id).update({members: FV.arrayUnion.apply(null, add)}).then(function(){ return FS.collection("chats").doc(id).collection("m").add({k: "sys", t: ME.name.split(" ")[0] + " added " + add.map(function(u){ return pname(u).split(" ")[0]; }).join(", "), by: MY, at: now()}); }).then(function(){ GSEL = {}; GADD = false; VIEW = "info"; paint(); }).catch(function(e){ toast(e.code || e.message); }); }
+function infoView(w){
+  var c = CHATS[OPEN], grp = c.type === "group", oth = chatOther(c), p = PEOPLE[oth], t = chatTitle(c), adm = (c.admins || []).indexOf(MY) >= 0;
+  var h = head(BACK, grp ? "Group info" : "Contact", "", "") + '<div class="yqcs"><div class="yqcinfo">' + av(t, grp ? OPEN : oth, 96, !grp && isOn(p)) + '<h3>' + esc(t) + '</h3>' + (grp ? '<span>' + (c.members || []).length + ' members</span>' : '<span>@' + esc(p && p.uname || "") + (p && p.dept ? " · " + esc(p.dept) : "") + '</span><span>' + esc(p && p.email || "") + '</span><span>' + esc(lastSeenTxt(p)) + '</span>') +
+    '<div class="acts"><button data-c="call">' + CALLI + '<span>' + (grp ? "Meeting" : "Call") + '</span></button><button data-c="back">💬<span>Message</span></button></div></div>';
+  if(grp){ h += '<div class="yqcsec">Members</div>' + (adm ? '<button class="yqcr" data-c="addm"><span class="yqav" style="width:42px;height:42px;background:#e8f2dd;color:#2F5A1A;font-size:22px">＋</span><div class="m"><div class="r1"><b>Add members</b></div></div></button>' : '') +
+    (c.members || []).map(function(u){ var pp = PEOPLE[u] || {name: u === MY ? ME.name : "Someone"}; return '<div class="yqcr">' + av(pp.name, u, 42, isOn(pp)) + '<div class="m"><div class="r1"><b>' + esc(u === MY ? "You" : pp.name) + '</b><time>' + ((c.admins || []).indexOf(u) >= 0 ? "<em>admin</em>" : "") + '</time></div><div class="r2"><span>@' + esc(pp.uname || "") + (pp.dept ? " · " + esc(pp.dept) : "") + '</span></div></div></div>'; }).join("") +
+    '<button class="yqcr danger" data-c="leave"><div class="m"><div class="r1"><b>Leave group</b></div></div></button>'; }
+  w.innerHTML = h + '</div>'; bind(w);
+}
+function leaveGroup(){ var id = OPEN; if(!confirm("Leave this group?")) return; FS.collection("chats").doc(id).collection("m").add({k: "sys", t: ME.name.split(" ")[0] + " left", by: MY, at: now()}).then(function(){ return FS.collection("chats").doc(id).update({members: FV.arrayRemove(MY), admins: FV.arrayRemove(MY)}); }).then(function(){ OPEN = null; VIEW = "list"; stopMsgs(); paint(); }).catch(function(e){ toast(e.code || e.message); }); }
+function peopleView(w){ TAB = "people"; VIEW = "list"; listView(w); }
+
+// ---------- one click handler ----------
+function bind(root){
+  root.querySelectorAll("[data-c]").forEach(function(el){ if(el.__yb) return; el.__yb = 1; el.addEventListener("click", function(e){ e.stopPropagation(); act(el.getAttribute("data-c"), el); }); });
+}
+function act(a, el){
+  if(a === "close") return history.state && history.state.yqc ? history.back() : closePanel();
+  if(a === "back"){ if(VIEW === "info" || (VIEW === "group" && GADD)){ GADD = false; GSEL = {}; VIEW = "chat"; return paint(); } VIEW = "list"; OPEN = null; GSEL = {}; stopMsgs(); return paint(); }
+  if(a === "tab"){ TAB = el.getAttribute("data-t"); return paint(); }
+  if(a === "me"){ VIEW = "setup"; return paint(); }
+  if(a === "saveme") return saveMe();
+  if(a === "open") return openChat(el.getAttribute("data-id"));
+  if(a === "dm") return openDm(el.getAttribute("data-u"));
+  if(a === "send") return send();
+  if(a === "mic") return micToggle();
+  if(a === "attach") return $("yqcFile").click();
+  if(a === "cam") return $("yqcCam").click();
+  if(a === "play") return play(el);
+  if(a === "dl") return download(el.getAttribute("data-f"), el.getAttribute("data-n"));
+  if(a === "view") return el.src && viewImg(el.src);
+  if(a === "info"){ VIEW = "info"; return paint(); }
+  if(a === "newgroup"){ GSEL = {}; GADD = false; OPEN = null; VIEW = "group"; return paint(); }
+  if(a === "addm"){ GSEL = {}; GADD = true; VIEW = "group"; return paint(); }
+  if(a === "gsel"){ var u = el.getAttribute("data-u"); if(GSEL[u]) delete GSEL[u]; else GSEL[u] = 1; return groupView($("yqcW")); }
+  if(a === "gmake") return makeGroup();
+  if(a === "gadd") return addMembers();
+  if(a === "leave") return leaveGroup();
+  if(a === "call") return startCall(OPEN);
+  if(a === "showcall") return showCallUi();
+}
+
+// ---------- background notification hook (filled once the push server is set up) ----------
+function pushNote(c, preview){ try{ if(window.YQ_PUSH && typeof window.YQ_PUSH.msg === "function") window.YQ_PUSH.msg(c, preview, ME); }catch(e){} }
+
+// ===================== voice calls and meetings (WebRTC, signalling through Firestore) =====================
+var CALL = null;
+function iceCfg(){ return {iceServers: [{urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}].concat(window.YQ_TURN || TURN || [])}; }
+function startCall(cid){
+  var c = CHATS[cid]; if(!c) return; if(CALL){ showCallUi(); return; }
+  var mem = (c.members || []).slice(); if(mem.length > 8 && c.type === "group"){ if(!confirm("Meetings work best with up to 8 people. Start anyway?")) return; }
+  getMic().then(function(st){
+    var ref = FS.collection("calls").doc(), t = now(), j = {}; j[MY] = t;
+    CALL = {id: ref.id, cid: cid, group: c.type === "group", title: chatTitle(c), by: MY, members: mem, st: st, pcs: {}, joined: j, t0: 0, out: true, muted: false, seen: {}};
+    return ref.set({cid: cid, by: MY, members: mem, group: c.type === "group", title: c.type === "group" ? (c.title || "Meeting") : "", at: t, joined: j, ended: false}).then(function(){
+      mem.forEach(function(u){ if(u !== MY) FS.collection("inbox").doc(u).set({ring: {id: ref.id, cid: cid, from: MY, name: ME.name, group: c.type === "group", title: c.type === "group" ? (c.title || "Meeting") : "", at: t}}, {merge: true}).catch(function(){}); });
+      try{ if(window.YQ_PUSH && YQ_PUSH.call) YQ_PUSH.call(CALL, ME); }catch(e){}
+      watchCall(); showCallUi(); ringStart("out");
+      CALL.noAns = setTimeout(function(){ if(CALL && CALL.id === ref.id && !CALL.t0){ endCall("No answer"); } }, 45000);
+    });
+  }).catch(function(e){ toast(e && e.name === "NotAllowedError" ? "Please allow the microphone to call." : "Could not start call: " + (e.message || e)); CALL = null; });
+}
+function getMic(){ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error("Calls are not supported on this browser")); return navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}, video: false}); }
+var RINGING = null;
+function onRing(r){
+  if(!r || !r.id || r.from === MY) return; if(now() - (r.at || 0) > 50000) return; if(CALL && CALL.id === r.id) return; if(RINGING && RINGING.id === r.id) return;
+  if(CALL){ FS.collection("calls").doc(r.id).collection("sig").add({f: MY, t: r.from, ty: "busy", at: now()}).catch(function(){}); return; }
+  FS.collection("calls").doc(r.id).get().then(function(d){ if(!d.exists || d.data().ended) return; RINGING = r; incomingUi(r);
+    RINGING.un = FS.collection("calls").doc(r.id).onSnapshot(function(x){ if(!x.exists || x.data().ended){ stopRinging(); } }, function(){}); }).catch(function(){});
+}
+function stopRinging(){ ringStop(); if(RINGING && RINGING.un) try{ RINGING.un(); }catch(e){} RINGING = null; var x = $("yqcIn"); if(x) x.remove(); }
+function incomingUi(r){
+  var x = $("yqcIn"); if(x) x.remove(); x = document.createElement("div"); x.id = "yqcIn";
+  x.innerHTML = '<div class="box">' + av(r.group ? r.title : r.name, r.group ? r.cid : r.from, 92) + '<b>' + esc(r.group ? r.title : r.name) + '</b><span>' + (r.group ? esc(r.name) + ' started a meeting' : 'Incoming voice call') + '</span><div class="btns"><button class="no" data-x="no">✕<small>Decline</small></button><button class="yes" data-x="yes">' + CALLI + '<small>Accept</small></button></div></div>';
+  document.body.appendChild(x); ringStart("in");
+  x.querySelector('[data-x="no"]').onclick = function(){ var rr = RINGING; stopRinging(); if(rr && !rr.group) FS.collection("calls").doc(rr.id).update({ended: true, why: "declined"}).catch(function(){}); };
+  x.querySelector('[data-x="yes"]').onclick = function(){ var rr = RINGING; stopRinging(); joinCall(rr); };
+  if(document.hidden && window.Notification && Notification.permission === "granted"){ try{ navigator.serviceWorker.getRegistration().then(function(reg){ if(reg) reg.showNotification((r.group ? r.title : r.name) + " is calling", {body: "Tap to open YQI and answer", icon: "icon-192.png", tag: "call_" + r.id, requireInteraction: true, vibrate: [400, 200, 400, 200, 400], data: {cid: r.cid}}); }); }catch(e){} }
+}
+function joinCall(r){
+  getMic().then(function(st){
+    return FS.collection("calls").doc(r.id).get().then(function(d){ if(!d.exists || d.data().ended){ st.getTracks().forEach(function(t){ t.stop(); }); toast("Call ended"); return; }
+      var cd = d.data(); CALL = {id: r.id, cid: cd.cid, group: !!cd.group, title: cd.group ? (cd.title || "Meeting") : pname(cd.by), by: cd.by, members: cd.members, st: st, pcs: {}, joined: cd.joined || {}, t0: now(), out: false, muted: false, seen: {}};
+      var u = {}; u["joined." + MY] = now(); return FS.collection("calls").doc(r.id).update(u).then(function(){ watchCall(); showCallUi(); });
+    });
+  }).catch(function(e){ toast(e && e.name === "NotAllowedError" ? "Please allow the microphone to answer." : "Could not join: " + (e.message || e)); });
+}
+function watchCall(){
+  var C0 = CALL, ref = FS.collection("calls").doc(C0.id);
+  C0.unDoc = ref.onSnapshot(function(d){ if(CALL !== C0) return; if(!d.exists){ return endCall("", true); } var x = d.data(); C0.members = x.members || C0.members;
+    if(x.ended){ return endCall(x.why === "declined" ? "Declined" : "", true); }
+    var j = x.joined || {}; C0.joined = j;
+    Object.keys(j).forEach(function(u){ if(u === MY) return; if(!C0.pcs[u]){ if(MY < u) makePc(u, true); } });
+    Object.keys(C0.pcs).forEach(function(u){ if(!j[u]){ closePc(u); } });
+    var others = Object.keys(j).filter(function(u){ return u !== MY; });
+    if(others.length && !C0.t0){ C0.t0 = now(); ringStop(); clearTimeout(C0.noAns); }
+    if(!C0.group && C0.t0 && !others.length && C0.hadPeer) return endCall("");
+    if(others.length) C0.hadPeer = true;
+    callUiUpdate();
+  }, function(){});
+  C0.unSig = ref.collection("sig").where("t", "==", MY).onSnapshot(function(q){ if(CALL !== C0) return; q.docs.forEach(function(d){ if(C0.seen[d.id]) return; C0.seen[d.id] = 1; onSig(d.data()); d.ref.delete().catch(function(){}); }); }, function(){});
+}
+function sig(to, ty, data){ if(!CALL) return; FS.collection("calls").doc(CALL.id).collection("sig").add({f: MY, t: to, ty: ty, d: data ? JSON.stringify(data) : "", at: now()}).catch(function(){}); }
+function makePc(u, offer){
+  var C0 = CALL, pc = new RTCPeerConnection(iceCfg()), P = {pc: pc, q: [], au: null, lvl: 0}; C0.pcs[u] = P;
+  C0.st.getTracks().forEach(function(t){ pc.addTrack(t, C0.st); });
+  pc.onicecandidate = function(e){ if(e.candidate) sig(u, "ice", e.candidate.toJSON ? e.candidate.toJSON() : e.candidate); };
+  pc.ontrack = function(e){ if(!P.au){ P.au = new Audio(); P.au.autoplay = true; P.au.playsInline = true; P.au.setAttribute("playsinline", ""); document.body.appendChild(P.au); P.au.style.display = "none"; }
+    P.au.srcObject = e.streams[0]; P.au.play().catch(function(){}); meter(u, e.streams[0]); };
+  pc.onconnectionstatechange = function(){ P.state = pc.connectionState; callUiUpdate(); if(pc.connectionState === "failed" && offer){ try{ pc.restartIce(); pc.createOffer({iceRestart: true}).then(function(o){ return pc.setLocalDescription(o); }).then(function(){ sig(u, "offer", pc.localDescription); }); }catch(e){} } };
+  if(offer) pc.createOffer({offerToReceiveAudio: true}).then(function(o){ return pc.setLocalDescription(o); }).then(function(){ sig(u, "offer", pc.localDescription); }).catch(function(){});
+  return P;
+}
+function onSig(m){
+  var C0 = CALL; if(!C0) return; var u = m.f, d = m.d ? JSON.parse(m.d) : null;
+  if(m.ty === "busy"){ if(!C0.group){ toast(pname(u) + " is on another call"); endCall("Busy"); } return; }
+  var P = C0.pcs[u];
+  if(m.ty === "offer"){ if(P && P.pc.signalingState !== "stable"){ closePc(u); P = null; } if(!P) P = makePc(u, false);
+    P.pc.setRemoteDescription(d).then(function(){ P.q.splice(0).forEach(function(c){ P.pc.addIceCandidate(c).catch(function(){}); }); return P.pc.createAnswer(); }).then(function(a){ return P.pc.setLocalDescription(a); }).then(function(){ sig(u, "answer", P.pc.localDescription); }).catch(function(){}); }
+  else if(m.ty === "answer" && P){ P.pc.setRemoteDescription(d).then(function(){ P.q.splice(0).forEach(function(c){ P.pc.addIceCandidate(c).catch(function(){}); }); }).catch(function(){}); }
+  else if(m.ty === "ice"){ if(!P){ return; } if(P.pc.remoteDescription && P.pc.remoteDescription.type) P.pc.addIceCandidate(d).catch(function(){}); else P.q.push(d); }
+}
+function closePc(u){ var P = CALL && CALL.pcs[u]; if(!P) return; try{ P.pc.close(); }catch(e){} if(P.au){ try{ P.au.srcObject = null; P.au.remove(); }catch(e){} } delete CALL.pcs[u]; }
+function meter(u, st){ try{ var a = ac(); if(!a) return; var src = a.createMediaStreamSource(st), an = a.createAnalyser(); an.fftSize = 256; src.connect(an); var buf = new Uint8Array(an.frequencyBinCount);
+  (function lp(){ if(!CALL || !CALL.pcs[u]) return; an.getByteFrequencyData(buf); var s = 0; for(var i = 0; i < buf.length; i++) s += buf[i]; CALL.pcs[u].lvl = s / buf.length; requestAnimationFrame(lp); })(); }catch(e){} }
+function endCall(why, remote){
+  var C0 = CALL; if(!C0) return; CALL = null; ringStop(); clearTimeout(C0.noAns); clearInterval(C0.tm);
+  try{ C0.unDoc && C0.unDoc(); }catch(e){} try{ C0.unSig && C0.unSig(); }catch(e){}
+  Object.keys(C0.pcs).forEach(function(u){ var P = C0.pcs[u]; try{ P.pc.close(); }catch(e){} if(P.au){ try{ P.au.srcObject = null; P.au.remove(); }catch(e){} } });
+  try{ C0.st.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+  var x = $("yqcCall"); if(x) x.remove();
+  var ref = FS.collection("calls").doc(C0.id), dur = C0.t0 ? Math.round((now() - C0.t0) / 1000) : 0;
+  var left = {}; left["joined." + MY] = FV.delete();
+  var stillIn = Object.keys(C0.joined || {}).filter(function(u){ return u !== MY; });
+  var end = !C0.group || !stillIn.length;
+  (end ? ref.update({ended: true, endAt: now(), why: why || "", dur: dur}) : ref.update(left)).catch(function(){});
+  if(!C0.group){ if(C0.out){ var txt = C0.t0 ? "Voice call" : (why === "Declined" ? "Call declined" : why === "Busy" ? "Busy — call not answered" : "Missed voice call"); logCall(C0.cid, txt, dur); } }
+  else if(end){ logCall(C0.cid, C0.t0 ? "Meeting ended" : "Meeting — no one joined", dur); }
+  if(OPEN === C0.cid && VIEW === "chat") paint();
+}
+function logCall(cid, t, dur){ var c = CHATS[cid]; if(!c) return; var ref = FS.collection("chats").doc(cid).collection("m").doc(), at = now(); var u = {at: at, last: {t: "📞 " + t, by: MY, at: at, k: "call"}};
+  (c.members || []).forEach(function(x){ if(x !== MY && /Missed|no one/.test(t)) u["n." + x] = FV.increment(1); });
+  ref.set({k: "call", t: t, dur: dur || 0, by: MY, at: at}).then(function(){ return FS.collection("chats").doc(cid).update(u); }).catch(function(){}); }
+function showCallUi(){
+  if(!CALL) return; var x = $("yqcCall"); if(x){ x.classList.remove("min"); return; }
+  x = document.createElement("div"); x.id = "yqcCall"; document.body.appendChild(x);
+  x.innerHTML = '<div class="top"><button class="ib" data-k="min" title="Minimise">⌄</button><span>' + (CALL.group ? "Meeting" : "Voice call") + ' · YQI</span></div><div class="mid"><div class="ppl" id="yqcPpl"></div><b id="yqcCt">' + esc(CALL.title) + '</b><span id="yqcCs">Calling…</span></div>' +
+    '<div class="yqcBar"><button data-k="mute" id="yqcMute"><svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-2.1A7 7 0 0019 12h-2z"/></svg><small>Mute</small></button>' +
+    (CALL.group ? '<button data-k="add"><span style="font-size:24px">＋</span><small>Ring all</small></button>' : '') + '<button data-k="end" class="end"><svg viewBox="0 0 24 24" width="28" height="28"><path fill="#fff" d="M12 9c-1.6 0-3.2.3-4.6.7v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3-.3 0-.5-.1-.7-.3L.3 13.1c-.2-.2-.3-.4-.3-.7 0-.3.1-.5.3-.7C3.3 8.8 7.4 7 12 7s8.7 1.8 11.7 4.7c.2.2.3.4.3.7 0 .3-.1.5-.3.7l-2.4 2.4c-.2.2-.4.3-.7.3-.3 0-.5-.1-.7-.3-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.7C15.2 9.3 13.6 9 12 9z"/></svg><small>End</small></button></div>';
+  x.querySelector('[data-k="min"]').onclick = function(){ x.classList.add("min"); };
+  x.addEventListener("click", function(e){ if(x.classList.contains("min") && !e.target.closest("[data-k]")) x.classList.remove("min"); });
+  x.querySelector('[data-k="end"]').onclick = function(e){ e.stopPropagation(); endCall(""); };
+  x.querySelector('[data-k="mute"]').onclick = function(e){ e.stopPropagation(); if(!CALL) return; CALL.muted = !CALL.muted; CALL.st.getAudioTracks().forEach(function(t){ t.enabled = !CALL.muted; }); this.classList.toggle("on", CALL.muted); this.querySelector("small").textContent = CALL.muted ? "Unmute" : "Mute"; };
+  var ad = x.querySelector('[data-k="add"]'); if(ad) ad.onclick = function(e){ e.stopPropagation(); if(!CALL) return; var t = now(); (CALL.members || []).forEach(function(u){ if(u !== MY && !(CALL.joined || {})[u]) FS.collection("inbox").doc(u).set({ring: {id: CALL.id, cid: CALL.cid, from: MY, name: ME.name, group: true, title: CALL.title, at: t}}, {merge: true}).catch(function(){}); }); toast("Ringing everyone who is not in the meeting"); };
+  CALL.tm = setInterval(callUiUpdate, 300); callUiUpdate();
+}
+function callUiUpdate(){
+  var C0 = CALL, x = $("yqcCall"); if(!C0 || !x) return; var j = C0.joined || {}, others = Object.keys(j).filter(function(u){ return u !== MY; });
+  var st = $("yqcCs"); if(st){ var conn = others.some(function(u){ return C0.pcs[u] && C0.pcs[u].state === "connected"; });
+    st.textContent = C0.t0 ? (conn ? fmtDur((now() - C0.t0) / 1000) : "Connecting…") + (C0.group ? " · " + (others.length + 1) + " in meeting" : "") : (C0.out ? "Ringing…" : "Connecting…"); }
+  var pp = $("yqcPpl"); if(pp){ var show = C0.group ? [MY].concat(others) : [others[0] || (C0.members || []).filter(function(u){ return u !== MY; })[0]];
+    var key = show.join(","); if(pp.getAttribute("data-k") !== key){ pp.setAttribute("data-k", key); pp.className = "ppl" + (show.length > 1 ? " grid" : ""); pp.innerHTML = show.map(function(u){ return '<div class="pp" data-u="' + u + '">' + av(u === MY ? ME.name : pname(u), u, show.length > 1 ? 70 : 120) + (show.length > 1 ? '<small>' + esc(u === MY ? "You" : pname(u).split(" ")[0]) + '</small>' : '') + '</div>'; }).join(""); }
+    pp.querySelectorAll(".pp").forEach(function(el){ var u = el.getAttribute("data-u"), P = C0.pcs[u], l = P ? P.lvl : 0; el.classList.toggle("talk", l > 18); }); }
+}
+
+// ---------- styles ----------
+function css(){
+  var s = document.createElement("style"); s.id = "yqcCss";
+  s.textContent = [
+  "#yqcFab{position:fixed;left:16px;bottom:18px;z-index:2147482000;width:58px;height:58px;border-radius:50%;border:0;background:linear-gradient(135deg,#5BA32A,#2F5A1A);box-shadow:0 10px 26px rgba(20,50,10,.45);display:grid;place-items:center;cursor:pointer;transition:transform .2s}#yqcFab:active{transform:scale(.92)}",
+  "#yqcFab b{position:absolute;top:-3px;right:-3px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#e5484d;color:#fff;font:800 12px/22px Manrope,system-ui,sans-serif;border:2px solid #fff;box-sizing:border-box}",
+  "html.yqcLock,html.yqcLock body{overflow:hidden!important}#yqcP{position:fixed;inset:0;z-index:2147482100;pointer-events:none;font-family:Manrope,Inter,system-ui,sans-serif}#yqcP .yqcbg{position:absolute;inset:0;background:rgba(6,19,10,.45);opacity:0;transition:opacity .25s}",
+  "#yqcP .yqcw{position:absolute;top:0;right:0;bottom:0;width:min(440px,100%);background:#f4f6f0;display:flex;flex-direction:column;transform:translateX(105%);transition:transform .3s cubic-bezier(.2,.9,.3,1);box-shadow:-20px 0 50px rgba(0,0,0,.25)}",
+  "#yqcP.on{pointer-events:auto}#yqcP.on .yqcbg{opacity:1}#yqcP.on .yqcw{transform:none}",
+  "#yqcP button{font-family:inherit}#yqcP .yqch{display:flex;align-items:center;gap:8px;padding:10px 10px 10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(135deg,#1f4a16,#10260f);color:#fff;min-height:60px;box-sizing:border-box}",
+  "#yqcP .yqch .t{flex:1;min-width:0;display:flex;flex-direction:column}#yqcP .yqch .t b{font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}#yqcP .yqch .t span{font-size:12px;color:#cfe8b0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+  "#yqcP .ib{border:0;background:transparent;color:inherit;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;cursor:pointer;font-size:18px;padding:0;flex:none}#yqcP .ib:hover{background:rgba(255,255,255,.12)}#yqcP .ib.av{width:auto;height:auto}#yqcP .ib.call{width:auto;padding:0 10px;border-radius:20px;gap:4px;display:flex;align-items:center;background:rgba(255,255,255,.12)}#yqcP .ib.call small{font-weight:800;font-size:12px}",
+  ".yqav{flex:none;border-radius:50%;color:#fff;display:inline-grid;place-items:center;font-weight:800;position:relative;letter-spacing:.5px;font-family:Manrope,Inter,system-ui,sans-serif}.yqav .on{position:absolute;right:1px;bottom:1px;width:24%;height:24%;min-width:10px;min-height:10px;border-radius:50%;background:#31c46c;border:2px solid #fff;box-sizing:border-box}",
+  "#yqcP .yqctabs{display:flex;background:#10260f;padding:0 8px}#yqcP .yqctabs button{flex:1;border:0;background:none;color:#a9c79a;padding:11px 0;font-weight:800;font-size:14px;border-bottom:3px solid transparent;cursor:pointer}#yqcP .yqctabs button.on{color:#fff;border-color:#9be15d}",
+  "#yqcP .yqcq{padding:8px 12px;background:#fff;border-bottom:1px solid #e3eadb}#yqcP .yqcq input{width:100%;box-sizing:border-box;border:0;background:#eef3e8;border-radius:20px;padding:10px 14px;font:500 14px inherit;font-family:inherit;outline:0}",
+  "#yqcP .yqcs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fff}#yqcP .yqcr{display:flex;align-items:center;gap:12px;width:100%;border:0;background:#fff;padding:10px 14px;text-align:left;cursor:pointer;border-bottom:1px solid #f0f3ec;box-sizing:border-box;color:#1d2a1a}#yqcP .yqcr:hover{background:#f6faf2}",
+  "#yqcP .yqcr .m{flex:1;min-width:0}#yqcP .yqcr .r1,#yqcP .yqcr .r2{display:flex;align-items:center;justify-content:space-between;gap:8px}#yqcP .yqcr .r1 b{font-size:15.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#yqcP .yqcr time{font-size:11.5px;color:#7a8a70;flex:none}#yqcP .yqcr time.nw{color:#3d9a1f;font-weight:800}#yqcP .yqcr time em{color:#2f9a4f;font-style:normal;font-weight:700}",
+  "#yqcP .yqcr .r2 span{font-size:13.5px;color:#66755c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}#yqcP .yqcr .r2 span.ty,#yqcP .ty{color:#3d9a1f!important;font-weight:700}#yqcP .yqcr .n{flex:none;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#3d9a1f;color:#fff;font:800 11.5px/20px inherit;font-style:normal;text-align:center;box-sizing:border-box}",
+  "#yqcP .yqcr.sel .ck{width:24px;height:24px;border-radius:50%;border:2px solid #b9c9ab;display:grid;place-items:center;color:#fff;font-style:normal;font-weight:800;flex:none}#yqcP .yqcr.sel.on .ck{background:#3d9a1f;border-color:#3d9a1f}#yqcP .yqcr.danger b{color:#d0393f}",
+  "#yqcP .tk{font-style:normal;color:#9aa890;letter-spacing:-3px;margin-right:3px;font-size:12px}#yqcP .tk.sn{color:#34b7f1}",
+  "#yqcP .yqcempty{padding:40px 24px;text-align:center;color:#6b7a60;display:flex;flex-direction:column;gap:6px}#yqcP .yqcempty b{color:#1c3d14;font-size:16px}#yqcP .yqcempty u{color:#2F5A1A;cursor:pointer}#yqcP .yqcempty.sm{padding:20px}#yqcP .yqcempty.sm span{background:#fdf6d8;color:#6b5a1a;border-radius:10px;padding:8px 12px;font-size:12.5px;margin:0 auto}",
+  "#yqcP .yqcfoot{padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e3eadb}#yqcP .pb{width:100%;border:0;border-radius:14px;padding:13px;background:linear-gradient(135deg,#4c8a2a,#2F5A1A);color:#fff;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 8px 20px rgba(47,90,26,.25)}#yqcP .pb:disabled{opacity:.45}#yqcP .pb.sm{padding:11px}",
+  "#yqcP .yqcsetup{padding:24px 20px;display:flex;flex-direction:column;align-items:stretch}#yqcP .yqcsetup>.yqav{align-self:center;margin-bottom:10px}#yqcP .yqcsetup p{text-align:center;color:#5d6b54;font-size:13.5px;margin:4px 0 14px}#yqcP .yqcsetup label{font-size:12px;font-weight:800;color:#4a5a40;margin:10px 0 5px;text-transform:uppercase;letter-spacing:.6px}",
+  "#yqcP .yqcsetup input{border:1.5px solid #dbe6cf;background:#f8fbf4;border-radius:12px;padding:12px;font:500 15px inherit;font-family:inherit;outline:0;width:100%;box-sizing:border-box}#yqcP .yqcsetup input:focus{border-color:#5BA32A;background:#fff}#yqcP .yqcsetup .un{position:relative}#yqcP .yqcsetup .un i{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-style:normal;color:#6b7a60;font-weight:700}#yqcP .yqcsetup .un input{padding-left:28px}#yqcP .yqcsetup .err{color:#c0392b;font-size:13px;min-height:18px;margin:10px 0 6px}",
+  "#yqcP .yqcmsgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 10px 6px;background:#e9efe2 url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cpath d='M20 60c8-14 22-22 36-24-4 14-18 24-36 24z' fill='%23dfe8d4'/%3E%3C/svg%3E\")}",
+  "#yqcP .dsep{text-align:center;margin:10px 0}#yqcP .dsep span{display:inline-block;background:#fff;color:#5d6b54;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.06)}#yqcP .dsep.sys span{background:#fdf6d8;color:#6b5a1a;font-weight:600}",
+  "#yqcP .bm{max-width:80%;margin:2px 0;padding:6px 8px 4px;border-radius:10px;position:relative;box-shadow:0 1px 1px rgba(0,0,0,.08);font-size:14.5px;line-height:1.38;color:#1d2a1a;word-wrap:break-word;overflow-wrap:anywhere;clear:both;width:max-content;box-sizing:border-box}#yqcP .bm.f{margin-top:7px}#yqcP .bm.me{background:#dcf5c6;margin-left:auto}#yqcP .bm.th{background:#fff;margin-right:auto}",
+  "#yqcP .bm.me.f{border-top-right-radius:2px}#yqcP .bm.th.f{border-top-left-radius:2px}#yqcP .bm .who{font-size:12.5px;font-weight:800;margin-bottom:1px}#yqcP .bm .tx{padding:0 2px}#yqcP .bm .tx a{color:#1a6fb0}#yqcP .bm .mt{font-size:10.5px;color:#7a8a70;text-align:right;margin-top:1px;white-space:nowrap;padding-left:20px}",
+  "#yqcP .bm img.ph{display:block;max-width:240px;max-height:300px;min-width:120px;min-height:80px;border-radius:8px;background:#cfdcc4;object-fit:cover;cursor:zoom-in}#yqcP .bm .vn{display:flex;align-items:center;gap:8px;min-width:200px;padding:2px}#yqcP .bm .vn .pl{width:36px;height:36px;border-radius:50%;border:0;background:#3d9a1f;color:#fff;font-size:14px;cursor:pointer;flex:none}#yqcP .bm .vn .vbar{flex:1;height:4px;border-radius:2px;background:#b9cdaa;overflow:hidden}#yqcP .bm .vn .vbar i{display:block;height:100%;width:0;background:#2F5A1A}#yqcP .bm .vn span{font-size:12px;color:#5d6b54}",
+  "#yqcP .bm .fl{display:flex;align-items:center;gap:10px;border:0;background:rgba(0,0,0,.05);border-radius:8px;padding:8px 10px;cursor:pointer;text-align:left;min-width:200px;max-width:260px}#yqcP .bm .fl .ic{font-size:26px}#yqcP .bm .fl .fn{display:flex;flex-direction:column;min-width:0}#yqcP .bm .fl b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#yqcP .bm .fl small{font-size:11.5px;color:#6b7a60}",
+  "#yqcP .bm .cl{display:flex;align-items:center;gap:8px;color:#2F5A1A;padding:2px 4px}#yqcP .bm .cl span{display:flex;flex-direction:column}#yqcP .bm .cl b{font-size:14px;color:#1d2a1a}#yqcP .bm .cl small{font-size:11.5px;color:#6b7a60}",
+  "#yqcP .yqcin{display:flex;align-items:flex-end;gap:4px;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:#f0f3ec}#yqcP .yqcin .ib{color:#55654f;width:40px;height:44px;font-size:20px}#yqcP .yqcin textarea{flex:1;resize:none;border:0;border-radius:22px;padding:11px 14px;font:500 15px/1.35 inherit;font-family:inherit;outline:0;background:#fff;max-height:120px;box-shadow:0 1px 1px rgba(0,0,0,.06)}",
+  "#yqcP .snd{flex:none;width:46px;height:46px;border-radius:50%;border:0;background:#3d9a1f;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 10px rgba(47,90,26,.3)}#yqcP .snd.rec{background:#e5484d;animation:yqcPul 1.2s infinite}@keyframes yqcPul{50%{box-shadow:0 0 0 10px rgba(229,72,77,.15)}}",
+  "#yqcP .yqclive{background:#3d9a1f;color:#fff;text-align:center;font-weight:800;font-size:13px;padding:7px;cursor:pointer}",
+  "#yqcP .yqcinfo{display:flex;flex-direction:column;align-items:center;padding:24px 16px;gap:4px;background:#fff;border-bottom:8px solid #f0f3ec}#yqcP .yqcinfo h3{margin:10px 0 2px;font-size:20px;color:#1c3d14}#yqcP .yqcinfo span{color:#66755c;font-size:13.5px}#yqcP .yqcinfo .acts{display:flex;gap:14px;margin-top:14px}#yqcP .yqcinfo .acts button{border:1px solid #dbe6cf;background:#fff;border-radius:14px;padding:10px 18px;display:flex;flex-direction:column;align-items:center;gap:4px;color:#2F5A1A;cursor:pointer;font-size:20px}#yqcP .yqcinfo .acts span{font-size:12px;font-weight:800;color:#2F5A1A}",
+  "#yqcP .yqcsec{padding:12px 14px 6px;font-size:12px;font-weight:800;color:#3d9a1f;text-transform:uppercase;letter-spacing:.6px;background:#fff}",
+  ".yqct{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:#1d2a1a;color:#fff;padding:10px 16px;border-radius:12px;font:600 13.5px Manrope,system-ui,sans-serif;z-index:2147483000;opacity:0;transition:all .3s;max-width:86vw;text-align:center}.yqct.on{opacity:1;transform:translate(-50%,0)}",
+  ".yqcpop{position:fixed;top:12px;left:50%;transform:translate(-50%,-140%);width:min(420px,calc(100% - 24px));background:#fff;border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.25);display:flex;gap:12px;align-items:center;padding:12px 14px;z-index:2147483200;transition:transform .35s cubic-bezier(.2,1.2,.4,1);cursor:pointer;font-family:Manrope,system-ui,sans-serif}.yqcpop.on{transform:translate(-50%,0)}.yqcpop div{display:flex;flex-direction:column;min-width:0}.yqcpop b{font-size:14.5px;color:#1c3d14}.yqcpop span{font-size:13px;color:#5d6b54;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+  ".yqcview{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:2147483300;display:grid;place-items:center}.yqcview img{max-width:96vw;max-height:90vh;object-fit:contain}.yqcview button{position:absolute;top:14px;right:14px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:20px}",
+  "#yqcIn{position:fixed;inset:0;z-index:2147483400;background:radial-gradient(circle at 50% 30%,#2c5a1f,#081407 75%);display:grid;place-items:center;font-family:Manrope,system-ui,sans-serif;animation:yqcFi .3s}@keyframes yqcFi{from{opacity:0}}#yqcIn .box{display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;text-align:center;padding:20px}#yqcIn .box .yqav{box-shadow:0 0 0 12px rgba(155,225,93,.12),0 0 0 26px rgba(155,225,93,.06);animation:yqcRg 1.6s infinite}@keyframes yqcRg{50%{box-shadow:0 0 0 18px rgba(155,225,93,.18),0 0 0 36px rgba(155,225,93,.08)}}",
+  "#yqcIn b{font-size:24px;margin-top:22px}#yqcIn span{color:#cfe8b0;font-size:14px}#yqcIn .btns{display:flex;gap:70px;margin-top:70px}#yqcIn .btns button{width:70px;height:70px;border-radius:50%;border:0;color:#fff;font-size:26px;display:grid;place-items:center;cursor:pointer;position:relative}#yqcIn .btns small{position:absolute;top:78px;font-size:12px;font-weight:700;color:#e6f5d6;white-space:nowrap}#yqcIn .no{background:#e5484d}#yqcIn .yes{background:#31c46c;animation:yqcSh 1.2s infinite}@keyframes yqcSh{0%,100%{transform:rotate(0)}10%,30%{transform:rotate(-14deg)}20%,40%{transform:rotate(14deg)}}",
+  "#yqcCall{position:fixed;inset:0;z-index:2147483350;background:linear-gradient(170deg,#1f4a16,#081407 80%);color:#fff;display:flex;flex-direction:column;font-family:Manrope,system-ui,sans-serif;transition:all .3s}#yqcCall .top{display:flex;align-items:center;gap:6px;padding:12px;padding-top:max(12px,env(safe-area-inset-top));font-size:12px;color:#a9c79a}#yqcCall .top .ib{border:0;background:rgba(255,255,255,.1);color:#fff;width:40px;height:40px;border-radius:50%;font-size:22px;cursor:pointer}",
+  "#yqcCall .mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px}#yqcCall .mid b{font-size:24px;margin-top:18px;text-align:center}#yqcCall .mid>span{color:#cfe8b0;font-size:15px}#yqcCall .ppl{display:flex;justify-content:center}#yqcCall .ppl.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:16px;width:min(420px,92vw)}#yqcCall .pp{display:flex;flex-direction:column;align-items:center;gap:6px}#yqcCall .pp small{font-size:12px;color:#e6f5d6}#yqcCall .pp .yqav{transition:box-shadow .15s}#yqcCall .pp.talk .yqav{box-shadow:0 0 0 4px #9be15d,0 0 24px #9be15d}",
+  "#yqcCall .yqcBar{display:flex;justify-content:center;gap:34px;padding:24px;padding-bottom:max(30px,env(safe-area-inset-bottom))}#yqcCall .yqcBar button{width:64px;height:64px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center;cursor:pointer;position:relative}#yqcCall .yqcBar button small{position:absolute;top:70px;font-size:12px;color:#cfe8b0;white-space:nowrap}#yqcCall .yqcBar button.on{background:#fff;color:#1d2a1a}#yqcCall .yqcBar .end{background:#e5484d}",
+  "#yqcCall.min{inset:auto 12px 86px auto;width:200px;height:auto;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.4);cursor:pointer}#yqcCall.min .top,#yqcCall.min .ppl{display:none}#yqcCall.min .mid{padding:10px 12px;align-items:flex-start;gap:0}#yqcCall.min .mid b{font-size:14px;margin:0}#yqcCall.min .mid>span{font-size:12px}#yqcCall.min .yqcBar{padding:0 12px 12px;gap:12px;justify-content:flex-start}#yqcCall.min .yqcBar button{width:42px;height:42px}#yqcCall.min .yqcBar small{display:none}",
+  ""
+  ].join("\n");
+  document.head.appendChild(s);
+}
 })();
 </script>
 <meta name="author" content="Hamza Khan">
