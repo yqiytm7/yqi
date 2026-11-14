@@ -4,6 +4,22 @@
 (function(){
 "use strict";
 
+// ---------- Android app (YQI APK): native save, notifications, call audio ----------
+(function(){ var C = window.Capacitor; if(!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.YqNative)) return;
+  var N = C.Plugins.YqNative; window.YQNATIVE = N; document.documentElement.classList.add("yqNative");
+  function Fake(t, o){ o = o || {}; N.notify({title: String(t || "YQI"), body: String(o.body || ""), tag: String(o.tag || "")}).catch(function(){}); }
+  Fake.permission = "granted";
+  Fake.requestPermission = function(cb){ return N.askNotify().catch(function(){}).then(function(){ if(cb) cb("granted"); return "granted"; }); };
+  try{ window.Notification = Fake; }catch(e){}
+  try{ if(window.ServiceWorkerRegistration) ServiceWorkerRegistration.prototype.showNotification = function(t, o){ Fake(t, o); return Promise.resolve(); }; }catch(e){}
+  var rv = URL.revokeObjectURL.bind(URL); URL.revokeObjectURL = function(u){ setTimeout(function(){ rv(u); }, 60000); };
+  function save(name, href){ fetch(href).then(function(r){ return r.blob(); }).then(function(b){ return new Promise(function(ok){ var fr = new FileReader(); fr.onload = function(){ ok([String(fr.result).split(",")[1] || "", b.type]); }; fr.readAsDataURL(b); }); })
+    .then(function(x){ return N.saveFile({name: name || "file", data: x[0], mime: x[1] || "application/octet-stream"}); }).catch(function(e){ N.toast({text: "Could not save the file"}).catch(function(){}); }); }
+  var oc = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function(){ var h = this.href || ""; if(this.hasAttribute("download") && /^(blob:|data:)/.test(h)){ save(this.getAttribute("download"), h); return; } return oc.apply(this, arguments); };
+  document.addEventListener("click", function(e){ var a = e.target && e.target.closest && e.target.closest("a[download]"); if(a && /^(blob:|data:)/.test(a.href || "")){ e.preventDefault(); e.stopPropagation(); save(a.getAttribute("download"), a.href); } }, true);
+})();
+
 // ---------- in-app dialog (replaces the browser's "yqiytm7.github.io says" boxes) ----------
 window.yqAsk = function(msg, o){ o = o || {}; return new Promise(function(res){
   if(!document.getElementById("yqAskCss")){ var st = document.createElement("style"); st.id = "yqAskCss"; st.textContent = "#yqAsk{position:fixed;inset:0;z-index:2147483640;display:grid;place-items:center;background:rgba(6,19,10,.55);font-family:Manrope,Inter,system-ui,sans-serif;animation:yqAskF .15s}@keyframes yqAskF{from{opacity:0}}#yqAsk .bx{width:min(360px,calc(100% - 40px));background:#fff;color:#16230f;border-radius:20px;padding:22px 20px 14px;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:yqAskP .2s cubic-bezier(.2,1.3,.4,1)}@keyframes yqAskP{from{transform:scale(.9);opacity:0}}#yqAsk h3{margin:0 0 6px;font-size:17px;font-weight:800}#yqAsk p{margin:0;font-size:15px;line-height:1.45;color:#3d4a36;white-space:pre-wrap}#yqAsk input,#yqAsk textarea{width:100%;box-sizing:border-box;margin-top:12px;border:1.5px solid #dbe6cf;background:#f8fbf4;border-radius:12px;padding:11px 12px;font:500 15px Manrope,system-ui,sans-serif;outline:0;color:#16230f}#yqAsk input:focus,#yqAsk textarea:focus{border-color:#5BA32A;background:#fff}#yqAsk .bt{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}#yqAsk .bt button{border:0;border-radius:12px;padding:11px 18px;font:800 14.5px Manrope,system-ui,sans-serif;cursor:pointer;background:#eef3e8;color:#2F5A1A}#yqAsk .bt .ok{background:linear-gradient(135deg,#4c8a2a,#2F5A1A);color:#fff}#yqAsk .bt .ok.red{background:#e5484d}"; document.head.appendChild(st); }
@@ -159,7 +175,7 @@ function yqIntro(){
 }
 
 // ---------- activity form: live camera in the installed app ----------
-function yqIsApp(){ try{ return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || navigator.standalone === true; }catch(e){ return false; } }
+function yqIsApp(){ try{ return !!window.YQNATIVE || matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || navigator.standalone === true; }catch(e){ return false; } }
 function yqStamp(file){ return new Promise(function(res){ try{ var u = URL.createObjectURL(file), im = new Image(); im.onload = function(){ var M = 1600, w = im.naturalWidth, h = im.naturalHeight, r = Math.min(1, M / Math.max(w, h)); w = Math.round(w * r); h = Math.round(h * r);
   var c = document.createElement("canvas"); c.width = w; c.height = h; var x = c.getContext("2d"); x.drawImage(im, 0, 0, w, h);
   var d = new Date(), pad = function(n){ return (n < 10 ? "0" : "") + n; }, txt = "YQI · " + pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + d.getFullYear() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " · live camera";
@@ -2231,7 +2247,7 @@ function attachMedia(u){ var P = CALL && CALL.pcs[u]; if(!P || !P.stream) return
 function meter(u, st){ try{ var a = ac(); if(!a) return; var src = a.createMediaStreamSource(st), an = a.createAnalyser(); an.fftSize = 256; src.connect(an); var buf = new Uint8Array(an.frequencyBinCount);
   (function lp(){ if(!CALL || !CALL.pcs[u]) return; an.getByteFrequencyData(buf); var s = 0; for(var i = 0; i < buf.length; i++) s += buf[i]; CALL.pcs[u].lvl = s / buf.length; setTimeout(lp, 150); })(); }catch(e){} }
 function endCall(why, remote){
-  var C0 = CALL; if(!C0) return; CALL = null; ringStop(); clearTimeout(C0.noAns); clearInterval(C0.tm);
+  var C0 = CALL; if(!C0) return; CALL = null; ringStop(); try{ if(window.YQNATIVE) window.YQNATIVE.callEnd(); }catch(e){} clearTimeout(C0.noAns); clearInterval(C0.tm);
   try{ C0.unDoc && C0.unDoc(); }catch(e){} try{ C0.unSig && C0.unSig(); }catch(e){}
   Object.keys(C0.pcs).forEach(function(u){ var P = C0.pcs[u]; try{ P.pc.close(); }catch(e){} if(P.au){ try{ P.au.srcObject = null; P.au.remove(); }catch(e){} } });
   try{ C0.st.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
@@ -2253,6 +2269,7 @@ function logCall(cid, t, dur, video){ var c = CHATS[cid]; if(!c) return; var ref
 var SINK = "";
 function showCallUi(){ if(!CALL) return; var x = $("ycCall"); if(x){ x.classList.remove("min"); return; }
   x = document.createElement("div"); x.id = "ycCall"; document.body.appendChild(x); x.className = CALL.video ? "vid" : "";
+  if(window.YQNATIVE){ CALL.spkOn = !!CALL.video; try{ window.YQNATIVE.callStart({speaker: CALL.spkOn}); }catch(e){} }
   x.innerHTML = '<div class="ycCtop"><button data-k="min" title="Minimise">⌄</button><span>' + (CALL.video ? "Video" : "Voice") + (CALL.group ? " meeting" : " call") + ' · YQI</span></div><div class="ycStage" id="ycStage"></div><div class="ycCinfo"><b>' + esc(CALL.title) + '</b><span id="ycCs">Calling…</span></div><video id="ycSelf" autoplay playsinline muted></video><div class="ycCbar" id="ycCbar"></div>';
   x.querySelector('[data-k="min"]').onclick = function(e){ e.stopPropagation(); x.classList.add("min"); };
   x.addEventListener("click", function(e){ if(x.classList.contains("min") && !e.target.closest("[data-k]")) x.classList.remove("min"); });
@@ -2261,7 +2278,7 @@ function showCallUi(){ if(!CALL) return; var x = $("ycCall"); if(x){ x.classList
 }
 function ctrlBar(){ var b = $("ycCbar"); if(!b || !CALL) return; var hasV = CALL.st.getVideoTracks().length > 0, sinks = !!(HTMLMediaElement.prototype.setSinkId && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices);
   b.innerHTML = (hasV ? '<button data-k="flip" title="Switch camera">' + IC.flip + '<small>Flip</small></button><button data-k="cam" class="' + (CALL.camOff ? "on" : "") + '" title="Camera">' + (CALL.camOff ? IC.camoff : IC.video) + '<small>' + (CALL.camOff ? "Cam off" : "Camera") + '</small></button>' : '') +
-    '<button data-k="mute" class="' + (CALL.muted ? "on" : "") + '">' + IC.mic + '<small>' + (CALL.muted ? "Unmute" : "Mute") + '</small></button>' + (sinks && !/Android|iPhone|iPad/i.test(navigator.userAgent) ? '<button data-k="spk">' + IC.spk + '<small>Output</small></button>' : '') +
+    '<button data-k="mute" class="' + (CALL.muted ? "on" : "") + '">' + IC.mic + '<small>' + (CALL.muted ? "Unmute" : "Mute") + '</small></button>' + (window.YQNATIVE ? '<button data-k="ear" class="' + (CALL.spkOn ? "on" : "") + '">' + IC.spk + '<small>' + (CALL.spkOn ? "Speaker" : "Earpiece") + '</small></button>' : '') + (sinks && !/Android|iPhone|iPad/i.test(navigator.userAgent) ? '<button data-k="spk">' + IC.spk + '<small>Output</small></button>' : '') +
     (CALL.group ? '<button data-k="ring" title="Ring everyone not here">' + IC.plus + '<small>Ring all</small></button>' : '') + '<button data-k="end" class="end">' + IC.hang + '<small>End</small></button>';
   b.querySelectorAll("[data-k]").forEach(function(el){ el.onclick = function(e){ e.stopPropagation(); var k = el.getAttribute("data-k"); if(!CALL) return;
     if(k === "end") return endCall("");
@@ -2270,6 +2287,7 @@ function ctrlBar(){ var b = $("ycCbar"); if(!b || !CALL) return; var hasV = CALL
     if(k === "flip") return flipCam();
     if(k === "ring"){ ringAll(CALL.members); toast("Ringing everyone who is not in the meeting"); }
     if(k === "spk") return pickSink();
+    if(k === "ear"){ CALL.spkOn = !CALL.spkOn; try{ window.YQNATIVE.setSpeaker({on: CALL.spkOn}); }catch(x){} }
     ctrlBar(); }; }); }
 function flipCam(){ var C0 = CALL; if(!C0) return; C0.face = C0.face === "user" ? "environment" : "user";
   navigator.mediaDevices.getUserMedia({video: {facingMode: {exact: C0.face}, width: {ideal: 640}, height: {ideal: 480}}}).catch(function(){ return navigator.mediaDevices.getUserMedia({video: {facingMode: C0.face}}); }).then(function(ns){

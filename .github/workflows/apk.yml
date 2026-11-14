@@ -1,0 +1,32 @@
+name: Build YQI APK
+on:
+  push:
+    branches: [main]
+    paths: ['android-app/**', '.github/workflows/apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install --no-audit --no-fund
+      - run: npx cap add android
+      - run: node patch.js
+      - run: npx cap sync android
+      - run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+        working-directory: android-app/android
+      - run: cp android/app/build/outputs/apk/release/app-release.apk YQI.apk && ls -la YQI.apk
+      - name: Publish download
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh release delete app --yes --cleanup-tag || true
+          gh release create app YQI.apk --title "YQI Android app 1.0.${{ github.run_number }}" --notes "Install YQI.apk on Android. Developed by Hamza Khan." --latest
