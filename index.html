@@ -3,6 +3,22 @@
 <head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><script>/* YQI company edition — login, customer workspaces, Firebase storage. Developed by Hamza Khan. */
 (function(){
 "use strict";
+
+// ---------- in-app dialog (replaces the browser's "yqiytm7.github.io says" boxes) ----------
+window.yqAsk = function(msg, o){ o = o || {}; return new Promise(function(res){
+  if(!document.getElementById("yqAskCss")){ var st = document.createElement("style"); st.id = "yqAskCss"; st.textContent = "#yqAsk{position:fixed;inset:0;z-index:2147483640;display:grid;place-items:center;background:rgba(6,19,10,.55);font-family:Manrope,Inter,system-ui,sans-serif;animation:yqAskF .15s}@keyframes yqAskF{from{opacity:0}}#yqAsk .bx{width:min(360px,calc(100% - 40px));background:#fff;color:#16230f;border-radius:20px;padding:22px 20px 14px;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:yqAskP .2s cubic-bezier(.2,1.3,.4,1)}@keyframes yqAskP{from{transform:scale(.9);opacity:0}}#yqAsk h3{margin:0 0 6px;font-size:17px;font-weight:800}#yqAsk p{margin:0;font-size:15px;line-height:1.45;color:#3d4a36;white-space:pre-wrap}#yqAsk input,#yqAsk textarea{width:100%;box-sizing:border-box;margin-top:12px;border:1.5px solid #dbe6cf;background:#f8fbf4;border-radius:12px;padding:11px 12px;font:500 15px Manrope,system-ui,sans-serif;outline:0;color:#16230f}#yqAsk input:focus,#yqAsk textarea:focus{border-color:#5BA32A;background:#fff}#yqAsk .bt{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}#yqAsk .bt button{border:0;border-radius:12px;padding:11px 18px;font:800 14.5px Manrope,system-ui,sans-serif;cursor:pointer;background:#eef3e8;color:#2F5A1A}#yqAsk .bt .ok{background:linear-gradient(135deg,#4c8a2a,#2F5A1A);color:#fff}#yqAsk .bt .ok.red{background:#e5484d}"; document.head.appendChild(st); }
+  var old = document.getElementById("yqAsk"); if(old) old.remove();
+  var d = document.createElement("div"); d.id = "yqAsk"; var inp = o.input != null;
+  var e = function(t){ return String(t == null ? "" : t).replace(/[&<>"]/g, function(c){ return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]; }); };
+  d.innerHTML = '<div class="bx">' + (o.title ? '<h3>' + e(o.title) + '</h3>' : '') + (msg ? '<p>' + e(msg) + '</p>' : '') + (inp ? (o.multi ? '<textarea rows="3"></textarea>' : '<input>') : '') + '<div class="bt">' + (o.alert ? '' : '<button class="no">' + e(o.cancel || "Cancel") + '</button>') + '<button class="ok' + (o.danger ? " red" : "") + '">' + e(o.ok || "OK") + '</button></div></div>';
+  document.body.appendChild(d); var f = d.querySelector("input,textarea"); if(f){ f.value = o.input || ""; f.placeholder = o.placeholder || ""; setTimeout(function(){ f.focus(); try{ f.setSelectionRange(f.value.length, f.value.length); }catch(x){} }, 30); }
+  var done = function(v){ d.remove(); window.removeEventListener("popstate", pop); res(v); };
+  var pop = function(){ done(inp ? null : false); };
+  d.querySelector(".ok").onclick = function(){ done(inp ? f.value : true); };
+  var no = d.querySelector(".no"); if(no) no.onclick = function(){ done(inp ? null : false); };
+  d.addEventListener("click", function(ev){ if(ev.target === d) done(inp ? null : (o.alert ? true : false)); });
+  if(f && !o.multi) f.addEventListener("keydown", function(ev){ if(ev.key === "Enter") done(f.value); });
+}); };
 // ---------- phone back button: one step back inside the app instead of closing it ----------
 window.YQBACK = (function(){
   var st = [], pend = [], purging = false;
@@ -287,14 +303,14 @@ function importFile(f, cur){
     var wref = FS.collection("ws").doc(cur.id), jobs = [];
     Object.keys(j.seed || {}).forEach(function(k){ var v = j.seed[k]; if(v == null) return; if(k === "PROGS" && (!Array.isArray(v) || !v.length)) return; jobs.push([wref.collection("seed").doc(k), {v: v}]); });
     Object.keys(j.data || {}).forEach(function(c){ Object.keys(j.data[c] || {}).forEach(function(id){ jobs.push([wref.collection(c).doc(id), j.data[c][id]]); }); });
-    if(!confirm("Load " + jobs.length + " records into " + (cur.x.name || cur.id) + "? Records with the same id are replaced.")) return;
+    return yqAsk("Load " + jobs.length + " records into " + (cur.x.name || cur.id) + "? Records with the same id are replaced.", {title: "Load records", ok: "Load"}).then(function(y){ if(!y){ msg(""); return; }
     var done = 0, bad = 0, i = 0;
     function next(){
       if(i >= jobs.length){ msg("Done: " + done + " records loaded" + (bad ? ", " + bad + " failed (too big or not allowed)" : "") + "."); return; }
       var part = jobs.slice(i, i + 20); i += 20;
       return Promise.all(part.map(function(x){ return x[0].set(enc(x[1])).then(function(){ done++; }).catch(function(e){ bad++; if(window.console) console.warn("YQI import", x[0].path, e); }); })).then(function(){ msg("Loading… " + done + " / " + jobs.length); return next(); });
     }
-    return next();
+    return next(); });
   }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function readCol(wref, c){ return wref.collection(c).get().then(function(q){ var o = {}; q.docs.forEach(function(d){ o[d.id] = dec(d.data()); }); return o; }).catch(function(){ return {}; }); }
@@ -748,13 +764,13 @@ function editOn(){
   h.querySelectorAll("[data-ek]").forEach(function(el){ el.contentEditable = "true"; el.spellcheck = false; });
   var b = document.createElement("div"); b.id = "yqEdBar"; b.innerHTML = '<span>Editing: tap any dashed text to change it (delete all of it to hide it). Tap any logo (YQI or a customer) to change the picture.</span><button class="s" id="yqEdS">Save</button><button id="yqEdC">Cancel</button><button id="yqEdR">Reset all</button>'; document.body.appendChild(b);
   var fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; fi.style.display = "none"; b.appendChild(fi); var tgt = null;
-  fi.onchange = function(){ var f = fi.files[0]; fi.value = ""; if(!f || !tgt) return; imgToData(f, /^logo:/.test(tgt.dataset.ei) ? 160 : 600).then(function(u){ HPEND[tgt.dataset.ei] = u; if(tgt.tagName === "IMG") tgt.src = u; else tgt.innerHTML = '<img src="' + u + '" alt="">'; }).catch(function(){ alert("This picture could not be read."); }); };
+  fi.onchange = function(){ var f = fi.files[0]; fi.value = ""; if(!f || !tgt) return; imgToData(f, /^logo:/.test(tgt.dataset.ei) ? 160 : 600).then(function(u){ HPEND[tgt.dataset.ei] = u; if(tgt.tagName === "IMG") tgt.src = u; else tgt.innerHTML = '<img src="' + u + '" alt="">'; }).catch(function(){ yqAsk("This picture could not be read."); }); };
   h.__edc = function(e){ if(!HEDIT) return; var im = e.target.closest("[data-ei]"); if(im){ e.preventDefault(); e.stopPropagation(); tgt = im; fi.click(); return; } if(e.target.closest("[data-ek]")){ e.stopPropagation(); if(e.target.closest("button,a")) e.preventDefault(); return; } e.preventDefault(); e.stopPropagation(); };
   h.addEventListener("click", h.__edc, true);
   h.__edk = function(e){ if(HEDIT && e.key === "Enter" && e.target.closest("[data-ek]")){ e.preventDefault(); e.target.blur(); } if(HEDIT && e.key === " " && e.target.closest("button")) e.stopPropagation(); };
   h.addEventListener("keydown", h.__edk, true);
   $("yqEdC").onclick = function(){ editOff(); };
-  $("yqEdR").onclick = function(){ if(!confirm("Put all headings and pictures back to the original?")) return; saveEdits({t: {}, img: {}}); };
+  $("yqEdR").onclick = function(){ yqAsk("Put all headings and pictures back to the original?", {title: "Reset page", ok: "Reset", danger: 1}).then(function(y){ if(y) saveEdits({t: {}, img: {}}); }); };
   $("yqEdS").onclick = function(){ var t = Object.assign({}, HOV.t), img = Object.assign({}, HOV.img, HPEND);
     h.querySelectorAll("[data-ek]").forEach(function(el){ var v = el.textContent.replace(/\s+/g, " ").trim(), d = (el.getAttribute("data-ed") || "").trim(); if(v === d) delete t[el.dataset.ek]; else t[el.dataset.ek] = v; });
     saveEdits({t: t, img: img}); };
@@ -817,7 +833,7 @@ function buyerShare(c){
     var cp = box.querySelector("#ysC"); if(cp) cp.onclick = function(){ var i = box.querySelector("input"); i.select(); try{ navigator.clipboard.writeText(i.value).then(function(){ cp.textContent = "Copied ✓"; }, function(){ document.execCommand("copy"); cp.textContent = "Copied ✓"; }); }catch(x){ document.execCommand("copy"); cp.textContent = "Copied ✓"; } };
     var mk = box.querySelector("#ysM"); if(mk) mk.onclick = function(){ mk.disabled = true; mk.textContent = "Creating…"; var a = new Uint8Array(15); crypto.getRandomValues(a); var t = Array.from(a).map(function(b){ return "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]; }).join("");
       Promise.resolve().then(function(){ return pubWrite(c, t); }).then(function(){ var m = Object.assign({}, PUBIDX); m[k] = {c: c, t: t, at: Date.now()}; return FS.collection("meta").doc("pubidx").set({map: m}).then(function(){ PUBIDX = m; draw(); }); }).catch(function(x){ box.querySelector("#ysMsg").textContent = errTxt(x); mk.disabled = false; mk.textContent = "Create buyer link"; }); };
-    var dl = box.querySelector("#ysD"); if(dl) dl.onclick = function(){ if(!confirm("Stop sharing? The link will stop working.")) return; FS.collection("pub").doc(e.t).delete().then(function(){ var m = Object.assign({}, PUBIDX); delete m[k]; return FS.collection("meta").doc("pubidx").set({map: m}).then(function(){ PUBIDX = m; draw(); }); }).catch(function(x){ box.querySelector("#ysMsg").textContent = errTxt(x); }); };
+    var dl = box.querySelector("#ysD"); if(dl) dl.onclick = function(){ yqAsk("The buyer link will stop working.", {title: "Stop sharing?", ok: "Stop sharing", danger: 1}).then(function(y){ if(!y) return; FS.collection("pub").doc(e.t).delete().then(function(){ var m = Object.assign({}, PUBIDX); delete m[k]; return FS.collection("meta").doc("pubidx").set({map: m}).then(function(){ PUBIDX = m; draw(); }); }).catch(function(x){ box.querySelector("#ysMsg").textContent = errTxt(x); }); }); };
   };
   box.onclick = function(ev){ if(ev.target === box) close(); };
   (PUBIDX ? Promise.resolve() : loadPubIdx()).then(draw);
@@ -1292,6 +1308,7 @@ var PEOPLE = {}, CHATS = {}, CALLS = [], STATUS = [], MEETS = {}, MSGS = [], OPE
 var VIEW = "home", TAB = "chats", FILTER = "all", STACK = [], PARAM = {};
 var unMsgs = null, firstChats = true, MSGLIM = 60, REPLY = null, SEARCHQ = "";
 var MAXF = 12 * 1024 * 1024, CHUNK = 700000, DARK = false;
+function ask(m, o){ return window.yqAsk ? window.yqAsk(m, o) : Promise.resolve(window.confirm(m)); }
 window.YQCHAT = {start: start};
 
 // ---------- helpers ----------
@@ -1567,7 +1584,7 @@ function statusTextView(w){
   bind(w); setTimeout(function(){ var t = $("ycStT"); if(t) t.focus(); }, 50);
 }
 function postTextStatus(){ var t = ($("ycStT").value || "").trim(); if(!t) return toast("Write something first"); FS.collection("status").add({by: MY, at: now(), k: "text", t: t, bg: PARAM.bg || SBG[0], v: {}}).then(function(){ toast("Status posted"); navBack(); }).catch(function(e){ toast("Could not post: " + (e.code || e.message)); }); }
-function postPhotoStatus(f){ toast("Posting status…"); Promise.all([thumbOf(f, 480), putFile(f, "status.jpg")]).then(function(a){ var cap = prompt("Add a caption (optional)") || ""; return FS.collection("status").add({by: MY, at: now(), k: "img", th: a[0] ? a[0].u : "", f: a[1], t: cap.slice(0, 200), v: {}}); }).then(function(){ toast("Status posted"); TAB = "updates"; repaint(); }).catch(function(e){ toast("Could not post: " + (e.message || e)); }); }
+function postPhotoStatus(f){ toast("Posting status…"); Promise.all([thumbOf(f, 480), putFile(f, "status.jpg"), ask("", {title: "Add a caption", input: "", placeholder: "Optional", ok: "Post"})]).then(function(a){ if(a[2] === null) throw new Error("cancelled"); var cap = a[2] || ""; return FS.collection("status").add({by: MY, at: now(), k: "img", th: a[0] ? a[0].u : "", f: a[1], t: cap.slice(0, 200), v: {}}); }).then(function(){ toast("Status posted"); TAB = "updates"; repaint(); }).catch(function(e){ if(e && e.message === "cancelled") return toast("Status not posted"); toast("Could not post: " + (e.message || e)); }); }
 var SV = null;
 function viewStatus(uid){
   var list = STATUS.filter(function(s){ return s.by === uid; }); if(!list.length) return;
@@ -1585,7 +1602,7 @@ function showStory(){
   if(SV.uid !== MY && unseen(s)){ var u = {}; u["v." + MY] = now(); FS.collection("status").doc(s.id).update(u).catch(function(){}); }
   x.querySelectorAll("[data-s]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var a = b.getAttribute("data-s");
     if(a === "x") return closeStory(); if(a === "prev"){ if(SV.i > 0){ SV.i--; showStory(); } else showStory(); return; } if(a === "next") return nextStory();
-    if(a === "del"){ if(confirm("Delete this status?")) FS.collection("status").doc(s.id).delete().then(function(){ closeStory(); }).catch(function(){}); return; }
+    if(a === "del"){ cancelAnimationFrame(SV.raf); ask("", {title: "Delete this status?", ok: "Delete", danger: 1}).then(function(y){ if(y) FS.collection("status").doc(s.id).delete().then(function(){ closeStory(); }).catch(function(){}); else if(SV) showStory(); }); return; }
     if(a === "reply"){ var u2 = SV.uid; closeStory(); openPanel(); openDm(u2, "Replying to your status: " + (s.k === "text" ? "“" + s.t.slice(0, 60) + "”" : "📷 photo")); } }; });
   cancelAnimationFrame(SV.raf); SV.t0 = performance.now(); var D = s.k === "text" ? 5000 : 6500, bar = x.querySelectorAll(".ycSVbars i b")[SV.i];
   (function lp(t){ if(!SV) return; var k = (t - SV.t0) / D; if(bar) bar.style.width = Math.min(100, k * 100) + "%"; if(k >= 1) return nextStory(); SV.raf = requestAnimationFrame(lp); })(SV.t0);
@@ -1821,10 +1838,10 @@ function msgMenu(id){
     else if(a === "fwd"){ FWD = m; go("pick", {mode: "fwd", sel: {}}); }
     else if(a === "star"){ var on = !(m.st && m.st[MY]); u["st." + MY] = on ? now() : FV.delete(); ref.update(u).catch(function(){});
       var sref = FS.collection("people").doc(MY).collection("star").doc(OPEN + "_" + id); if(on) sref.set({cid: OPEN, mid: id, at: m.at, by: m.by, k: m.k, t: preview(m), th: m.th || "", f: m.f || null, sat: now()}).catch(function(){}); else sref.delete().catch(function(){}); toast(on ? "Starred" : "Unstarred"); }
-    else if(a === "edit"){ var nt = prompt("Edit message", m.t); if(nt != null && nt.trim() && nt !== m.t) ref.update({t: nt.trim().slice(0, 5000), ed: 1}).catch(function(x){ toast(x.code || x.message); }); }
-    else if(a === "info"){ var oth = (c.members || []).filter(function(x){ return x !== MY; }); alert("Read by: " + (oth.filter(function(x){ return (c.rd || {})[x] >= m.at; }).map(fullName).join(", ") || "no one yet") + "\nSent: " + new Date(m.at).toLocaleString()); }
+    else if(a === "edit"){ ask("", {title: "Edit message", input: m.t, multi: 1, ok: "Save"}).then(function(nt){ if(nt != null && nt.trim() && nt !== m.t) ref.update({t: nt.trim().slice(0, 5000), ed: 1}).catch(function(x){ toast(x.code || x.message); }); }); }
+    else if(a === "info"){ var oth = (c.members || []).filter(function(x){ return x !== MY; }); ask("Read by: " + (oth.filter(function(x){ return (c.rd || {})[x] >= m.at; }).map(fullName).join(", ") || "no one yet") + "\nSent: " + new Date(m.at).toLocaleString(), {title: "Message info", alert: 1}); }
     else if(a === "delme"){ u["dm." + MY] = 1; ref.update(u).catch(function(){}); m.dm = m.dm || {}; m.dm[MY] = 1; MKEY = ""; renderMsgs(); }
-    else if(a === "delall"){ if(confirm("Delete this message for everyone?")) ref.update({del: 1, t: "", f: null, th: "", rp: null}).then(function(){ if(c.last && c.last.at === m.at){ FS.collection("chats").doc(OPEN).update({"last.t": "🚫 Message deleted"}).catch(function(){}); } }).catch(function(x){ toast(x.code || x.message); }); }
+    else if(a === "delall"){ ask("Everyone in this chat will see “This message was deleted”.", {title: "Delete for everyone?", ok: "Delete", danger: 1}).then(function(y){ if(y) ref.update({del: 1, t: "", f: null, th: "", rp: null}).then(function(){ if(c.last && c.last.at === m.at){ FS.collection("chats").doc(OPEN).update({"last.t": "🚫 Message deleted"}).catch(function(){}); } }).catch(function(x){ toast(x.code || x.message); }); }); }
   });
 }
 var FWD = null;
@@ -1840,7 +1857,7 @@ function chatMenu(id){
     var u = {}, ref = FS.collection("chats").doc(id);
     if(a === "pin") u["pn." + MY] = pn ? FV.delete() : now(); if(a === "mute") u["mu." + MY] = mu ? FV.delete() : 1; if(a === "arch"){ u["ar." + MY] = ar ? FV.delete() : 1; toast(ar ? "Chat unarchived" : "Chat archived"); }
     if(a === "read"){ u["n." + MY] = n ? 0 : 1; if(n) u["rd." + MY] = now(); }
-    if(a === "clear"){ if(!confirm("Delete this chat for you? Messages stay for the other people.")) return; u["hid." + MY] = now(); u["n." + MY] = 0; try{ localStorage.removeItem("yqc_m_" + id); }catch(e){} if(OPEN === id){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); } }
+    if(a === "clear"){ ask("Messages stay for the other people.", {title: "Delete this chat for you?", ok: "Delete", danger: 1}).then(function(y){ if(!y) return; var u2 = {}; u2["hid." + MY] = now(); u2["n." + MY] = 0; try{ localStorage.removeItem("yqc_m_" + id); }catch(e){} if(OPEN === id){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); } ref.update(u2).catch(function(e){ toast(e.code || e.message); }); }); return; }
     ref.update(u).catch(function(e){ toast(e.code || e.message); });
   });
 }
@@ -1865,7 +1882,7 @@ function chatMoreMenu(){
     if(a === "find"){ PARAM.find = true; var w = $("ycW"); w.removeAttribute("data-v"); return paint(true); }
     if(a === "wall") return wallSheet();
     var u = {}; if(a === "cmute") u["mu." + MY] = c.mu && c.mu[MY] ? FV.delete() : 1; if(a === "carch") u["ar." + MY] = c.ar && c.ar[MY] ? FV.delete() : 1;
-    if(a === "cdel"){ if(!confirm("Delete this chat for you?")) return; u["hid." + MY] = now(); u["n." + MY] = 0; }
+    if(a === "cdel"){ var cid0 = OPEN; ask("Messages stay for the other people.", {title: "Delete this chat for you?", ok: "Delete", danger: 1}).then(function(y){ if(!y) return; var u2 = {}; u2["hid." + MY] = now(); u2["n." + MY] = 0; FS.collection("chats").doc(cid0).update(u2).then(function(){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); paint(true); }).catch(function(e){ toast(e.code || e.message); }); }); return; }
     FS.collection("chats").doc(OPEN).update(u).then(function(){ if(a === "cdel" || a === "carch"){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); paint(true); } }).catch(function(e){ toast(e.code || e.message); });
   });
 }
@@ -1957,12 +1974,12 @@ function personCard(u){
     on: function(k){
       if(k === "edit"){ if(VIEW !== "profile"){ go("profile", {}); } setTimeout(function(){ pickPhoto("photo"); }, 0); }
       else if(k === "prof"){ if(VIEW !== "profile") go("profile", {}); }
-      else if(k === "rm"){ if(confirm("Remove your profile photo?")) FS.collection("people").doc(MY).set({pt: "", ph: ""}, {merge: true}).then(function(){ ME.pt = ""; ME.ph = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); }
+      else if(k === "rm"){ ask("", {title: "Remove your profile photo?", ok: "Remove", danger: 1}).then(function(y){ if(y) FS.collection("people").doc(MY).set({pt: "", ph: ""}, {merge: true}).then(function(){ ME.pt = ""; ME.ph = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); }); }
       else if(k === "msg") openDm(u); else if(k === "call") openDmThenCall(u, false); else if(k === "vid") openDmThenCall(u, true);
       else if(k === "info"){ var id = dmId(MY, u); if(CHATS[id]){ if(OPEN !== id || VIEW !== "chat") openChat(id); go("info", {}); } else openDm(u); }
     }});
 }
-function coverCard(){ var me = ME || {}; photoCard({title: "Cover photo", sub: me.name || "", pt: me.cvt, ph: me.cv, key: MY, acts: [["edit", IC.cam, me.cvt ? "Change cover" : "Add cover"]].concat(me.cvt ? [["rm", IC.trash, "Remove"]] : []), on: function(k){ if(k === "edit") pickPhoto("cover"); else if(k === "rm" && confirm("Remove cover photo?")) FS.collection("people").doc(MY).set({cvt: "", cv: ""}, {merge: true}).then(function(){ ME.cvt = ""; ME.cv = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); } }); }
+function coverCard(){ var me = ME || {}; photoCard({title: "Cover photo", sub: me.name || "", pt: me.cvt, ph: me.cv, key: MY, acts: [["edit", IC.cam, me.cvt ? "Change cover" : "Add cover"]].concat(me.cvt ? [["rm", IC.trash, "Remove"]] : []), on: function(k){ if(k === "edit") pickPhoto("cover"); else if(k === "rm") ask("", {title: "Remove cover photo?", ok: "Remove", danger: 1}).then(function(y){ if(y) FS.collection("people").doc(MY).set({cvt: "", cv: ""}, {merge: true}).then(function(){ ME.cvt = ""; ME.cv = ""; $("ycW").removeAttribute("data-v"); paint(true); }).catch(function(){}); }); } }); }
 function groupCard(){ var c = CHATS[OPEN]; if(!c) return; var adm = (c.admins || []).indexOf(MY) >= 0; photoCard({title: c.title || "Group", sub: (c.members || []).length + " members", pt: c.pt, ph: c.ph, key: c.id, acts: adm ? [["edit", IC.cam, c.pt ? "Change photo" : "Add photo"]] : [], on: function(k){ if(k === "edit") groupPhoto("photo"); } }); }
 // ---------- contact / group info ----------
 function infoView(w){
@@ -1987,12 +2004,13 @@ function memberMenu(u){ var c = CHATS[OPEN], adm = (c.admins || []).indexOf(MY) 
   sheet('<div class="ycShT">' + esc(fullName(u)) + '</div>' + acts.map(function(a){ return '<button class="ycAct' + (a[0] === "rm" ? " red" : "") + '" data-a="' + a[0] + '"><span>' + a[1] + '</span>' + a[2] + '</button>'; }).join(""), function(a){
     if(a === "msg") return openDm(u); if(a === "vc"){ return openDmThenCall(u, false); }
     var ref = FS.collection("chats").doc(OPEN); if(a === "adm") ref.update({admins: isA ? FV.arrayRemove(u) : FV.arrayUnion(u)}).catch(function(e){ toast(e.code || e.message); });
-    if(a === "rm" && confirm("Remove " + fullName(u) + "?")) ref.update({members: FV.arrayRemove(u), admins: FV.arrayRemove(u)}).then(function(){ return ref.collection("m").add({k: "sys", t: first(MY) + " removed " + first(u), by: MY, at: now()}); }).catch(function(e){ toast(e.code || e.message); }); }); }
+    if(a === "rm") ask("", {title: "Remove " + fullName(u) + " from the group?", ok: "Remove", danger: 1}).then(function(y){ if(y) ref.update({members: FV.arrayRemove(u), admins: FV.arrayRemove(u)}).then(function(){ return ref.collection("m").add({k: "sys", t: first(MY) + " removed " + first(u), by: MY, at: now()}); }).catch(function(e){ toast(e.code || e.message); }); }); }); }
 function groupPhoto(kind){ var f = $("ycPhF"); f.onchange = function(){ var x = f.files[0]; f.value = ""; if(!x) return;
   cropUpload(x, "photo").then(function(a){
     var u = {pt: a[0] ? a[0].u : "", ph: a[1].id}; if(VIEW === "newgroup"){ PARAM.pt = u.pt; PARAM.ph = u.ph; $("ycW").removeAttribute("data-v"); return paint(true); }
     return FS.collection("chats").doc(OPEN).update(u); }).catch(function(e){ toast(e.message || e); }); }; f.click(); }
-function leaveGroup(){ var id = OPEN; if(!confirm("Exit this group?")) return; FS.collection("chats").doc(id).collection("m").add({k: "sys", t: first(MY) + " left", by: MY, at: now()}).then(function(){ return FS.collection("chats").doc(id).update({members: FV.arrayRemove(MY), admins: FV.arrayRemove(MY)}); }).then(function(){ OPEN = null; STACK = []; VIEW = "home"; stopMsgs(); paint(true); }).catch(function(e){ toast(e.code || e.message); }); }
+function leaveGroup(){ var id = OPEN; ask("", {title: "Exit this group?", ok: "Exit", danger: 1}).then(function(y){ if(y) leaveGroup2(id); }); }
+function leaveGroup2(id){ FS.collection("chats").doc(id).collection("m").add({k: "sys", t: first(MY) + " left", by: MY, at: now()}).then(function(){ return FS.collection("chats").doc(id).update({members: FV.arrayRemove(MY), admins: FV.arrayRemove(MY)}); }).then(function(){ OPEN = null; STACK = []; VIEW = "home"; stopMsgs(); paint(true); }).catch(function(e){ toast(e.code || e.message); }); }
 function archivedView(w){ var list = visibleChats(true); w.innerHTML = bar(BACKB(), '<b>Archived</b>', list.length + " chats") + '<div class="ycScroll">' + (list.map(chatRow).join("") || '<div class="ycEmpty"><span>No archived chats. Long-press a chat → Archive.</span></div>') + '</div>'; bind(w); }
 var STARS = null;
 function starredView(w){ w.innerHTML = bar(BACKB(), '<b>Starred messages</b>', "") + '<div class="ycScroll" id="ycStars"><div class="ycEmpty sm"><span>Loading…</span></div></div>'; bind(w);
@@ -2087,7 +2105,7 @@ function act(a, el){
   case "addm": return go("pick", {mode: "add", sel: {}});
   case "mem": return memberMenu(u);
   case "leave": return leaveGroup();
-  case "cdel2": var c2 = OPEN; if(!confirm("Delete this chat for you?")) return; var uu = {}; uu["hid." + MY] = now(); uu["n." + MY] = 0; FS.collection("chats").doc(c2).update(uu).then(function(){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); paint(true); }).catch(function(){}); return;
+  case "cdel2": var c2 = OPEN; ask("Messages stay for the other people.", {title: "Delete this chat for you?", ok: "Delete", danger: 1}).then(function(y){ if(!y) return; var uu = {}; uu["hid." + MY] = now(); uu["n." + MY] = 0; FS.collection("chats").doc(c2).update(uu).then(function(){ STACK = []; VIEW = "home"; OPEN = null; stopMsgs(); paint(true); }).catch(function(){}); }); return;
   case "call": return startCallChat(OPEN, false);
   case "vcall": return startCallChat(OPEN, true);
   case "showcall": return showCallUi();
@@ -2130,7 +2148,7 @@ function startCall(o){
   if(CALL){ showCallUi(); return; } if(!ME) return toast("Set up your profile first");
   var mem = o.members.filter(function(u, i, a){ return a.indexOf(u) === i; }); if(mem.indexOf(MY) < 0) mem.unshift(MY);
   if(mem.length < 2) return toast("Pick at least one person");
-  if(mem.length > 8 && !confirm("Calls work best with up to 8 people" + (o.video ? " (video: 4–6)" : "") + ". Continue?")) return;
+  if(mem.length > 8 && !o.okBig) return ask("Calls work best with up to 8 people" + (o.video ? " (video: 4–6)" : "") + ".", {title: "Big call", ok: "Continue"}).then(function(y){ if(y){ o.okBig = 1; startCall(o); } });
   getMedia(o.video).then(function(st){
     var ref = FS.collection("calls").doc(), t = now(), j = {}; j[MY] = t; var was = {}; was[MY] = 1;
     CALL = {id: ref.id, cid: o.cid || "", group: !!o.group, video: !!o.video, title: o.title, by: MY, members: mem, st: st, pcs: {}, joined: j, t0: 0, out: true, muted: false, camOff: false, seen: {}, meet: o.meet || "", face: "user"};
@@ -3027,7 +3045,7 @@ h+=`<div class="card"><div class="slot"><div class="t"><b>${s[1]}</b>${s[2]?`<sm
 h+=slotAddCard(p);return h}
 function lastCard(){const L=S.last;if(!L)return '';return `<div class="card" style="margin-top:16px;border:2px solid #256B4B"><b style="font-size:14px">✔ ${L.n} articles saved</b><div class="note" style="margin-top:4px">Shipping plan: ${esc(L.plan)}. Graphs, shipping plans, defects and orders are updated.</div><div style="display:flex;gap:8px;margin-top:10px;align-items:center"><button class="btn ghost" style="flex:1" data-a="lastopen">View in Home</button><button class="x" data-a="lastundo">Undo</button></div></div>`}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]');if(!t)return;const a=t.dataset.a,L=S.last;if(a==='lastopen'&&L){S.an.pl=L.plan.split(', ')[0];S.an.col='All';S.tab='home';S.shp=null;render();window.scrollTo(0,0)}
-else if(a==='lastundo'&&L){if(!confirm('Remove these '+L.n+' articles again?'))return;try{for(const [c,ids] of [['insp',L.insp],['ext',L.ext],['activities',L.act]])for(const id of ids)await DB.collection(c).doc(id).delete();S.last=null;render();toast('Removed')}catch(x){toast('Could not remove')}}});
+else if(a==='lastundo'&&L){if(!(await window.yqAsk('',{title:'Remove these '+L.n+' articles again?',ok:'Remove',danger:1})))return;try{for(const [c,ids] of [['insp',L.insp],['ext',L.ext],['activities',L.act]])for(const id of ids)await DB.collection(c).doc(id).delete();S.last=null;render();toast('Removed')}catch(x){toast('Could not remove')}}});
 function activity(){let h=hero('Daily Activity','Log what you did today, with photos');h+=lastCard();
 if(!VIEW)h+=`<div class="card" style="margin-top:16px"><div class="fld"><label for="f_type">ACTIVITY</label><select id="f_type">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="fld" id="cmtbox" style="display:none"><label for="f_cmt">REASON FOR CMT VISIT</label><select id="f_cmt">${CMTR.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="fld" id="progbox"><label for="f_prog">PROGRAM</label><select id="f_prog">${['General'].concat(T180.length?['T180']:[]).concat(PROGS).map(p=>`<option ${p===(S.pp==='T180'?(S.pq==='All'?'':S.pq):S.pp)?'selected':''}>${esc(p)}</option>`).join('')}</select></div><div class="fld" id="mpbox" style="display:none"><label>PROGRAMS (TAP ALL THAT APPLY)</label><div style="display:flex;flex-wrap:wrap;gap:8px">${PROGS.map(p=>`<label class="mpl"><input type="checkbox" class="mpc" value="${esc(p)}">${esc(p)}</label>`).join('')}</div><div class="note" style="margin-top:6px">One entry is saved for each program you tick.</div></div><div class="fld" id="istgbox" style="display:none"><label for="f_istage">INSPECTION STAGE</label><select id="f_istage"><option>Final</option><option>Partial</option></select></div><div class="fld" id="stgbox"><label for="f_stage">STAGE</label><select id="f_stage">${STAGES.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="fld"><label for="f_date">DATE</label><input type="date" id="f_date" value="${today()}"></div><div class="fld"><label for="f_note">NOTES</label><textarea id="f_note" placeholder="What was checked, what was found"></textarea></div><div class="fld"><label for="f_files">PHOTOS AND FILES</label><input type="file" id="f_files" multiple accept="image/*,.pdf,.csv,.xlsx,.xls" style="font-size:13px"><div class="note" style="margin-top:6px">Approvals go into the program’s QA folder automatically. For external inspection, Excel or PDF files are saved as the packing list.</div></div><button class="btn full" data-a="save">Save activity</button></div>`;
 h+=impCard();h+=`<div class="sec"><span>History</span><select id="af" data-ch="af" style="width:auto;min-height:38px;font-size:13px"><option>All</option>${['General'].concat(T180.length?['T180']:[]).concat(PROGS).map(p=>`<option ${p===S.af?'selected':''}>${esc(p)}</option>`).join('')}</select></div><div id="actlist">${actList()}</div>`;return h}
@@ -5432,7 +5450,7 @@ function Studio(el, opts){
     side.querySelectorAll(".stu-fx").forEach(function(e){ e.onclick = function(){ selectFeature(+e.dataset.fx); }; });
     if(S.step >= 0 && S.model.steps[S.step]){ var sel_ = side.querySelector('.stu-step[data-i="' + S.step + '"]'); if(sel_){ sel_.classList.add("on"); } }
     $("sPrev").onclick = function(){ setStep(Math.max(-1, S.step - 1)); }; $("sNext").onclick = function(){ setStep(Math.min(S.model.steps.length - 1, S.step + 1)); };
-    $("spApply").onclick = function(){ try{ var j = JSON.parse($("spJson").value); if(!BUILD[j.type]) throw 0; setEmpty(false); mkTypes(); S.type = j.type; S.sp = Object.assign({}, DEFAULTS[j.type], j); rebuild(); }catch(e){ alert("JSON not valid"); } };
+    $("spApply").onclick = function(){ try{ var j = JSON.parse($("spJson").value); if(!BUILD[j.type]) throw 0; setEmpty(false); mkTypes(); S.type = j.type; S.sp = Object.assign({}, DEFAULTS[j.type], j); rebuild(); }catch(e){ yqAsk('',{title:'JSON not valid',alert:1}); } };
     $("spPng").onclick = function(){ draw(); var a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = "YQI_3D_" + S.type + ".png"; a.click(); };
   }
   function redrawStepsOnly(){ var m = S.model; root.querySelectorAll(".stu-step").forEach(function(e, i){ var s = m.steps[i]; if(s){ e.querySelector("b").textContent = s.n; e.querySelector("small").textContent = s.m; } }); }
