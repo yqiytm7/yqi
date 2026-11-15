@@ -78,7 +78,7 @@ service cloud.firestore {
       allow read: if isStaff() || (isCust() && ws == custWs());
       allow write: if canWrite();
       // the All customers workspace (Inspection Summary, CAPA, reports) is for QA and above
-      match /{col}/{id} { allow read: if (ws != '_all' && isStaff()) || canAll() || (isCust() && ws == custWs() && col in ['seed', 'cfg', 'orders', 'items', 'specdata', 'ext', 'shadeov', 'shdyn', 'slotcfg']); allow write: if canWrite(); }
+      match /{col}/{id} { allow read: if (ws != '_all' && isStaff()) || canAll() || (isCust() && ws == custWs() && col in ['seed', 'cfg', 'orders', 'items', 'specdata', 'ext', 'shadeov', 'shdyn', 'slotcfg']); allow write: if canWrite() || (ws == '_all' && col == 'capa' && canAll()); }
     }
     // employee numbers: one account per number
     match /ecodes/{code} { allow read: if canRead(); allow create: if canRead() && request.resource.data.uid == me(); allow delete: if isOwner() || (canRead() && resource.data.uid == me()); }
