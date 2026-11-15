@@ -23,7 +23,7 @@
     PN.addListener("pushNotificationActionPerformed", function(a){ var d = (a && a.notification && a.notification.data) || {}; var go = function(){ if(window.YQCHAT && window.YQCHAT.openChat) window.YQCHAT.openChat(d.cid || ""); }; setTimeout(go, 2500); });
     setTimeout(function(){ PN.checkPermissions().then(function(p){ return p.receive === "granted" ? p : PN.requestPermissions(); }).then(function(p){ if(p.receive === "granted") PN.register(); }).catch(function(){}); }, 3000); }catch(e){} }
   // ---- one-tap app update (new APK from GitHub) ----
-  function updBar(v, url){ if(document.getElementById("yqUpd")) return; var b = document.createElement("div"); b.id = "yqUpd";
+  function updBar(v, url){ if(document.getElementById("yqApkUpd")) return; var b = document.createElement("div"); b.id = "yqApkUpd";
     b.style.cssText = "position:fixed;left:12px;right:12px;bottom:14px;z-index:2147483600;background:#0e240e;color:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;font:600 14px Manrope,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35)";
     b.innerHTML = '<span style="flex:1">New YQI app version (' + v + ') is ready</span><button style="border:0;background:#7DB82E;color:#fff;font:700 14px inherit;font-family:inherit;border-radius:999px;padding:9px 16px">Update</button><button aria-label="Later" style="border:0;background:none;color:#cfe3b6;font-size:20px;padding:0 4px">×</button>';
     (document.body || document.documentElement).appendChild(b); var bt = b.querySelectorAll("button");
@@ -60,6 +60,10 @@ var URD = {"Chats": "چیٹس", "Updates": "اپڈیٹس", "Calls": "کالز", 
   var go = function(){ tr(document.body); mo.observe(document.body, {childList: true, subtree: true, characterData: true}); var st = document.createElement("style"); st.textContent = "body,button,input,textarea{font-family:'Noto Naskh Arabic','Segoe UI',Manrope,system-ui,sans-serif}"; document.head.appendChild(st); };
   if(document.body) go(); else document.addEventListener("DOMContentLoaded", go); })();
 
+// ---------- updates: apply right away when the app has just opened; check again when it comes back ----------
+(function(){ var mark = function(){ window.__yqTouched = 1; window.__yqResume = 0; }; ["pointerdown", "keydown"].forEach(function(ev){ addEventListener(ev, mark, {capture: true}); });
+  var hid = 0; document.addEventListener("visibilitychange", function(){ if(document.hidden){ hid = Date.now(); return; } if(hid && Date.now() - hid > 10 * 60000){ window.__yqTouched = 0; window.__yqResume = 1; setTimeout(function(){ window.__yqResume = 0; }, 20000); try{ fetch(location.pathname, {cache: "no-store"}).catch(function(){}); }catch(e){} } }); })();
+
 // ---------- offline banner ----------
 (function(){ function upd(){ var b = document.getElementById("yqOffB"); if(navigator.onLine){ if(b) b.remove(); return; } if(b) return; b = document.createElement("div"); b.id = "yqOffB"; b.textContent = "No internet · showing saved data"; b.style.cssText = "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483500;background:#3a3f36;color:#fff;font:600 12.5px Manrope,system-ui,sans-serif;padding:7px 14px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none"; (document.body || document.documentElement).appendChild(b); }
   window.addEventListener("online", upd); window.addEventListener("offline", upd); if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", upd); else upd(); })();
@@ -93,7 +97,7 @@ window.YQBACK = (function(){
     has: function(tag){ return st.some(function(x){ return x.t === tag && !x.dead; }); }, count: function(tag){ return st.filter(function(x){ return x.t === tag && !x.dead; }).length; },
     killTag: function(tag){ st.forEach(function(x){ if(x.t === tag) x.dead = true; }); }, purge: function(){ if(st.length && st[st.length - 1].dead && !purging){ purging = true; try{ history.back(); }catch(e){ purging = false; } } }, depth: function(){ return st.length; }};
 })();
-try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function(e){ if(e.data && e.data.yqUpdate && !document.getElementById("yqUpd")){ var b = document.createElement("button"); b.id = "yqUpd"; b.textContent = "New version ready · tap to update"; b.style.cssText = "position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483600;border:0;border-radius:20px;padding:9px 16px;background:#16230f;color:#fff;font:700 13px Manrope,system-ui,sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.3)"; b.onclick = function(){ location.reload(); }; document.body.appendChild(b); setTimeout(function(){ try{ b.remove(); }catch(x){} }, 15000); } }); }catch(e){}
+try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function(e){ if(e.data && e.data.yqUpdate && !window.__yqTouched && (performance.now() < 25000 || window.__yqResume)){ location.reload(); return; } if(e.data && e.data.yqUpdate && !document.getElementById("yqUpd")){ var b = document.createElement("button"); b.id = "yqUpd"; b.textContent = "New version ready · tap to update"; b.style.cssText = "position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483600;border:0;border-radius:20px;padding:9px 16px;background:#16230f;color:#fff;font:700 13px Manrope,system-ui,sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.3)"; b.onclick = function(){ location.reload(); }; document.body.appendChild(b); setTimeout(function(){ try{ b.remove(); }catch(x){} }, 15000); } }); }catch(e){}
 // ======= 1) PASTE YOUR FIREBASE CONFIG HERE (Firebase console → Project settings → Your apps → Web app) =======
 var FIREBASE_CONFIG = {
   apiKey: "AIzaSyDuYarXV14aENaqjRA-G3nKk_HgrFYgOho",
