@@ -2557,7 +2557,7 @@ var _pickView = pickView; pickView = function(w){ _pickView(w); if(PARAM.mode ==
 function pushNote(c, preview){ try{ var g = c.type === "group"; pushSend(c.members || [], g ? chatTitle(c) : fullName(MY), (g ? first(MY) + ": " : "") + preview, c.id, "msg", c); }catch(e){} }
 // ---------- push to phones that are closed (Cloudflare worker → Firebase Cloud Messaging) ----------
 var PUSHURL = "", AUTHO = null;
-function pushInit(){ FS.collection("meta").doc("push").get().then(function(d){ PUSHURL = (d.exists && d.data().url) || ""; window.YQPUSH_ON = !!PUSHURL; }).catch(function(){}); if(window.YQPUSHTOK) setToken(window.YQPUSHTOK.t, window.YQPUSHTOK.k); }
+function pushInit(){ FS.collection("meta").doc("push").get().catch(function(){ return null; }).then(function(d){ PUSHURL = (d && d.exists && d.data().url) || "https://yqi-push.yqi-ytm7.workers.dev"; return fetch(PUSHURL).then(function(r){ return r.json(); }).then(function(j){ window.YQPUSH_ON = !!(j && j.ready); if(!window.YQPUSH_ON && !/push\.test/.test(PUSHURL)) PUSHURL = PUSHURL; }); }).catch(function(){}); if(window.YQPUSHTOK) setToken(window.YQPUSHTOK.t, window.YQPUSHTOK.k); }
 function setToken(t, k){ window.YQPUSHTOK = {t: t, k: k}; if(!MY || !t) return; var h = 0; for(var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; var key = (k || "a") + h.toString(36);
   if(ME && ME.fcm && ME.fcm[key] === t) return; var x = {}; x["fcm." + key] = t; FS.collection("people").doc(MY).update(x).then(function(){ ME = ME || {}; ME.fcm = ME.fcm || {}; ME.fcm[key] = t; }).catch(function(){}); }
 function pushSend(mem, title, body, cid, kind, c){ if(!PUSHURL || !AUTHO || !AUTHO.currentUser) return;
