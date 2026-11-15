@@ -25,4 +25,5 @@ g = g.replace(/release\s*\{(\s*)minifyEnabled/, 'release {$1signingConfig signin
 if (!g.includes('signingConfig signingConfigs.release')) throw new Error('signing not applied');
 g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'androidx.biometric:biometric:1.1.0'");
 fs.writeFileSync(gf, g);
+fs.copyFileSync(path.join(__dirname, 'google-services.json'), path.join(A, 'google-services.json'));
 console.log('YQI patch applied, version 1.0.' + run);

@@ -1,5 +1,10 @@
 package com.yunustextile.yqi;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +22,19 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(YqNativePlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Notification channels used by push messages (messages, calls)
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            NotificationChannel m = new NotificationChannel("yqi_msg", "YQI messages", NotificationManager.IMPORTANCE_HIGH);
+            m.enableVibration(true);
+            nm.createNotificationChannel(m);
+            NotificationChannel c = new NotificationChannel("yqi_call", "YQI calls", NotificationManager.IMPORTANCE_HIGH);
+            c.enableVibration(true);
+            c.setVibrationPattern(new long[]{0, 600, 300, 600, 300, 600});
+            c.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            nm.createNotificationChannel(c);
+        }
 
         // Draw behind the bars ourselves and keep the page clear of status bar, nav bar and the keyboard.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
