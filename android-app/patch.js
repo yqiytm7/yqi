@@ -11,7 +11,7 @@ const cp = (s, t) => { for (const f of fs.readdirSync(s)) { const a = path.join(
 cp(path.join(__dirname, 'res'), RES);
 // permissions
 const mf = path.join(M, 'AndroidManifest.xml'); let m = fs.readFileSync(mf, 'utf8');
-const perms = ['CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'ACCESS_NETWORK_STATE'];
+const perms = ['REQUEST_INSTALL_PACKAGES', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'ACCESS_NETWORK_STATE'];
 const add = perms.filter(p => !m.includes('android.permission.' + p + '"')).map(p => `    <uses-permission android:name="android.permission.${p}" />`).join('\n')
   + '\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />\n';
 m = m.replace('</manifest>', add + '</manifest>');
@@ -23,5 +23,6 @@ g = g.replace(/versionCode\s+\d+/, 'versionCode ' + run).replace(/versionName\s+
 g = g.replace(/android\s*\{/, `android {\n    signingConfigs { release { storeFile file('../../yqi.jks'); storePassword 'yqi-ytm7-2026'; keyAlias 'yqi'; keyPassword 'yqi-ytm7-2026' } }`);
 g = g.replace(/release\s*\{(\s*)minifyEnabled/, 'release {$1signingConfig signingConfigs.release$1minifyEnabled');
 if (!g.includes('signingConfig signingConfigs.release')) throw new Error('signing not applied');
+g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'androidx.biometric:biometric:1.1.0'");
 fs.writeFileSync(gf, g);
 console.log('YQI patch applied, version 1.0.' + run);

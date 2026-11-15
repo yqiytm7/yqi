@@ -28,6 +28,15 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
+import android.content.pm.PackageInfo;
+import android.provider.Settings;
+import com.getcapacitor.JSObject;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -184,5 +193,74 @@ public class YqNativePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("save failed: " + e.getMessage());
         }
+    }
+
+    // ---------- app version + one-tap update ----------
+    @PluginMethod
+    public void info(PluginCall call) {
+        JSObject o = new JSObject();
+        try {
+            PackageInfo pi = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            o.put("code", Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode);
+            o.put("name", pi.versionName);
+        } catch (Exception e) { o.put("code", 0); }
+        o.put("bio", bioOk());
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void update(PluginCall call) {
+        final String url = call.getString("url", "");
+        final Context c = getContext();
+        if (Build.VERSION.SDK_INT >= 26 && !c.getPackageManager().canRequestPackageInstalls()) {
+            Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + c.getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { c.startActivity(i); } catch (Exception e) { }
+            call.reject("allow");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                File f = new File(c.getCacheDir(), "YQI-update.apk");
+                HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
+                h.setInstanceFollowRedirects(true);
+                h.connect();
+                int n = h.getContentLength(), got = 0, last = -1;
+                try (InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(f)) {
+                    byte[] b = new byte[65536]; int r;
+                    while ((r = in.read(b)) > 0) {
+                        o.write(b, 0, r); got += r;
+                        int p = n > 0 ? (int) (got * 100L / n) : 0;
+                        if (p != last) { last = p; JSObject ev = new JSObject(); ev.put("p", p); notifyListeners("updProgress", ev); }
+                    }
+                }
+                Uri u = FileProvider.getUriForFile(c, c.getPackageName() + ".fileprovider", f);
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(u, "application/vnd.android.package-archive");
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                c.startActivity(i);
+                call.resolve();
+            } catch (Exception e) { call.reject("download failed: " + e.getMessage()); }
+        }).start();
+    }
+
+    // ---------- fingerprint / face / phone PIN lock ----------
+    private int auths() { return Build.VERSION.SDK_INT >= 30 ? (BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL) : BiometricManager.Authenticators.BIOMETRIC_WEAK; }
+    private boolean bioOk() { try { return BiometricManager.from(getContext()).canAuthenticate(auths()) == BiometricManager.BIOMETRIC_SUCCESS; } catch (Exception e) { return false; } }
+
+    @PluginMethod
+    public void bio(PluginCall call) {
+        if (!bioOk()) { call.reject("none"); return; }
+        getActivity().runOnUiThread(() -> {
+            try {
+                BiometricPrompt bp = new BiometricPrompt(getActivity(), ContextCompat.getMainExecutor(getContext()), new BiometricPrompt.AuthenticationCallback() {
+                    @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult r) { call.resolve(); }
+                    @Override public void onAuthenticationError(int code, CharSequence msg) { call.reject(String.valueOf(msg)); }
+                });
+                BiometricPrompt.PromptInfo.Builder b = new BiometricPrompt.PromptInfo.Builder().setTitle("Unlock YQI").setSubtitle("Use your fingerprint, face or phone lock").setAllowedAuthenticators(auths());
+                if (Build.VERSION.SDK_INT < 30) b.setNegativeButtonText("Cancel");
+                bp.authenticate(b.build());
+            } catch (Exception e) { call.reject(e.getMessage()); }
+        });
     }
 }
