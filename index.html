@@ -17,6 +17,11 @@
     .then(function(x){ return N.saveFile({name: name || "file", data: x[0], mime: x[1] || "application/octet-stream"}); }).catch(function(e){ N.toast({text: "Could not save the file"}).catch(function(){}); }); }
   var oc = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function(){ var h = this.href || ""; if(this.hasAttribute("download") && /^(blob:|data:)/.test(h)){ save(this.getAttribute("download"), h); return; } return oc.apply(this, arguments); };
+  // ---- push notifications (app closed) ----
+  var PN = C.Plugins.PushNotifications;
+  if(PN){ try{ PN.addListener("registration", function(t){ window.YQPUSHTOK = {t: t.value, k: "a"}; if(window.YQCHAT && window.YQCHAT.setToken) window.YQCHAT.setToken(t.value, "a"); });
+    PN.addListener("pushNotificationActionPerformed", function(a){ var d = (a && a.notification && a.notification.data) || {}; var go = function(){ if(window.YQCHAT && window.YQCHAT.openChat) window.YQCHAT.openChat(d.cid || ""); }; setTimeout(go, 2500); });
+    setTimeout(function(){ PN.checkPermissions().then(function(p){ return p.receive === "granted" ? p : PN.requestPermissions(); }).then(function(p){ if(p.receive === "granted") PN.register(); }).catch(function(){}); }, 3000); }catch(e){} }
   // ---- one-tap app update (new APK from GitHub) ----
   function updBar(v, url){ if(document.getElementById("yqUpd")) return; var b = document.createElement("div"); b.id = "yqUpd";
     b.style.cssText = "position:fixed;left:12px;right:12px;bottom:14px;z-index:2147483600;background:#0e240e;color:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;font:600 14px Manrope,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35)";
@@ -38,6 +43,12 @@
   document.addEventListener("visibilitychange", function(){ if(document.hidden) lockAt = Date.now(); else if(lockAt && Date.now() - lockAt > 60000) bioLock(); });
   document.addEventListener("click", function(e){ var a = e.target && e.target.closest && e.target.closest("a[download]"); if(a && /^(blob:|data:)/.test(a.href || "")){ e.preventDefault(); e.stopPropagation(); save(a.getAttribute("download"), a.href); } }, true);
 })();
+
+// ---------- web push token (Chrome / installed web app) ----------
+var VAPID = "BP7_Qec5FRLX0rIisqpYA4Cm-AAk3Jws6-VwcKtfJyLmOa24VWaoJ8Km_q5DJjwA7ZnW_JBFbL7O9_1-wHeVJwY";
+function webPush(){ if(window.YQNATIVE || !("serviceWorker" in navigator) || !window.Notification || Notification.permission !== "granted" || !window.firebase) return;
+  var go = function(){ navigator.serviceWorker.getRegistration().then(function(reg){ if(!reg) return; return firebase.messaging().getToken({vapidKey: VAPID, serviceWorkerRegistration: reg}).then(function(t){ if(t && window.YQCHAT && window.YQCHAT.setToken) window.YQCHAT.setToken(t, "w"); }); }).catch(function(){}); };
+  if(firebase.messaging) return go(); loadJs("https://www.gstatic.com/firebasejs/" + FBV + "/firebase-messaging-compat.js").then(go).catch(function(){}); }
 
 // ---------- Urdu / English ----------
 var URD = {"Chats": "چیٹس", "Updates": "اپڈیٹس", "Calls": "کالز", "Tasks": "کام", "All": "سب", "Unread": "نہ پڑھے", "Groups": "گروپس", "New group": "نیا گروپ", "New meeting": "نئی میٹنگ", "Starred messages": "اہم پیغامات", "Archived chats": "آرکائیو چیٹس", "Profile & settings": "پروفائل اور سیٹنگز", "Close chat": "چیٹ بند کریں", "View contact": "رابطہ دیکھیں", "Group info": "گروپ کی معلومات", "Search in chat": "چیٹ میں تلاش", "Media, links and docs": "تصاویر، لنکس اور فائلیں", "Wallpaper": "وال پیپر", "Mute notifications": "اطلاعات بند", "Unmute notifications": "اطلاعات کھولیں", "Archive chat": "چیٹ آرکائیو کریں", "Unarchive chat": "آرکائیو سے نکالیں", "Block": "بلاک کریں", "Unblock": "ان بلاک", "Delete chat": "چیٹ حذف کریں", "Reply": "جواب", "Copy": "کاپی", "Forward": "آگے بھیجیں", "Star": "اہم", "Unstar": "اہم ہٹائیں", "Edit": "ترمیم", "Info": "معلومات", "Delete for me": "میرے لیے حذف", "Delete for everyone": "سب کے لیے حذف", "Start meeting": "میٹنگ شروع کریں", "Schedule": "شیڈول", "Call someone": "کال کریں", "Upcoming meetings": "آنے والی میٹنگز", "Recent": "حالیہ", "Past meetings · minutes": "پرانی میٹنگز · منٹس", "Agenda": "ایجنڈا", "Minutes": "منٹس", "Add a task": "کام شامل کریں", "Tasks from this meeting": "اس میٹنگ کے کام", "Share minutes in chat": "منٹس چیٹ میں بھیجیں", "Download": "ڈاؤن لوڈ", "My tasks": "میرے کام", "Done": "مکمل", "New task": "نیا کام", "Edit task": "کام میں ترمیم", "Task": "کام", "Who will do it": "کون کرے گا", "Due": "آخری تاریخ", "Add task": "کام شامل کریں", "Save": "محفوظ کریں", "Cancel": "منسوخ", "Delete": "حذف", "Mute": "خاموش", "End": "ختم", "Notes": "نوٹس", "Output": "آواز", "Speaker": "اسپیکر", "Earpiece": "کان والا", "Ring all": "سب کو بلائیں", "Accept": "قبول", "Decline": "رد", "Meeting notes": "میٹنگ نوٹس", "Other discussion": "دیگر گفتگو", "Not discussed": "بات نہیں ہوئی", "Customer groups": "کسٹمر گروپس", "Join": "شامل ہوں", "Open": "کھولیں", "People on YQI": "YQI پر لوگ", "Messages and files": "پیغامات اور فائلیں", "Inspection Summary": "انسپیکشن سمری", "CAPA tracker": "کیپا ٹریکر", "Today's report": "آج کی رپورٹ", "Upload inspections": "انسپیکشن اپلوڈ", "Upload file": "فائل اپلوڈ", "Download template": "ٹیمپلیٹ ڈاؤن لوڈ", "Customer": "کسٹمر", "All customers": "تمام کسٹمرز", "Open ›": "کھولیں ›", "Share ›": "بھیجیں ›", "Preview": "دیکھیں", "Send on WhatsApp": "واٹس ایپ پر بھیجیں", "Overdue": "تاخیر", "Closed": "بند", "In progress": "جاری", "+ New CAPA": "+ نیا کیپا", "Problem / complaint": "مسئلہ / شکایت", "Root cause (why it happened)": "بنیادی وجہ (کیوں ہوا)", "Corrective action (fix now)": "اصلاحی قدم (ابھی ٹھیک کریں)", "Preventive action (stop it coming back)": "احتیاطی قدم (دوبارہ نہ ہو)", "Owner (who does it)": "ذمہ دار", "Due date": "آخری تاریخ", "Status": "حالت", "Source": "ذریعہ", "Date": "تاریخ", "Add CAPA": "کیپا شامل کریں", "Daily floor and external data, wastage, reports and presentations": "روزانہ فلور اور ایکسٹرنل ڈیٹا، ویسٹیج، رپورٹس اور پریزنٹیشن", "Complaints, root cause, actions and who closes them": "شکایات، وجہ، اقدامات اور ذمہ دار", "One tap to send the day's quality summary on WhatsApp": "ایک ٹچ میں دن کی کوالٹی رپورٹ واٹس ایپ پر", "Quality": "کوالٹی", "Intelligence": "انٹیلیجنس", "Dark": "ڈارک", "Light": "لائٹ", "Sign out": "سائن آؤٹ", "Search chats, people, messages": "چیٹس، لوگ، پیغامات تلاش کریں", "Message": "پیغام", "Type a note or decision": "نوٹ یا فیصلہ لکھیں", "Add a point to the agenda": "ایجنڈے میں نکتہ شامل کریں", "You blocked this contact.": "آپ نے اس رابطے کو بلاک کیا ہے۔", "Fingerprint lock": "فنگر پرنٹ لاک", "✓ Fingerprint lock": "✓ فنگر پرنٹ لاک", "Offline copy": "آف لائن کاپی", "✓ Offline copy": "✓ آف لائن کاپی"};
@@ -276,6 +287,7 @@ function afterLogin(u){
   if(!allowedEmail(EMAIL)){ ssSet("yqi_lc", ""); var go = function(){ loginScreen({t: "Only @" + CO_DOMAIN + " or Gmail emails can use YQI. " + EMAIL + " is not allowed.", bad: 1}); }; AUTH.signOut().then(go, go); return; }
   showGate('<h1>Loading…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
   try{ if(window.YQCHAT) window.YQCHAT.start({fs: FS, auth: AUTH, user: u, email: EMAIL}); }catch(e){}
+  setTimeout(webPush, 7000); window.yqWebPush = webPush;
   var lc = null; try{ lc = JSON.parse(ssGet("yqi_lc") || "null"); }catch(e){}
   var fresh = listMyWs().then(function(r){ if(!r.first) ssSet("yqi_lc", JSON.stringify({v: 2, email: EMAIL, owner: OWNER, list: r.list, at: Date.now()})); return r; });
   var lp = (lc && lc.v === 2 && lc.email === EMAIL && lc.list && lc.list.length && Date.now() - lc.at < 6 * 3600e3) ? loadEditors().then(function(){ OWNER = EMAIL === OWNER_EMAIL; var rl = OWNER ? "owner" : ISED ? "editor" : "viewer"; return {list: lc.list.map(function(w){ return Object.assign({}, w, {role: rl}); }), cached: 1}; }) : fresh;
@@ -1466,7 +1478,7 @@ var VIEW = "home", TAB = "chats", FILTER = "all", STACK = [], PARAM = {};
 var unMsgs = null, firstChats = true, MSGLIM = 60, REPLY = null, SEARCHQ = "";
 var MAXF = 12 * 1024 * 1024, CHUNK = 700000, DARK = false;
 function ask(m, o){ return window.yqAsk ? window.yqAsk(m, o) : Promise.resolve(window.confirm(m)); }
-window.YQCHAT = {alert: function(rid, text){ try{ qaAlert(rid, text); }catch(e){} }, start: start};
+window.YQCHAT = {setToken: function(t, k){ setToken(t, k); }, pushInit: function(){ pushInit(); }, openChat: function(cid){ try{ var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); if(cid && CHATS[cid]) openChat(cid); }catch(e){} }, alert: function(rid, text){ try{ qaAlert(rid, text); }catch(e){} }, start: start};
 
 // ---------- helpers ----------
 function $(id){ return document.getElementById(id); }
@@ -1611,7 +1623,7 @@ var saveT = 0; function saveSoon(){ clearTimeout(saveT); saveT = setTimeout(save
 function saveMsgs(cid){ try{ var keep = MSGS.filter(function(m){ return !m.pend; }).slice(-50).map(function(m){ var x = Object.assign({}, m); return x; }); localStorage.setItem("yqc_m_" + cid, JSON.stringify(keep)); }catch(e){ try{ localStorage.removeItem("yqc_m_" + cid); }catch(x){} } }
 
 // ---------- start ----------
-function start(o){
+function start(o){ AUTHO = o.auth || null; setTimeout(pushInit, 2500);
   if(started || !o || !o.fs || !o.user) return; started = true;
   FS = o.fs; FV = firebase.firestore.FieldValue; MY = o.user.uid || ("u" + hex(12)); EMAIL = String(o.email || o.user.email || "").toLowerCase();
   DARK = lsGet("yqc_dark") === "1" || (lsGet("yqc_dark") === null && lsGet("yqi_dark") === "1");
@@ -1646,7 +1658,7 @@ function badge(){ var b = $("ycFabN"); if(!b) return; if(!ME){ b.textContent = "
   var nt = $("ycTabN_chats"); if(nt){ nt.textContent = n; nt.style.display = n ? "" : "none"; }
   var su = STATUS.filter(function(s){ return s.by !== MY && !(s.v && s.v[MY]); }).length, ns = $("ycTabN_updates"); if(ns){ ns.style.display = su ? "" : "none"; }
 }
-function notifyMsg(c){
+function notifyMsg(c){ if(document.hidden && window.YQPUSH_ON && ME && ME.fcm && Object.keys(ME.fcm).length && window.YQNATIVE) return;
   if(c.type !== "group" && iBlocked(c.last && c.last.by)) return;
   var l = c.last, who = fullName(l.by), title = c.type === "group" ? (c.title || "Group") : who, body = (c.type === "group" ? who.split(" ")[0] + ": " : "") + (l.t || "");
   msgSound();
@@ -1681,7 +1693,7 @@ function panelOpen(){ var p = $("ycP"); return !!(p && p.classList.contains("on"
 function openPanel(){ var p = $("ycP"); if(!p) return; ac(); p.classList.add("on"); p.classList.toggle("dk", DARK); document.documentElement.classList.add("ycLock"); pushH(); if(!ME){ VIEW = "profile"; STACK = []; PARAM = {setup: 1}; } paint(); askNotif(); }
 function closeNow(){ var p = $("ycP"); if(!p) return; closeSheet(); p.classList.remove("on"); document.documentElement.classList.remove("ycLock"); stopMsgs(); OPEN = null; VIEW = ME ? "home" : "profile"; STACK = []; PARAM = {}; }
 function closePanel(){ closeNow(); BK.killTag("chat"); BK.purge(); }
-function askNotif(){ try{ if(window.Notification && Notification.permission === "default") Notification.requestPermission(); }catch(e){} }
+function askNotif(){ try{ if(window.Notification && Notification.permission === "default") Promise.resolve(Notification.requestPermission()).then(function(p){ if(p === "granted" && window.yqWebPush) window.yqWebPush(); }); }catch(e){} }
 function go(v, param){ STACK.push({v: VIEW, p: PARAM, o: OPEN}); pushH(); VIEW = v; PARAM = param || {}; paint(true); }
 function navBack(){ var s = STACK.pop(); closeSheet(); if(VIEW === "chat"){ stopMsgs(); REPLY = null; } if(!s){ VIEW = "home"; PARAM = {}; OPEN = null; } else { VIEW = s.v; PARAM = s.p; if(s.v === "chat" && s.o){ return openChat(s.o, true); } OPEN = s.v === "chat" ? s.o : (s.v === "info" ? s.o : null); } paint(true); }
 var RPT = 0; function repaint(){ if(!panelOpen()) return; clearTimeout(RPT); RPT = setTimeout(function(){ paint(false); }, 60); }
@@ -2542,7 +2554,15 @@ var _pickRows = pickRows; pickRows = function(){ if(PARAM.mode === "meetsel"){ P
 var _pickView = pickView; pickView = function(w){ _pickView(w); if(PARAM.mode === "meetsel"){ var b = document.querySelector('[data-c="pickdone"]'); if(b){ b.textContent = "Done"; b.disabled = false; } } };
 
 // ---------- background push hook (filled once the push server is set up) ----------
-function pushNote(c, preview){ try{ if(window.YQ_PUSH && typeof window.YQ_PUSH.msg === "function") window.YQ_PUSH.msg(c, preview, ME); }catch(e){} }
+function pushNote(c, preview){ try{ var g = c.type === "group"; pushSend(c.members || [], g ? chatTitle(c) : fullName(MY), (g ? first(MY) + ": " : "") + preview, c.id, "msg", c); }catch(e){} }
+// ---------- push to phones that are closed (Cloudflare worker → Firebase Cloud Messaging) ----------
+var PUSHURL = "", AUTHO = null;
+function pushInit(){ FS.collection("meta").doc("push").get().then(function(d){ PUSHURL = (d.exists && d.data().url) || ""; window.YQPUSH_ON = !!PUSHURL; }).catch(function(){}); if(window.YQPUSHTOK) setToken(window.YQPUSHTOK.t, window.YQPUSHTOK.k); }
+function setToken(t, k){ window.YQPUSHTOK = {t: t, k: k}; if(!MY || !t) return; var h = 0; for(var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; var key = (k || "a") + h.toString(36);
+  if(ME && ME.fcm && ME.fcm[key] === t) return; var x = {}; x["fcm." + key] = t; FS.collection("people").doc(MY).update(x).then(function(){ ME = ME || {}; ME.fcm = ME.fcm || {}; ME.fcm[key] = t; }).catch(function(){}); }
+function pushSend(mem, title, body, cid, kind, c){ if(!PUSHURL || !AUTHO || !AUTHO.currentUser) return;
+  var toks = []; mem.forEach(function(u){ if(u === MY) return; var p = PEOPLE[u]; if(!p || !p.fcm) return; if(kind !== "call" && c && c.mu && c.mu[u]) return; if(p.bl && p.bl[MY]) return; Object.keys(p.fcm).forEach(function(k){ toks.push(p.fcm[k]); }); });
+  if(!toks.length) return; AUTHO.currentUser.getIdToken().then(function(idt){ return fetch(PUSHURL, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({idToken: idt, tokens: toks, title: title, body: String(body || "").slice(0, 180), cid: cid || "", kind: kind || "msg"})}); }).catch(function(){}); }
 
 // ===================== voice + video calls and meetings (WebRTC, Firestore signalling) =====================
 var CALL = null;
@@ -2566,7 +2586,8 @@ function startCall(o){
     });
   }).catch(function(e){ toast(e && e.name === "NotAllowedError" ? "Please allow the " + (o.video ? "camera and " : "") + "microphone." : "Could not start call: " + (e.message || e)); CALL = null; });
 }
-function ringAll(mem, t){ mem.forEach(function(u){ if(u !== MY && !(CALL.joined || {})[u]) FS.collection("inbox").doc(u).set({ring: {id: CALL.id, cid: CALL.cid, from: MY, name: ME.name, pt: ME.pt || "", group: CALL.group, video: CALL.video, title: CALL.group ? CALL.title : "", at: t || now()}}, {merge: true}).catch(function(){}); }); }
+function ringAll(mem, t){ try{ var tgt = mem.filter(function(u){ return u !== MY && !(CALL.joined || {})[u]; }); pushSend(tgt, (CALL.video ? "📹 " : "📞 ") + (CALL.group ? CALL.title : fullName(MY)), CALL.group ? first(MY) + " is inviting you to a meeting" : "Incoming " + (CALL.video ? "video" : "voice") + " call — open YQI to answer", CALL.cid || "", "call"); }catch(e){}
+  mem.forEach(function(u){ if(u !== MY && !(CALL.joined || {})[u]) FS.collection("inbox").doc(u).set({ring: {id: CALL.id, cid: CALL.cid, from: MY, name: ME.name, pt: ME.pt || "", group: CALL.group, video: CALL.video, title: CALL.group ? CALL.title : "", at: t || now()}}, {merge: true}).catch(function(){}); }); }
 var RINGING = null;
 function onRing(r){ if(r && iBlocked(r.from)) return;
   if(!r || !r.id || r.from === MY) return; if(now() - (r.at || 0) > 50000) return; if(CALL && CALL.id === r.id) return; if(RINGING && RINGING.id === r.id) return;

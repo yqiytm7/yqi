@@ -31,7 +31,7 @@ self.addEventListener("fetch", e => {
 // YQI Chat: messages and calls that arrive while the app is closed (push server) or in the background
 self.addEventListener("push", e => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (x) { d = {title: "YQI", body: e.data ? e.data.text() : ""}; }
-  const n = d.notification || d.data || d;
+  const n = Object.assign({}, d.data || {}, d.notification || {}, d.notification || d.data ? {} : d);
   const call = n.kind === "call";
   e.waitUntil(self.registration.showNotification(n.title || "YQI Chat", {
     body: n.body || "", icon: "icon-192.png", badge: "icon-192.png", tag: n.tag || (call ? "call" : "msg"), renotify: true,
