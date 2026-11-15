@@ -24,6 +24,8 @@ service cloud.firestore {
     // whole app (QA and above)
     function canAll() { return isOwner() || isEditor() || lvl() in ['qa', 'auth'] || (lvl() == '' && inLocks()); }
     // company data: orders, specs, approvals (QC and above)
+    // duties set in People & access: somos, lead (line manager), insp
+    function duty(d) { return hasLv() && d in lvDoc().get('du', {}).get(em(), []); }
     function isStaff() { return canAll() || lvl() == 'qc' || (lvl() == '' && isCompany()); }
 
     // buyer-link tokens (meta/pubidx) are for staff only
@@ -85,7 +87,7 @@ service cloud.firestore {
     match /qi/{id} {
       allow read: if isStaff();
       allow create: if isStaff() && request.resource.data.email == em();
-      allow update: if canWrite() || (isStaff() && resource.data.email == em() && request.resource.data.email == em());
+      allow update: if canWrite() || (isStaff() && (resource.data.email == em() || resource.data.get('asg', '') == em() || duty('lead')) && request.resource.data.email == resource.data.email);
       allow delete: if canWrite();
     }
     // repacking reports
