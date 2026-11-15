@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function em() { return request.auth.token.email.lower(); }
+    function isOwner() { return signedIn() && em() == 'yqi.ytm7@gmail.com'; }
+    // anyone with a Yunus Textile email can look
+    function isCompany() { return signedIn() && em().matches('.*@yunustextile[.]com$'); }
+    function lvDoc() { return get(/databases/$(database)/documents/meta/levels).data; }
+    function hasLv() { return exists(/databases/$(database)/documents/meta/levels); }
+    // access level set by the owner in People & access: guest | qc | qa | auth
+    function lvl() { return hasLv() ? lvDoc().m.get(em(), '') : ''; }
+    // customers (purple) get chat only
+    function isCust() { return signedIn() && hasLv() && lvDoc().cu.get(em(), '') != ''; }
+    // editors (Authorised) are listed by the owner (meta/editors)
+    function isEditor() { return signedIn() && exists(/databases/$(database)/documents/meta/editors) && em() in get(/databases/$(database)/documents/meta/editors).data.emails; }
+    function inLocks() { return exists(/databases/$(database)/documents/meta/locks) && em() in get(/databases/$(database)/documents/meta/locks).data.emails; }
+    // any verified Gmail account can sign in and chat (Guest)
+    function isGmail() { return signedIn() && em().matches('.*@gmail[.]com$'); }
+    function canRead() { return isOwner() || isCompany() || isGmail() || isCust(); }
+    function canWrite() { return isOwner() || isEditor(); }
+    // whole app (QA and above)
+    function canAll() { return isOwner() || isEditor() || lvl() in ['qa', 'auth'] || (lvl() == '' && inLocks()); }
+    // company data: orders, specs, approvals (QC and above)
+    function isStaff() { return canAll() || lvl() == 'qc' || (lvl() == '' && isCompany()); }
+
+    match /meta/{doc} { allow read: if canRead(); allow write: if isOwner(); }
+    match /users/{email} { allow read: if canRead(); allow write: if isOwner(); }
+    // buyer pages: read by anyone who has the secret link, written only by owner / editors
+    match /pub/{id} { allow read: if true; allow write: if canWrite(); }
+    // ---------- YQI Chat ----------
+    function me() { return request.auth.uid; }
+    match /people/{uid} { allow read: if canRead(); allow write: if canRead() && me() == uid; }
+    match /unames/{n} { allow read: if canRead(); allow create: if canRead() && request.resource.data.uid == me(); allow delete: if canRead() && resource.data.uid == me(); }
+    match /inbox/{uid} { allow read: if canRead() && me() == uid; allow write: if canRead(); }
+    match /chats/{cid} {
+      allow read: if canRead() && (resource == null || me() in resource.data.members);
+      allow create: if canRead() && me() in request.resource.data.members;
+      allow update: if canRead() && (me() in resource.data.members);
+      match /m/{mid} {
+        allow read, create: if canRead() && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
+        allow update: if canRead() && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
+        allow delete: if canRead() && resource.data.by == me();
+      }
+    }
+    match /people/{uid}/{sub}/{id} { allow read, write: if canRead() && me() == uid; }
+    match /status/{id} { allow read: if canRead(); allow create: if canRead() && request.resource.data.by == me(); allow update: if canRead(); allow delete: if canRead() && resource.data.by == me(); }
+    match /meets/{id} {
+      allow read: if canRead() && (resource == null || me() in resource.data.members);
+      allow create: if canRead() && me() in request.resource.data.members;
+      allow update: if canRead() && me() in resource.data.members;
+      allow delete: if canRead() && resource.data.by == me();
+      // meeting notes / transcript lines
+      match /tx/{t} {
+        allow read, create: if canRead() && me() in get(/databases/$(database)/documents/meets/$(id)).data.members;
+        allow delete: if canRead() && resource.data.by == me();
+      }
+    }
+    match /cblob/{id} { allow read: if canRead(); allow create: if canRead(); }
+    match /cblobc/{id} { allow read: if canRead(); allow create: if canRead(); }
+    match /calls/{id} {
+      allow read: if canRead() && (resource == null || me() in resource.data.members);
+      allow create: if canRead() && me() in request.resource.data.members;
+      allow update: if canRead() && me() in resource.data.members;
+      match /sig/{s} {
+        allow read, create: if canRead() && me() in get(/databases/$(database)/documents/calls/$(id)).data.members;
+        allow delete: if canRead() && resource.data.t == me();
+      }
+    }
+    match /ws/{ws} {
+      allow read: if isStaff();
+      allow write: if canWrite();
+      // the All customers workspace (Inspection Summary, CAPA, reports) is for QA and above
+      match /{col}/{id} { allow read: if (ws != '_all' && isStaff()) || canAll(); allow write: if canWrite(); }
+    }
+    // employee numbers: one account per number
+    match /ecodes/{code} { allow read: if canRead(); allow create: if canRead() && request.resource.data.uid == me(); allow delete: if isOwner() || (canRead() && resource.data.uid == me()); }
+    match /ecdup/{id} { allow create: if canRead() && request.resource.data.uid == me(); allow read, delete: if isOwner(); }
+    // repacking reports
+    match /repack/{id} {
+      allow read: if canAll() || (canRead() && resource.data.email == em());
+      allow create: if canRead() && request.resource.data.email == em();
+      allow update: if canWrite() || (canRead() && resource.data.email == em() && request.resource.data.email == em());
+      allow delete: if canWrite();
+    }
+  }
+}
