@@ -1616,7 +1616,8 @@ var IL = {
   exit: li('<path d="M14 4.5h4.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H14M10 16l4-4-4-4M14 12H3.5"/>'),
   smile: li('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.2c.8 1.3 2 2 3.5 2s2.7-.7 3.5-2M9 9.8h.01M15 9.8h.01"/>', 18),
   plus: li('<path d="M12 5v14M5 12h14"/>'),
-  lock: li('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/>')
+  lock: li('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/>'),
+  qr: li('<rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM20.5 14v.01M14 20.5h.01M17 20.5h3.5V17"/>')
 };
 
 // ---------- sounds ----------
@@ -1760,7 +1761,7 @@ var BACKB = function(){ return ib("back", IC.back, "Back"); };
 
 // ---------- home: chats / updates / calls ----------
 function homeView(w){
-  var h = bar('', '<b class="ycBrand"><img src="' + WLOGO + '" alt="YQI"><em>Chat</em></b>', '', ib("search", IC.search, "Search") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
+  var h = bar('', '<b class="ycBrand"><img src="' + WLOGO + '" alt="YQI"><em>Chat</em></b>', '', ib("search", IC.search, "Search") + ib("linkpc", IL.qr, "Link a computer (scan QR)") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
   if(PARAM.search){ h = bar(ib("unsearch", IC.back, "Back"), '<input id="ycQ" class="ycQin" placeholder="Search chats, people, messages" value="' + esc(SEARCHQ) + '">', '', '', "home"); }
   h += '<div class="ycTabs">' + ["chats:Chats", "updates:Updates", "calls:Calls", "tasks:Tasks"].map(function(t){ var a = t.split(":"); return '<button data-c="tab" data-t="' + a[0] + '" class="' + (TAB === a[0] ? "on" : "") + '">' + a[1] + '<i id="ycTabN_' + a[0] + '" class="ycTn" style="display:none"></i></button>'; }).join("") + '</div><div class="ycScroll" id="ycList">';
   if(TAB === "updates") h += updatesList(); else if(TAB === "calls") h += callsList(); else if(TAB === "tasks") h += tasksList(); else h += chatsList();
@@ -2155,7 +2156,7 @@ function attachSheet(){
     if(a === "doc") $("ycFile").click(); else if(a === "cam") $("ycCam").click(); else if(a === "gal") $("ycGal").click(); else if(a === "meet") go("meetnew", {cid: OPEN}); });
 }
 function homeMenu(el){
-  menu(el, [["newgroup0", IL.users, "New group"], ["meetnew", IL.cal, "New meeting"], ["starred", IL.star, "Starred messages"], ["archived", IL.archive, "Archived chats"], ["me", IL.user, "Profile & settings"], ["close", IL.exit, "Close chat"]], function(a){ act(a); });
+  menu(el, [["newgroup0", IL.users, "New group"], ["meetnew", IL.cal, "New meeting"], ["starred", IL.star, "Starred messages"], ["archived", IL.archive, "Archived chats"], ["me", IL.user, "Profile & settings"], ["linkpc", IL.qr, "Link a computer (scan QR)"], ["close", IL.exit, "Close chat"]], function(a){ act(a); });
 }
 function chatMoreMenu(el){
   var c = CHATS[OPEN], g = c.type === "group", oth = chatOther(c);
@@ -2570,6 +2571,7 @@ function act(a, el){
   case "meetstart": var mem = [MY].concat(Object.keys(PARAM.sel || {}).map(function(x){ return x.slice(2); })); var vid = !!PARAM.video, ttl = ($("ycMt").value || "").trim() || "Meeting"; var ag = agendaOf(($("ycMa") || {}).value); STACK = []; VIEW = "home"; TAB = "calls"; paint(true); return adhocMeet(mem, ttl, vid, ag);
   case "meetjoin": return meetJoin(id);
   case "meetinfo": return go("meet", {id: id});
+  case "linkpc": if(window.yqQrScan) window.yqQrScan(); return;
   case "tasknew": return go("tasknew", {mid: el.getAttribute("data-mid") || "", t: el.getAttribute("data-t") || ""});
   case "taskopen": return go("tasknew", {id: id});
   case "tdone": return taskDone(id);
