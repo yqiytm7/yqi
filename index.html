@@ -971,7 +971,8 @@ function tipInit(){
 // ---------- activity log: who changed which data (written in small batches) ----------
 var AUQ = [], AUT = null;
 function auditHook(){ try{ var P = firebase.firestore.DocumentReference.prototype, C = firebase.firestore.CollectionReference.prototype; if(P.__yqA) return; P.__yqA = 1;
-  var log = function(op, path, d){ if(!ISED || !/^ws\//.test(path) || /\/(audit|seed)\//.test(path)) return; var f = d && typeof d === "object" ? Object.keys(d).filter(function(k){ return !/^_/.test(k); }).slice(0, 8) : [];
+  var log = function(op, path, d){ if(/\/is_int\//.test(path) && (op === "set" || op === "add") && d && typeof d === "object" && d.date && !d.customer){ clearTimeout(window.__yqNcT); window.__yqNc = (window.__yqNc || 0) + 1; window.__yqNcT = setTimeout(function(){ var n = window.__yqNc; window.__yqNc = 0; if(!sessionStorage.getItem("yqNcWarn")){ try{ sessionStorage.setItem("yqNcWarn", "1"); }catch(e){} yqAsk(n + " floor (internal) records were saved without a Customer. They count in the overall internal pass, but not when you pick a customer on the home page. Add a Customer column to the floor sheet before uploading.", {title: "Floor sheet has no Customer column", alert: 1}); } }, 2500); }
+    if(!ISED || !/^ws\//.test(path) || /\/(audit|seed)\//.test(path)) return; var f = d && typeof d === "object" ? Object.keys(d).filter(function(k){ return !/^_/.test(k); }).slice(0, 8) : [];
     var x = {op: op, p: path.split("/").slice(1).join("/"), f: f.join(",")}; ["customer", "ytm", "po", "result", "date"].forEach(function(k){ if(d && d[k] != null && typeof d[k] !== "object") x[k] = String(d[k]).slice(0, 40); });
     AUQ.push(x); clearTimeout(AUT); AUT = setTimeout(auditFlush, 4000); };
   ["set", "update", "delete"].forEach(function(m){ var o = P[m]; P[m] = function(d){ try{ log(m, this.path, d); }catch(e){} return o.apply(this, arguments); }; });
