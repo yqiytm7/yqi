@@ -544,18 +544,18 @@ function buildLots(R, ext, wsHas){
     q.first = (q.re || q.bad) ? "fail" : q.ni && !q.p1 ? "pend" : "pass"; q.final = q.bad ? "fail" : q.re ? "repass" : q.ni && !q.p1 ? "pend" : "pass";
     // the external inspection records (Inspection Summary) give the real inspection day and the 1st-go result of the shipping plan
     var h = (byPo[ckey(q.cust) + "|" + String(q.id).toUpperCase()] || []).slice().sort(function(a, b){ return (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1; });
-    if(h.length){ q.hist = h; q.date = h[0].date; if(h[h.length - 1].date > q.last) q.last = h[h.length - 1].date;
+    if(h.length){ h.forEach(function(r){ r.__u = 1; }); q.hist = h; q.date = h[0].date; if(h[h.length - 1].date > q.last) q.last = h[h.length - 1].date;
       var f0 = rkind(h[0].result), fl = rkind(h[h.length - 1].result);
       if(f0 === "fail"){ q.first = "fail"; q.final = q.bad && fl !== "pass" ? "fail" : (fl === "pass" || !q.bad) ? "repass" : "fail"; }
       h.forEach(function(r){ if(r.sample){ q.sample += +r.sample || 0; q.major += +r.major || 0; } (r.dlist || []).forEach(function(d){ if(d && d.n) q.dl[d.n] = (q.dl[d.n] || 0) + (+d.q || 1); }); }); }
   });
   // Inspection Summary: every record is one inspection (count = number of inspections it stands for)
   var by = {};
-  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || wsHas[ckey(c)]) return; var y = String(x.ytm || "").trim(); if(y) (by[c + "|" + y] = by[c + "|" + y] || []).push(x); });
+  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || (wsHas[ckey(c)] && x.__u)) return; var y = String(x.ytm || "").trim(); if(y) (by[c + "|" + y] = by[c + "|" + y] || []).push(x); });
   var reOf = {};
   Object.keys(by).forEach(function(k){ var rs = by[k].sort(function(a, b){ return (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1; }), seenFail = null;
     rs.forEach(function(r){ var rk = rkind(r.result); if(rk === "fail") seenFail = r; else if(rk === "pass" && seenFail){ reOf[seenFail._id] = "repass"; reOf[r._id] = "reins"; seenFail = null; } }); });
-  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || wsHas[ckey(c)]) return; var fk = rkind(x.result), dl = {};
+  (ext || []).forEach(function(x){ var c = canonC(x.customer); if(!x.date || !c || (wsHas[ckey(c)] && x.__u)) return; var fk = rkind(x.result), dl = {};
     (x.dlist || []).forEach(function(d){ if(d && d.n) dl[d.n] = (dl[d.n] || 0) + (+d.q || 1); });
     var st = reOf[x._id] || (fk === "pass" ? "pass" : fk === "fail" ? "fail" : "pend");
     lots.push({cust: c, ws: null, id: String(x.ytm || x.po || "—"), lbl: x.ytm ? "YTM " + x.ytm : x.po ? "PO " + x.po : "—", rid: x._id, kind: "is", date: x.date, last: x.date, w: +x.count || 1, first: st === "reins" ? "reins" : fk === "pass" ? "pass" : fk === "fail" ? "fail" : "pend", final: st === "reins" ? "pass" : st,
@@ -725,7 +725,7 @@ function renderHome(){
     '<div class="rleg">' + segs.map(function(g){ return '<div data-filt="' + g.f + '"' + tip(g.t + ": " + g.v + " inspections (" + pc(g.v, base) + ")\nClick to list them") + '><i style="background:' + g.c + '"></i>' + g.t + '<b>' + g.v + ' · ' + pc(g.v, base) + '</b></div>'; }).join("") + '</div></div>' +
     '<div class="big"><div' + tip(nAll + " external inspections in " + rg.lbl + (ri ? "\nincludes " + ri + " re-inspections" : "")) + '><span data-ek="b1">External inspections</span><b data-cnt="' + nAll + '">' + nAll + '</b><i>' + (HCUST ? esc(HCUST) : Object.keys(ccount).length + " customers") + '</i></div>' +
     '<div' + tip(p1 + " passed, " + fa + " failed of " + base) + '><span data-ek="b2">Pass %</span><b data-cnt="' + (base ? Math.round(p1 / base * 1000) / 10 : "") + '" data-suf="%">' + pc(p1, base) + '</b><i>' + p1 + ' passed · ' + fa + ' failed</i></div>' +
-    '<div' + tip(it.p + " of " + it.n + " internal (floor) inspections passed") + '><span data-ek="b3">Internal pass</span><b data-cnt="' + (it.n ? Math.round(it.p / it.n * 1000) / 10 : "") + '" data-suf="%">' + pc(it.p, it.n) + '</b><i>' + it.n + ' floor inspections</i></div>' +
+    '<div' + tip(it.p + " of " + it.n + " internal (floor) inspections passed") + '><span data-ek="b3">Internal pass</span><b data-cnt="' + (it.n ? Math.round(it.p / it.n * 1000) / 10 : "") + '" data-suf="%">' + pc(it.p, it.n) + '</b><i>' + (HCUST && !it.n && (INT || []).some(function(r){ return inR(r.date) && !r.customer; }) ? 'floor sheets have no customer column' : it.n + ' floor inspections') + '</i></div>' +
     '<div' + tip(smp ? maj + " major defects in " + smp + " samples (external)" : "OQL needs sample and major from Inspection Summary") + '><span data-ek="b4">OQL</span><b data-cnt="' + (oql == null ? "" : oql) + '" data-suf="%" data-dec="2">' + (oql == null ? "—" : oql + "%") + '</b><i>limit 2.5%</i></div></div></div>' + tiles;
   // things that need attention
   var att = [];
