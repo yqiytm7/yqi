@@ -24,7 +24,10 @@ service cloud.firestore {
     // company data: orders, specs, approvals (QC and above)
     function isStaff() { return canAll() || lvl() == 'qc' || (lvl() == '' && isCompany()); }
 
-    match /meta/{doc} { allow read: if canRead(); allow write: if isOwner(); }
+    // buyer-link tokens (meta/pubidx) are for staff only
+    match /meta/{doc} { allow read: if canRead() && (doc != 'pubidx' || isStaff()); allow write: if isOwner(); }
+    // a purple customer's own results link
+    match /cust/{email} { allow read: if isOwner() || isStaff() || (signedIn() && em() == email); allow write: if isOwner(); }
     match /users/{email} { allow read: if canRead(); allow write: if isOwner(); }
     // buyer pages: read by anyone who has the secret link, written only by owner / editors
     match /pub/{id} { allow read: if true; allow write: if canWrite(); }
