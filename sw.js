@@ -1,7 +1,7 @@
 // YQI app shell: always fetch fresh from the network (data stays live); only the icons are kept for offline start.
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v7").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
-// The app page: always try the newest copy first (3 s), fall back to the copy kept on the phone when offline or slow.
+// The app page: kept on the phone so YQI opens instantly; the newest copy is fetched in the background.
 const PAGE = "yqi-page-v3", PKEY = "/__yqi_page", LIB = "yqi-lib-v1";
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => /^yqi-page-/.test(k) && k !== PAGE).map(k => caches.delete(k))))); });
 self.addEventListener("fetch", e => {
@@ -17,11 +17,20 @@ self.addEventListener("fetch", e => {
   const scope = self.registration.scope.replace(location.origin, "");
   const isPage = e.request.mode === "navigate" || u.pathname === scope || /\/index\.html$/.test(u.pathname);
   if (!isPage || u.searchParams.has("nc")) { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); return; }
-  e.respondWith(caches.open(PAGE).then(c => {
-    const net = fetch(u.origin + u.pathname, { cache: "no-store", credentials: "same-origin" }).then(r => { if (r.ok) c.put(PKEY, r.clone()).catch(() => {}); return r; });
-    const late = new Promise(res => setTimeout(res, 3000)).then(() => c.match(PKEY));
-    return Promise.race([net.catch(() => c.match(PKEY)), late.then(h => h || net)]).then(r => r || net).catch(() => c.match(PKEY));
-  }));
+  // Open at once from the copy kept on the phone; fetch the newest copy in the background and tell the page when it changed.
+  e.respondWith(caches.open(PAGE).then(c => c.match(PKEY).then(hit => {
+    const net = fetch(u.origin + u.pathname, { cache: "no-store", credentials: "same-origin" });
+    if (hit) {
+      e.waitUntil(net.then(r => {
+        if (!r || !r.ok) return;
+        const tag = x => x.headers.get("etag") || x.headers.get("last-modified") || "";
+        const same = tag(hit) && tag(r) ? Promise.resolve(tag(hit) === tag(r)) : Promise.all([hit.clone().text(), r.clone().text()]).then(t => t[0] === t[1]);
+        return same.then(eq => c.put(PKEY, r.clone()).then(() => { if (!eq) return self.clients.matchAll({ type: "window" }).then(l => l.forEach(w => w.postMessage({ yqiUpdate: 1 }))); }));
+      }).catch(() => {}));
+      return hit;
+    }
+    return net.then(r => { if (r.ok) c.put(PKEY, r.clone()).catch(() => {}); return r; }).catch(() => c.match(PKEY));
+  })));
 });
 // YQI Chat: messages and calls that arrive while the app is closed (push server) or in the background
 self.addEventListener("push", e => {
