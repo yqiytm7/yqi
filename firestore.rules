@@ -12,6 +12,8 @@ service cloud.firestore {
     function lvl() { return hasLv() ? lvDoc().m.get(em(), '') : ''; }
     // customers (purple) get chat only
     function isCust() { return signedIn() && hasLv() && lvDoc().cu.get(em(), '') != ''; }
+    // the customer workspace a purple customer may look at (orders, specs, shipping plans)
+    function custWs() { return hasLv() ? lvDoc().get('cw', {}).get(em(), '') : ''; }
     // editors (Authorised) are listed by the owner (meta/editors)
     function isEditor() { return signedIn() && exists(/databases/$(database)/documents/meta/editors) && em() in get(/databases/$(database)/documents/meta/editors).data.emails; }
     function inLocks() { return exists(/databases/$(database)/documents/meta/locks) && em() in get(/databases/$(database)/documents/meta/locks).data.emails; }
@@ -71,10 +73,10 @@ service cloud.firestore {
       }
     }
     match /ws/{ws} {
-      allow read: if isStaff();
+      allow read: if isStaff() || (isCust() && ws == custWs());
       allow write: if canWrite();
       // the All customers workspace (Inspection Summary, CAPA, reports) is for QA and above
-      match /{col}/{id} { allow read: if (ws != '_all' && isStaff()) || canAll(); allow write: if canWrite(); }
+      match /{col}/{id} { allow read: if (ws != '_all' && isStaff()) || canAll() || (isCust() && ws == custWs() && col in ['seed', 'cfg', 'orders', 'items', 'specdata', 'ext', 'shadeov', 'shdyn', 'slotcfg']); allow write: if canWrite(); }
     }
     // employee numbers: one account per number
     match /ecodes/{code} { allow read: if canRead(); allow create: if canRead() && request.resource.data.uid == me(); allow delete: if isOwner() || (canRead() && resource.data.uid == me()); }

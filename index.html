@@ -138,7 +138,7 @@ function dec(v){
 
 // ---------- styles + screens ----------
 var css = document.createElement("style");
-css.textContent = "#yqiGate.lowz{z-index:2147481000}#yqiGate{position:fixed;inset:0;z-index:2147483000;background:linear-gradient(160deg,#0C1A14,#1d3a1f);display:flex;align-items:center;justify-content:center;padding:16px;font:14px Manrope,system-ui,-apple-system,Segoe UI,sans-serif;color:#1d2a17}" +
+css.textContent = "#yqiGate.lowz{z-index:2147481000}body.yqapp:not(.onland) #ycFab{bottom:calc(78px + env(safe-area-inset-bottom))}#yqiGate{position:fixed;inset:0;z-index:2147483000;background:linear-gradient(160deg,#0C1A14,#1d3a1f);display:flex;align-items:center;justify-content:center;padding:16px;font:14px Manrope,system-ui,-apple-system,Segoe UI,sans-serif;color:#1d2a17}" +
   "#yqiGate .bx{background:#fff;border-radius:16px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35);max-height:92vh;overflow:auto}" +
   "#yqiGate h1{font-size:19px;margin:0 0 2px;color:#2F5A1A}#yqiGate .sub{color:#6b7a60;font-size:12.5px;margin-bottom:14px}#yqiGate label{display:block;font-size:12px;color:#5b6b50;margin:10px 0 3px;font-weight:700}" +
   "#yqiGate input,#yqiGate select,#yqiGate textarea{width:100%;box-sizing:border-box;border:1px solid #cfdcc2;border-radius:9px;padding:10px;font:inherit}#yqiGate button{border:0;border-radius:9px;padding:10px 14px;font:700 14px inherit;cursor:pointer;background:#3D6B22;color:#fff;margin-top:12px}" +
@@ -273,7 +273,7 @@ function verifyScreen(u){
 var EDITORS = [], ISED = false;
 var LOCKS = [];
 // Access levels: guest = chat only · qc = orders, specs, approvals · qa = whole app (view) · auth = can change data
-var LEVELS = {m: {}, mg: [], cu: {}, rj: {}}, LV = "", FLAGS = {};
+var LEVELS = {m: {}, mg: [], cu: {}, rj: {}, cw: {}}, LV = "", FLAGS = {};
 function lvOf(e){ e = String(e || "").toLowerCase(); if(!e) return "guest"; if(e === OWNER_EMAIL) return "auth"; if(EDITORS.indexOf(e) >= 0) return "auth"; var v = LEVELS.m[e]; if(v) return v; if(LOCKS.indexOf(e) >= 0) return "qa"; if(isCoEmail(e)) return "qc"; return "guest"; }
 window.yqLvOf = function(e){ return lvOf(e); };
 function lockOk(){ return OWNER || ISED || LV === "qa" || LV === "auth"; }
@@ -281,7 +281,7 @@ function lockMsg(what){ yqAsk("Only the owner, editors and people the owner allo
 function loadEditors(){ var M = FS.collection("meta");
   return Promise.all([M.doc("locks").get().then(function(d){ LOCKS = ((d.exists && d.data().emails) || []).map(function(x){ return String(x).toLowerCase(); }); }).catch(function(){}),
     M.doc("editors").get().then(function(d){ EDITORS = ((d.exists && d.data().emails) || []).map(function(x){ return String(x).toLowerCase(); }); }).catch(function(){ EDITORS = []; }),
-    M.doc("levels").get().then(function(d){ var x = d.exists ? d.data() : {}; LEVELS = {m: x.m || {}, mg: x.mg || [], cu: x.cu || {}, rj: x.rj || {}}; }).catch(function(){}),
+    M.doc("levels").get().then(function(d){ var x = d.exists ? d.data() : {}; LEVELS = {m: x.m || {}, mg: x.mg || [], cu: x.cu || {}, rj: x.rj || {}, cw: x.cw || {}}; }).catch(function(){}),
     M.doc("flags").get().then(function(d){ FLAGS = d.exists ? d.data() : {}; }).catch(function(){})])
   .then(function(){ OWNER = EMAIL === OWNER_EMAIL; ISED = OWNER || EDITORS.indexOf(EMAIL) >= 0; LV = lvOf(EMAIL); window.YQLV = LV; try{ window.__RO = !ISED; }catch(e){} try{ if(window.YQCHAT && YQCHAT.refresh) YQCHAT.refresh(); }catch(e){} homeSoon(); }); }
 function listMyWs(){
@@ -329,16 +329,16 @@ function afterLogin(u){
     chooseWs(list);
   }).catch(function(e){ showGate('<h1>Could not load</h1><div class="sub">' + esc(errTxt(e)) + '</div><button id="yqO">Sign out</button>'); $("yqO").onclick = function(){ AUTH.signOut(); }; });
 }
-function lvWatch(){ var was = LV; try{ FS.collection("meta").doc("levels").onSnapshot(function(d){ var x = d.exists ? d.data() : {}; LEVELS = {m: x.m || {}, mg: x.mg || [], cu: x.cu || {}, rj: x.rj || {}}; if(lvOf(EMAIL) !== was){ ssSet("yqi_lc", ""); location.reload(); } }, function(){}); }catch(e){} }
+function lvWatch(){ var was = LV; try{ FS.collection("meta").doc("levels").onSnapshot(function(d){ var x = d.exists ? d.data() : {}; LEVELS = {m: x.m || {}, mg: x.mg || [], cu: x.cu || {}, rj: x.rj || {}, cw: x.cw || {}}; if(lvOf(EMAIL) !== was){ ssSet("yqi_lc", ""); location.reload(); } }, function(){}); }catch(e){} }
 function guestScreen(u){ try{ if(HOMEON) showHome(false); }catch(e){} lvWatch();
   FS.collection("people").doc(u.uid).get().then(function(d){ return d.exists ? d.data() : null; }).catch(function(){ return null; }).then(function(me){
     var e = (me && me.emp) || {}, rj = LEVELS.rj && LEVELS.rj[EMAIL] && LEVELS.rj[EMAIL] >= (e.at || 0);
     var st = e.code && !rj ? '<div class="sub" style="background:#fff6dc;color:#7a5600;border-radius:10px;padding:10px 12px">Your employee card is sent. Waiting for approval — this page opens by itself when it is approved.</div>' : rj ? '<div class="sub" style="background:#fde8e8;color:#9b1c1c;border-radius:10px;padding:10px 12px">Your employee card was not approved. Check the number and photos and send it again.</div>' : '';
     var cu = LEVELS.cu && LEVELS.cu[EMAIL];
-    if(cu) showGate('<h1>Welcome to YQI</h1><div class="sub"><b>' + esc(EMAIL) + '</b><br><b>' + esc(cu) + '</b> · Yunus Textile</div><button class="ws" id="yqBr" style="text-align:left">' + (logoUrl(cu) ? '<img src="' + esc(logoUrl(cu)) + '" alt="" style="width:22px;height:22px;border-radius:6px;vertical-align:-5px;margin-right:8px;object-fit:contain;background:#fff">' : '') + '<b>' + esc(cu) + ' · external inspections</b> <small style="color:#6b7a60">· results, pass %, defects</small></button><div class="row"><button id="yqGc">Open chat</button><button class="g" id="yqGe">My profile</button></div><div class="row"><button class="g" id="yqO">Sign out</button></div>');
+    if(cu) showGate('<h1>Welcome to YQI</h1><div class="sub"><b>' + esc(EMAIL) + '</b><br><b>' + esc(cu) + '</b> · Yunus Textile</div><button class="ws" id="yqBr" style="text-align:left">' + (logoUrl(cu) ? '<img src="' + esc(logoUrl(cu)) + '" alt="" style="width:22px;height:22px;border-radius:6px;vertical-align:-5px;margin-right:8px;object-fit:contain;background:#fff">' : '') + '<b>' + esc(cu) + ' · external inspections</b> <small style="color:#6b7a60">· results, pass %, defects</small></button>' + ((LEVELS.cw || {})[EMAIL] ? '<button class="ws" id="yqBo" style="text-align:left"><b>' + esc(cu) + ' · orders, specs, shipping plans</b> <small style="color:#6b7a60">· view only</small></button>' : '') + '<div class="row"><button id="yqGc">Open chat</button><button class="g" id="yqGe">My profile</button></div><div class="row"><button class="g" id="yqO">Sign out</button></div>');
     else showGate('<h1>Welcome to YQI</h1><div class="sub"><b>' + esc(EMAIL) + '</b><br>This is a <b>Guest</b> account: chat, calls and meetings.</div><div class="sub">Work at Yunus Textile? Add your employee card in your profile. After approval you get company data.</div>' + st +
       '<div class="row"><button id="yqGc">Open chat</button><button class="g" id="yqGe">' + (e.code ? "My employee card" : "Add employee card") + '</button></div><div class="row"><button class="g" id="yqO">Sign out</button></div>');
-    gate.classList.add("lowz"); if($("yqBr")) $("yqBr").onclick = function(){ custResults(cu); }; $("yqGc").onclick = function(){ if(window.YQCHAT) YQCHAT.openChat(); }; $("yqGe").onclick = function(){ if(window.YQCHAT) YQCHAT.openProfile(); }; $("yqO").onclick = function(){ AUTH.signOut(); };
+    gate.classList.add("lowz"); if($("yqBr")) $("yqBr").onclick = function(){ custResults(cu); }; if($("yqBo")) $("yqBo").onclick = function(){ CUSTMODE = true; openWs({id: LEVELS.cw[EMAIL], name: cu, role: "viewer"}); }; $("yqGc").onclick = function(){ if(window.YQCHAT) YQCHAT.openChat(); }; $("yqGe").onclick = function(){ if(window.YQCHAT) YQCHAT.openProfile(); }; $("yqO").onclick = function(){ AUTH.signOut(); };
   }); }
 function qcHome(list, u){ try{ if(HOMEON) showHome(false); }catch(e){} lvWatch();
   var cs = (list || []).filter(function(w){ return w.id !== "_all"; }).sort(function(a, b){ return String(a.name).localeCompare(String(b.name)); });
@@ -347,8 +347,9 @@ function qcHome(list, u){ try{ if(HOMEON) showHome(false); }catch(e){} lvWatch()
   gate.classList.add("lowz");
   gate.querySelectorAll(".ws").forEach(function(b){ b.onclick = function(){ var w = cs[+b.dataset.i]; openWs({id: w.id, name: w.name, role: "viewer"}); }; });
   $("yqGc").onclick = function(){ if(window.YQCHAT) YQCHAT.openChat(); }; $("yqPp").onclick = function(){ if(window.YQCHAT) YQCHAT.openStaff(); }; $("yqO").onclick = function(){ AUTH.signOut(); }; }
-function qcApp(){ if(!(LV === "qc" && !OWNER)) return; document.body.classList.add("yqqc");
-  if(!$("yqQcCss")){ var st = document.createElement("style"); st.id = "yqQcCss"; st.textContent = 'body.yqqc .nav [data-t="home"],body.yqqc .nav [data-t="report"],body.yqqc [data-v=insp]{display:none!important}'; document.head.appendChild(st); }
+function qcApp(){ if(OWNER || !(LV === "qc" || CUSTMODE)) return; document.body.classList.add("yqqc"); if(CUSTMODE) document.body.classList.add("yqcu");
+  try{ if(!YQBACK.has("ws")) YQBACK.onGesture(function(){ ssSet("yqi_cur", ""); lsSet(LSK, ""); location.reload(); }, "ws"); }catch(e){}
+  if(!$("yqQcCss")){ var st = document.createElement("style"); st.id = "yqQcCss"; st.textContent = 'body.yqqc .nav [data-t="home"],body.yqqc .nav [data-t="report"],body.yqqc [data-v=insp]{display:none!important}body.yqcu label.btn.full{display:none!important}body.yqcu .nav [data-t=activity]{display:none!important}'; document.head.appendChild(st); }
   var n = 0, t = setInterval(function(){ n++; if(n > 60) return clearInterval(t); var b = document.querySelector('[data-v="bed"]');
     if(b && document.body.classList.contains("onland")){ b.click(); return; }
     var o = document.querySelector('.nav [data-a="tab"][data-t="orders"]'), h = document.querySelector('.nav [data-a="tab"][data-t="home"].on, .nav [data-a="tab"][data-t="report"].on');
@@ -432,9 +433,13 @@ function saveBlob(name, data){
 }
 
 // ---------- the claude.* replacement the app talks to ----------
+var CUSTMODE = false, CUSTOK = ["seed", "cfg", "orders", "items", "specdata", "ext", "shadeov", "shdyn", "slotcfg"];
+function emptyCol(){ var no = function(){ return Promise.reject(Object.assign(new Error("Not shared with customers."), {code: "permission-denied"})); }, none = function(i){ return {id: i, exists: false, data: function(){ return undefined; }, metadata: {fromCache: false}}; };
+  var d = function(i){ i = i || "x"; return {id: i, get: function(){ return Promise.resolve(none(i)); }, onSnapshot: function(cb){ setTimeout(function(){ cb(none(i)); }, 0); return function(){}; }, set: no, update: no, "delete": no}; };
+  return {doc: d, add: no, get: function(){ return Promise.resolve({docs: [], metadata: {fromCache: false}}); }, onSnapshot: function(cb){ setTimeout(function(){ cb({docs: [], metadata: {fromCache: false}, docChanges: function(){ return []; }}); }, 0); return function(){}; }}; }
 function makeDb(){
   var root = FS.collection("ws").doc(WS);
-  function col(c){ c = String(c); return (/^is_/.test(c) && ISROOT ? ISROOT : root).collection(c); }
+  function col(c){ c = String(c); if(CUSTMODE && CUSTOK.indexOf(c) < 0) return emptyCol(); return (/^is_/.test(c) && ISROOT ? ISROOT : root).collection(c); }
   function ds(s){ return {id: s.id, exists: s.exists, data: function(){ var d = s.data(); return d ? dec(d) : d; }, metadata: s.metadata || {fromCache: false}}; }
   function qs(q){ var docs = q.docs.map(ds); return {docs: docs, empty: !docs.length, size: docs.length, metadata: q.metadata || {fromCache: false}, forEach: function(f){ docs.forEach(f); }}; }
   // big history is kept as a few "pack" documents (one read each); here they are opened back into single records
@@ -523,7 +528,7 @@ function startCustUi(){
 function pickIsRoot(){
   var all = FS.collection("ws").doc("_all");
   ISCUST = lsGet("yqi_iscust") || "";
-  if(!OWNER && LV === "qc"){ ISROOT = null; return Promise.resolve(); }
+  if(!OWNER && (LV === "qc" || LV === "guest")){ ISROOT = null; return Promise.resolve(); }
   if(OWNER && WS !== "_all" && ssGet("yqi_lc")){ ISROOT = all; return Promise.resolve(); }
   if(OWNER) return all.get().then(function(d){ if(!d.exists) return all.set({name: "All customers (Inspection Summary)", members: {}}); }).then(function(){ ISROOT = all; return FS.collection("ws").get(); }).then(function(q){ q.docs.forEach(function(d){ if(d.id !== "_all"){ var n = (d.data() || {}).name; if(n) CUSTS[n] = 1; } }); }).catch(function(){ ISROOT = ISROOT || null; });
   return all.get().then(function(d){ ISROOT = d.exists ? all : null; }).catch(function(){ ISROOT = null; });
@@ -1082,12 +1087,13 @@ function custLink(em, c){ if(!c) return FS.collection("cust").doc(em).delete().c
     var a = new Uint8Array(15); crypto.getRandomValues(a); var t = Array.from(a).map(function(b){ return "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]; }).join("");
     return pubWrite(c, t).then(function(ok){ if(!ok) throw new Error("Open Home once (so " + c + "'s data is loaded), then try again."); var m = Object.assign({}, PUBIDX); m[k] = {c: c, t: t, at: Date.now()}; return FS.collection("meta").doc("pubidx").set({map: m}).then(function(){ PUBIDX = m; return t; }); }); })
   .then(function(t){ return FS.collection("cust").doc(em).set({c: c, t: t, at: Date.now(), by: EMAIL}); }); }
-function custSync(){ var cu = LEVELS.cu || {}; Object.keys(cu).forEach(function(em){ FS.collection("cust").doc(em).get().then(function(d){ if(!d.exists || d.data().c !== cu[em]) return custLink(em, cu[em]); }).catch(function(){}); }); }
-function saveLevels(fn){ var L = {m: Object.assign({}, LEVELS.m), mg: (LEVELS.mg || []).slice(), cu: Object.assign({}, LEVELS.cu), rj: Object.assign({}, LEVELS.rj || {})};
+function custSync(){ var cu = LEVELS.cu || {}; if(Object.keys(cu).some(function(e){ return !(LEVELS.cw || {})[e] && wsOfCust(cu[e]); })) saveLevels(function(){}).catch(function(){}); Object.keys(cu).forEach(function(em){ FS.collection("cust").doc(em).get().then(function(d){ if(!d.exists || d.data().c !== cu[em]) return custLink(em, cu[em]); }).catch(function(){}); }); }
+function wsOfCust(c){ var k = ckey(c), w = (CLIST || []).filter(function(x){ return ckey(x.name) === k || x.id === k; })[0]; return w ? w.id : ""; }
+function saveLevels(fn){ var L = {m: Object.assign({}, LEVELS.m), mg: (LEVELS.mg || []).slice(), cu: Object.assign({}, LEVELS.cu), rj: Object.assign({}, LEVELS.rj || {}), cw: {}};
   EDITORS.forEach(function(e){ if(!L.m[e]) L.m[e] = "auth"; }); LOCKS.forEach(function(e){ if(!L.m[e]) L.m[e] = "qa"; });
-  fn(L); var ed = [], lk = []; Object.keys(L.m).forEach(function(e){ if(L.m[e] === "auth"){ ed.push(e); lk.push(e); } else if(L.m[e] === "qa") lk.push(e); });
+  fn(L); Object.keys(L.cu).forEach(function(e){ var w = wsOfCust(L.cu[e]) || (LEVELS.cw || {})[e]; if(w) L.cw[e] = w; }); var ed = [], lk = []; Object.keys(L.m).forEach(function(e){ if(L.m[e] === "auth"){ ed.push(e); lk.push(e); } else if(L.m[e] === "qa") lk.push(e); });
   var M = FS.collection("meta");
-  return Promise.all([M.doc("levels").set({m: L.m, mg: L.mg, cu: L.cu, rj: L.rj, at: Date.now(), by: EMAIL}), M.doc("editors").set({emails: ed, at: Date.now(), by: EMAIL}), M.doc("locks").set({emails: lk, at: Date.now(), by: EMAIL})])
+  return Promise.all([M.doc("levels").set({m: L.m, mg: L.mg, cu: L.cu, rj: L.rj, cw: L.cw, at: Date.now(), by: EMAIL}), M.doc("editors").set({emails: ed, at: Date.now(), by: EMAIL}), M.doc("locks").set({emails: lk, at: Date.now(), by: EMAIL})])
     .then(function(){ LEVELS = L; EDITORS = ed; LOCKS = lk; ssSet("yqi_lc", ""); }); }
 function peopleAdmin(){ if(!OWNER) return; var o = yqSheet("People & access", '<div id="yqPaB" class="paW">Loading…</div>', 1);
   if(!$("yqPaCss")){ var st = document.createElement("style"); st.id = "yqPaCss"; st.textContent = '.paW{max-width:900px;margin:0 auto}.paW h3{font-size:14px;margin:18px 0 8px;color:#2F5A1A}.paC{background:#fff;border:1px solid #dfe7d6;border-radius:14px;padding:12px;margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.paC .av{width:56px;height:56px;border-radius:50%;object-fit:cover;background:#e3ead9;flex:none;display:grid;place-items:center;font-weight:800;color:#55654f}.paC .in{flex:1;min-width:180px;font-size:13px;line-height:1.5}.paC .in b{font-size:15px}.paC .cards{display:flex;gap:8px}.paC .cards img{width:120px;height:76px;object-fit:cover;border-radius:8px;border:1px solid #dfe7d6;cursor:zoom-in;background:#f2f5ee}.paA{display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end}.paA button,.paT button{border:1px solid #cfdcc3;background:#fff;border-radius:9px;padding:7px 12px;font:700 13px inherit;font-family:inherit;cursor:pointer;color:#2F5A1A}.paA button.p{background:#3d9a1f;color:#fff;border-color:#3d9a1f}.paA button.r,.paT button.r{color:#b42318}.paT{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;font-size:13px}.paT td,.paT th{padding:8px;border-bottom:1px solid #eef2ea;text-align:left;vertical-align:middle}.paT th{font-size:11.5px;color:#6b7a60;background:#f6f9f2}.paT select,.paT input{font:inherit;border:1px solid #cfdcc3;border-radius:8px;padding:5px 6px;max-width:150px}.paT select{min-width:112px}.paT input[data-cu]{min-width:120px}.paS{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.paS input{flex:1;min-width:180px;border:1px solid #cfdcc3;border-radius:10px;padding:8px 10px;font:inherit}.paD{background:#fde8e8;color:#9b1c1c;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:6px;display:flex;gap:8px;align-items:center}.paG{background:#fff;border:1px solid #dfe7d6;border-radius:14px;padding:12px;margin-bottom:10px}.paG label{display:inline-flex;gap:6px;align-items:center;margin:3px 12px 3px 0;font-size:13px}.paTw{overflow-x:auto}'; document.head.appendChild(st); }
@@ -1677,7 +1683,7 @@ function openWs(w){
   Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
     var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL, logo: WS === "_all" ? "" : logoUrl(WSNAME)};
-  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); startCustUi(); if(WS === "_all"){ startHome(); } else { runApp(); goDirect(); qcApp(); } }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); startCustUi(); if(WS === "_all"){ startHome(); } else { document.body.classList.add("yqapp"); runApp(); goDirect(); qcApp(); } }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
