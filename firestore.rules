@@ -81,6 +81,13 @@ service cloud.firestore {
     // employee numbers: one account per number
     match /ecodes/{code} { allow read: if canRead(); allow create: if canRead() && request.resource.data.uid == me(); allow delete: if isOwner() || (canRead() && resource.data.uid == me()); }
     match /ecdup/{id} { allow create: if canRead() && request.resource.data.uid == me(); allow read, delete: if isOwner(); }
+    // inspections (all types)
+    match /qi/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff() && request.resource.data.email == em();
+      allow update: if canWrite() || (isStaff() && resource.data.email == em() && request.resource.data.email == em());
+      allow delete: if canWrite();
+    }
     // repacking reports
     match /repack/{id} {
       allow read: if canAll() || (canRead() && resource.data.email == em());
