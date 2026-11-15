@@ -17,8 +17,37 @@
     .then(function(x){ return N.saveFile({name: name || "file", data: x[0], mime: x[1] || "application/octet-stream"}); }).catch(function(e){ N.toast({text: "Could not save the file"}).catch(function(){}); }); }
   var oc = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function(){ var h = this.href || ""; if(this.hasAttribute("download") && /^(blob:|data:)/.test(h)){ save(this.getAttribute("download"), h); return; } return oc.apply(this, arguments); };
+  // ---- one-tap app update (new APK from GitHub) ----
+  function updBar(v, url){ if(document.getElementById("yqUpd")) return; var b = document.createElement("div"); b.id = "yqUpd";
+    b.style.cssText = "position:fixed;left:12px;right:12px;bottom:14px;z-index:2147483600;background:#0e240e;color:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;font:600 14px Manrope,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35)";
+    b.innerHTML = '<span style="flex:1">New YQI app version (' + v + ') is ready</span><button style="border:0;background:#7DB82E;color:#fff;font:700 14px inherit;font-family:inherit;border-radius:999px;padding:9px 16px">Update</button><button aria-label="Later" style="border:0;background:none;color:#cfe3b6;font-size:20px;padding:0 4px">×</button>';
+    (document.body || document.documentElement).appendChild(b); var bt = b.querySelectorAll("button");
+    bt[1].onclick = function(){ b.remove(); };
+    bt[0].onclick = function(){ if(!N.update){ location.href = url; return; } bt[0].disabled = true; bt[0].textContent = "0%"; var l = N.addListener && N.addListener("updProgress", function(e){ bt[0].textContent = (e.p || 0) + "%"; });
+      N.update({url: url}).then(function(){ bt[0].textContent = "Install"; bt[0].disabled = false; }).catch(function(e){ bt[0].disabled = false; bt[0].textContent = "Update"; var m = String(e && e.message || e); N.toast({text: /allow/.test(m) ? "Allow 'Install unknown apps' for YQI, then tap Update again" : "Download failed. Check internet and try again."}).catch(function(){}); }); }; }
+  setTimeout(function(){ (N.info ? N.info() : Promise.resolve({code: 0})).then(function(inf){ window.YQAPP = inf; return fetch("https://api.github.com/repos/yqiytm7/yqi/releases/tags/app", {cache: "no-store"}).then(function(r){ return r.json(); }).then(function(rel){ var m = String(rel.name || "").match(/1\.0\.(\d+)/), a = (rel.assets || [])[0]; if(m && a && +m[1] > (inf.code || 0)) updBar("1.0." + m[1], a.browser_download_url); }); }).catch(function(){}); }, 4000);
+  // ---- fingerprint lock ----
+  var lockAt = 0;
+  function bioLock(){ if(!N.bio || lsGetN("yqi_bio") !== "1" || document.getElementById("yqBioL")) return; var o = document.createElement("div"); o.id = "yqBioL";
+    o.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#0e240e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#fff;font:600 15px Manrope,system-ui,sans-serif";
+    o.innerHTML = '<div style="font-size:44px">🔒</div><div>YQI is locked</div><button style="border:0;background:#7DB82E;color:#fff;font:700 15px inherit;font-family:inherit;border-radius:999px;padding:12px 26px">Unlock</button>';
+    (document.body || document.documentElement).appendChild(o); var go = function(){ N.bio().then(function(){ o.remove(); }).catch(function(){}); }; o.querySelector("button").onclick = go; setTimeout(go, 350); }
+  function lsGetN(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  window.yqBioLock = bioLock;
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", bioLock); else bioLock();
+  document.addEventListener("visibilitychange", function(){ if(document.hidden) lockAt = Date.now(); else if(lockAt && Date.now() - lockAt > 60000) bioLock(); });
   document.addEventListener("click", function(e){ var a = e.target && e.target.closest && e.target.closest("a[download]"); if(a && /^(blob:|data:)/.test(a.href || "")){ e.preventDefault(); e.stopPropagation(); save(a.getAttribute("download"), a.href); } }, true);
 })();
+
+// ---------- Urdu / English ----------
+var URD = {"Chats": "چیٹس", "Updates": "اپڈیٹس", "Calls": "کالز", "Tasks": "کام", "All": "سب", "Unread": "نہ پڑھے", "Groups": "گروپس", "New group": "نیا گروپ", "New meeting": "نئی میٹنگ", "Starred messages": "اہم پیغامات", "Archived chats": "آرکائیو چیٹس", "Profile & settings": "پروفائل اور سیٹنگز", "Close chat": "چیٹ بند کریں", "View contact": "رابطہ دیکھیں", "Group info": "گروپ کی معلومات", "Search in chat": "چیٹ میں تلاش", "Media, links and docs": "تصاویر، لنکس اور فائلیں", "Wallpaper": "وال پیپر", "Mute notifications": "اطلاعات بند", "Unmute notifications": "اطلاعات کھولیں", "Archive chat": "چیٹ آرکائیو کریں", "Unarchive chat": "آرکائیو سے نکالیں", "Block": "بلاک کریں", "Unblock": "ان بلاک", "Delete chat": "چیٹ حذف کریں", "Reply": "جواب", "Copy": "کاپی", "Forward": "آگے بھیجیں", "Star": "اہم", "Unstar": "اہم ہٹائیں", "Edit": "ترمیم", "Info": "معلومات", "Delete for me": "میرے لیے حذف", "Delete for everyone": "سب کے لیے حذف", "Start meeting": "میٹنگ شروع کریں", "Schedule": "شیڈول", "Call someone": "کال کریں", "Upcoming meetings": "آنے والی میٹنگز", "Recent": "حالیہ", "Past meetings · minutes": "پرانی میٹنگز · منٹس", "Agenda": "ایجنڈا", "Minutes": "منٹس", "Add a task": "کام شامل کریں", "Tasks from this meeting": "اس میٹنگ کے کام", "Share minutes in chat": "منٹس چیٹ میں بھیجیں", "Download": "ڈاؤن لوڈ", "My tasks": "میرے کام", "Done": "مکمل", "New task": "نیا کام", "Edit task": "کام میں ترمیم", "Task": "کام", "Who will do it": "کون کرے گا", "Due": "آخری تاریخ", "Add task": "کام شامل کریں", "Save": "محفوظ کریں", "Cancel": "منسوخ", "Delete": "حذف", "Mute": "خاموش", "End": "ختم", "Notes": "نوٹس", "Output": "آواز", "Speaker": "اسپیکر", "Earpiece": "کان والا", "Ring all": "سب کو بلائیں", "Accept": "قبول", "Decline": "رد", "Meeting notes": "میٹنگ نوٹس", "Other discussion": "دیگر گفتگو", "Not discussed": "بات نہیں ہوئی", "Customer groups": "کسٹمر گروپس", "Join": "شامل ہوں", "Open": "کھولیں", "People on YQI": "YQI پر لوگ", "Messages and files": "پیغامات اور فائلیں", "Inspection Summary": "انسپیکشن سمری", "CAPA tracker": "کیپا ٹریکر", "Today's report": "آج کی رپورٹ", "Upload inspections": "انسپیکشن اپلوڈ", "Upload file": "فائل اپلوڈ", "Download template": "ٹیمپلیٹ ڈاؤن لوڈ", "Customer": "کسٹمر", "All customers": "تمام کسٹمرز", "Open ›": "کھولیں ›", "Share ›": "بھیجیں ›", "Preview": "دیکھیں", "Send on WhatsApp": "واٹس ایپ پر بھیجیں", "Overdue": "تاخیر", "Closed": "بند", "In progress": "جاری", "+ New CAPA": "+ نیا کیپا", "Problem / complaint": "مسئلہ / شکایت", "Root cause (why it happened)": "بنیادی وجہ (کیوں ہوا)", "Corrective action (fix now)": "اصلاحی قدم (ابھی ٹھیک کریں)", "Preventive action (stop it coming back)": "احتیاطی قدم (دوبارہ نہ ہو)", "Owner (who does it)": "ذمہ دار", "Due date": "آخری تاریخ", "Status": "حالت", "Source": "ذریعہ", "Date": "تاریخ", "Add CAPA": "کیپا شامل کریں", "Daily floor and external data, wastage, reports and presentations": "روزانہ فلور اور ایکسٹرنل ڈیٹا، ویسٹیج، رپورٹس اور پریزنٹیشن", "Complaints, root cause, actions and who closes them": "شکایات، وجہ، اقدامات اور ذمہ دار", "One tap to send the day's quality summary on WhatsApp": "ایک ٹچ میں دن کی کوالٹی رپورٹ واٹس ایپ پر", "Quality": "کوالٹی", "Intelligence": "انٹیلیجنس", "Dark": "ڈارک", "Light": "لائٹ", "Sign out": "سائن آؤٹ", "Search chats, people, messages": "چیٹس، لوگ، پیغامات تلاش کریں", "Message": "پیغام", "Type a note or decision": "نوٹ یا فیصلہ لکھیں", "Add a point to the agenda": "ایجنڈے میں نکتہ شامل کریں", "You blocked this contact.": "آپ نے اس رابطے کو بلاک کیا ہے۔", "Fingerprint lock": "فنگر پرنٹ لاک", "✓ Fingerprint lock": "✓ فنگر پرنٹ لاک", "Offline copy": "آف لائن کاپی", "✓ Offline copy": "✓ آف لائن کاپی"};
+(function(){ var on = false; try{ on = localStorage.getItem("yqi_lang") === "ur"; }catch(e){} window.YQLANG = on ? "ur" : "en"; if(!on) return;
+  var tr = function(n){ if(n.nodeType === 3){ var t = n.nodeValue, k = t.trim(); if(k && URD[k] && n.__ur !== t){ n.nodeValue = t.replace(k, URD[k]); n.__ur = n.nodeValue; } return; }
+    if(n.nodeType !== 1 || /^(SCRIPT|STYLE|TEXTAREA)$/.test(n.tagName)) return; if(n.placeholder && URD[n.placeholder]) n.placeholder = URD[n.placeholder]; if(n.title && URD[n.title]) n.title = URD[n.title];
+    var w = document.createTreeWalker(n, 5, null), x; while((x = w.nextNode())){ if(x.nodeType === 3){ var k2 = x.nodeValue.trim(); if(k2 && URD[k2]) x.nodeValue = x.nodeValue.replace(k2, URD[k2]); } else if(x.placeholder && URD[x.placeholder]) x.placeholder = URD[x.placeholder]; } };
+  var mo = new MutationObserver(function(ms){ ms.forEach(function(m){ if(m.type === "characterData") tr(m.target); m.addedNodes && m.addedNodes.forEach(tr); }); });
+  var go = function(){ tr(document.body); mo.observe(document.body, {childList: true, subtree: true, characterData: true}); var st = document.createElement("style"); st.textContent = "body,button,input,textarea{font-family:'Noto Naskh Arabic','Segoe UI',Manrope,system-ui,sans-serif}"; document.head.appendChild(st); };
+  if(document.body) go(); else document.addEventListener("DOMContentLoaded", go); })();
 
 // ---------- offline banner ----------
 (function(){ function upd(){ var b = document.getElementById("yqOffB"); if(navigator.onLine){ if(b) b.remove(); return; } if(b) return; b = document.createElement("div"); b.id = "yqOffB"; b.textContent = "No internet · showing saved data"; b.style.cssText = "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483500;background:#3a3f36;color:#fff;font:600 12.5px Manrope,system-ui,sans-serif;padding:7px 14px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none"; (document.body || document.documentElement).appendChild(b); }
@@ -287,9 +316,12 @@ function adminScreen(selId){
     h += '<label>New customer</label><div class="row" style="flex-wrap:nowrap"><input id="yqNw" placeholder="e.g. Walmart"><button id="yqNb" style="margin-top:0">Add</button></div>';
     if(L.length){
       h += '<label>Customer</label><select id="yqSel">' + L.map(function(w){ return '<option value="' + esc(w.id) + '"' + (cur && w.id === cur.id ? " selected" : "") + '>' + esc(w.x.name || w.id) + '</option>'; }).join("") + '</select>';
-      h += '<label>Editors · people who can add and change data</label><table>' + (EDITORS.length ? EDITORS.slice().sort().map(function(e){ return '<tr><td>' + esc(e) + '</td><td><span style="color:#2f7d1f;font-weight:700">can edit</span></td><td><button class="x" data-rm="' + esc(e) + '">Remove</button></td></tr>'; }).join("") : '<tr><td style="color:#8a967f">No editors yet. Only you (owner) can change data.</td></tr>') + '</table>';
-      h += '<div class="row" style="flex-wrap:nowrap;margin-top:6px"><input id="yqMe" type="email" placeholder="name@' + CO_DOMAIN + '"><button id="yqMa" style="margin-top:0">Add editor</button></div><div class="sub" style="margin:4px 0 0">Everyone with an <b>@' + CO_DOMAIN + '</b> email can sign up and <b>view</b> all customers without being added. Add here only people who should edit.</div>';
-      h += '<label>🔒 Locked items (Inspection Summary + Monthly CEO report) · extra people who can open them</label><textarea id="yqLk" rows="3" placeholder="one email per line"></textarea><button class="g" id="yqLs">Save locked access</button><div class="sub" style="margin:4px 0 0">You and editors can always open them. Everyone else sees them locked.</div>';
+      var RL = {}; EDITORS.forEach(function(e){ RL[e] = "qc"; }); LOCKS.forEach(function(e){ RL[e] = EDITORS.indexOf(e) >= 0 ? "mgr" : "lk"; });
+      var rsel = function(e, v){ return '<select data-role="' + esc(e) + '">' + [["qc", "QC · adds & changes data"], ["mgr", "Manager · QC + locked items"], ["lk", "Viewer + locked items"], ["x", "Remove"]].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === v ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") + '</select>'; };
+      h += '<label>People & roles</label><table>' + (Object.keys(RL).length ? Object.keys(RL).sort().map(function(e){ return '<tr><td>' + esc(e) + '</td><td>' + rsel(e, RL[e]) + '</td></tr>'; }).join("") : '<tr><td style="color:#8a967f">Nobody added yet. Only you (owner) can change data.</td></tr>') + '</table>';
+      h += '<div class="row" style="flex-wrap:nowrap;margin-top:6px"><input id="yqMe" type="email" placeholder="name@' + CO_DOMAIN + '"><select id="yqMr" style="max-width:150px"><option value="qc">QC</option><option value="mgr">Manager</option><option value="lk">Viewer + locked</option></select><button id="yqMa" style="margin-top:0">Add</button></div>';
+      h += '<div class="sub" style="margin:4px 0 0"><b>Viewer</b> (anyone with an @' + CO_DOMAIN + ' or Gmail email, no need to add): sees data, but Inspection Summary and the Monthly CEO report stay 🔒 locked. <b>QC</b>: adds and changes data, opens locked items. <b>Manager</b>: same as QC, plus fail alerts and CAPA. <b>Owner</b> (you): everything, plus this page.</div>';
+      h += '<div class="row"><button class="g" id="yqAud">Activity log · who changed what</button></div>';
       h += '<label>Programs of this customer (one per line)</label><textarea id="yqPg" rows="4" placeholder="Solid&#10;Waffle&#10;Pillowcase"></textarea><button class="g" id="yqPs">Save programs</button>';
       h += '<label>Load data into this customer</label><div class="sub" style="margin:0">Use the file from <b>Export all data</b> (home page of the Claude version of YQI).</div><input id="yqIf" type="file" accept=".json,application/json"><div class="row"><button class="g" id="yqEx">Download backup of this customer</button></div>';
       h += '<div class="row"><button id="yqGo">Open ' + esc(cur.x.name || cur.id) + '</button><button class="g" id="yqO">Sign out</button></div>';
@@ -305,18 +337,17 @@ function adminScreen(selId){
     if(!cur) return;
     var wref = FS.collection("ws").doc(cur.id);
     $("yqSel").onchange = function(){ adminScreen(this.value); };
-    FS.collection("meta").doc("locks").get().then(function(d){ $("yqLk").value = ((d.exists && d.data().emails) || []).join("\n"); }).catch(function(){});
-    $("yqLs").onclick = function(){ var v = $("yqLk").value.split(/[\s,;]+/).map(function(x){ return x.trim().toLowerCase(); }).filter(function(x){ return /@/.test(x); }); FS.collection("meta").doc("locks").set({emails: v}).then(function(){ LOCKS = v; msg("Locked access saved (" + v.length + ")."); }).catch(function(e){ msg(errTxt(e), 1); }); };
     wref.collection("seed").doc("PROGS").get().then(function(d){ var v = d.exists ? dec(d.data().v) : []; $("yqPg").value = (v || []).join("\n"); }).catch(function(){});
     $("yqPs").onclick = function(){ var v = $("yqPg").value.split("\n").map(function(x){ return x.trim(); }).filter(Boolean); if(!v.length) v = ["General"]; wref.collection("seed").doc("PROGS").set({v: v}).then(function(){ msg("Programs saved (" + v.length + ")."); }).catch(function(e){ msg(errTxt(e), 1); }); };
     gate.querySelectorAll("[data-r]").forEach(function(s){ s.onchange = function(){ var u = {}; u["members"] = Object.assign({}, cur.x.members); u.members[s.dataset.r] = s.value; wref.update(u).then(function(){ msg("Saved."); }).catch(function(e){ msg(errTxt(e), 1); }); }; });
-    var saveEd = function(list){ return FS.collection("meta").doc("editors").set({emails: list, at: Date.now(), by: EMAIL}).then(function(){ EDITORS = list; ssSet("yqi_lc", ""); adminScreen(cur.id); }).catch(function(x){ msg(errTxt(x), 1); }); };
-    gate.querySelectorAll("[data-rm]").forEach(function(b){ b.onclick = function(){ saveEd(EDITORS.filter(function(e){ return e !== b.dataset.rm; })); }; });
-    $("yqMa").onclick = function(){
-      var e = $("yqMe").value.trim().toLowerCase(); if(!isCoEmail(e)){ msg("Editors need an @" + CO_DOMAIN + " email.", 1); return; }
-      if(EDITORS.indexOf(e) >= 0){ msg("Already an editor.", 1); return; }
-      msg("Adding…"); saveEd(EDITORS.concat([e]));
-    };
+    var saveRoles = function(RL){ var ed = [], lk = []; Object.keys(RL).forEach(function(e){ var r = RL[e]; if(r === "qc" || r === "mgr") ed.push(e); if(r === "mgr" || r === "lk") lk.push(e); });
+      msg("Saving…"); Promise.all([FS.collection("meta").doc("editors").set({emails: ed, at: Date.now(), by: EMAIL}), FS.collection("meta").doc("locks").set({emails: lk, at: Date.now(), by: EMAIL})]).then(function(){ EDITORS = ed; LOCKS = lk; ssSet("yqi_lc", ""); adminScreen(cur.id); }).catch(function(x){ msg(errTxt(x), 1); }); };
+    var curRL = function(){ var RL = {}; gate.querySelectorAll("[data-role]").forEach(function(sl){ RL[sl.dataset.role] = sl.value; }); return RL; };
+    gate.querySelectorAll("[data-role]").forEach(function(sl){ sl.onchange = function(){ var RL = curRL(); if(RL[sl.dataset.role] === "x") delete RL[sl.dataset.role]; saveRoles(RL); }; });
+    $("yqMa").onclick = function(){ var e = $("yqMe").value.trim().toLowerCase(), r = $("yqMr").value; if(!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(e)){ msg("Type a full email.", 1); return; }
+      if(r !== "lk" && !isCoEmail(e)){ msg("QC and Manager need an @" + CO_DOMAIN + " email (to change data).", 1); return; }
+      var RL = curRL(); RL[e] = r; saveRoles(RL); };
+    $("yqAud").onclick = auditView;
     $("yqIf").onchange = function(){ var f = this.files && this.files[0]; if(f) importFile(f, cur); };
     $("yqEx").onclick = function(){ backupWs(cur); };
     $("yqGo").onclick = function(){ openWs({id: cur.id, name: cur.x.name || cur.id, role: "owner"}); };
@@ -642,18 +673,21 @@ function renderHome(){
   var names = {}; CLIST.forEach(function(w){ names[w.name] = w.id; });
   (EXT || []).forEach(function(x){ var c = canonC(x.customer); if(c && c !== "Not recorded" && !(c in names)) names[c] = null; });
   (INT || []).forEach(function(x){ if(x.customer){ var c = canonC(x.customer); if(!(c in names)) names[c] = null; } });
-  var nk = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
+  var nk = window.YQCUST = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
   if(HCUST && !(HCUST in names) && HD && EXT) HCUST = "";
   var per = [["day", "Day"], ["3d", "Last 3 days"], ["m", "This month"], ["all", HSTART ? "All (since " + mName(HSTART) + ")" : "All"]].map(function(p){ return '<button data-per="' + p[0] + '"' + (HPER === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>'; }).join("");
-  var top = '<div class="htop"><div class="brand"><span class="lp q" data-ei="logoQ">' + LOGO_Q + '</span></div><div class="umenu"><span class="who"><i>' + esc((EMAIL || "?").charAt(0).toUpperCase()) + '</i><span><b>' + esc(EMAIL) + '</b><em>' + (OWNER ? "Owner · full access" : ISED ? "Editor · can change data" : "View only") + '</em></span></span>' + (INSTP ? '<button id="yqIns">⬇ Install app</button>' : '') + (OWNER ? '<button id="yqEd">✎ Edit page</button><button id="yqAm2">Admin</button>' : '') + '' + (window.YQNATIVE ? '' : '<button id="yqOff" title="Keep a copy on this device so YQI opens without internet">' + (lsGet("yqi_off") === "1" ? "✓ Offline copy" : "Offline copy") + '</button>') + '<button id="yqDk" title="Dark / light">' + (lsGet("yqi_dark") === "1" ? "☀ Light" : "🌙 Dark") + '</button><button id="yqSo2">Sign out</button></div></div>' + (fromC ? '<div class="upd">Updating…</div>' : '');
+  var top = '<div class="htop"><div class="brand"><span class="lp q" data-ei="logoQ">' + LOGO_Q + '</span></div><div class="umenu"><span class="who"><i>' + esc((EMAIL || "?").charAt(0).toUpperCase()) + '</i><span><b>' + esc(EMAIL) + '</b><em>' + (OWNER ? "Owner · full access" : ISED ? "Editor · can change data" : "View only") + '</em></span></span>' + (INSTP ? '<button id="yqIns">⬇ Install app</button>' : '') + (OWNER ? '<button id="yqEd">✎ Edit page</button><button id="yqAm2">Admin</button>' : '') + '' + (window.YQNATIVE ? (!window.YQNATIVE.bio ? '' : '<button id="yqBio" title="Ask for fingerprint when YQI opens">' + (lsGet("yqi_bio") === "1" ? "✓ Fingerprint lock" : "Fingerprint lock") + '</button>') : '<button id="yqOff" title="Keep a copy on this device so YQI opens without internet">' + (lsGet("yqi_off") === "1" ? "✓ Offline copy" : "Offline copy") + '</button>') + '<button id="yqLg" title="Urdu / English">' + (lsGet("yqi_lang") === "ur" ? "English" : "اردو") + '</button><button id="yqDk" title="Dark / light">' + (lsGet("yqi_dark") === "1" ? "☀ Light" : "🌙 Dark") + '</button><button id="yqSo2">Sign out</button></div></div>' + (fromC ? '<div class="upd">Updating…</div>' : '');
   var head = top + '<div class="hrow"><div class="hl"><h1><span data-ek="h1a">Quality</span> <em data-ek="h1b">Intelligence</em></h1><div class="hsub">' + (HCUST ? clogo(HCUST) + esc(HCUST) : 'All customers') + ' · ' + esc(rg.lbl) + ' · ' + esc(dt) + '</div><div class="chips">' + per +
     '<label>Day <input type="date" id="yqDay" value="' + esc(HPER === "day" ? (HDAY || HDAYS[0] || today) : "") + '"></label><label>From <input type="date" id="yqFr" value="' + esc(HPER === "rng" ? HFROM : "") + '"></label><label>To <input type="date" id="yqTo" value="' + esc(HPER === "rng" ? HTO : "") + '"></label></div></div>';
   var tiles = '<div class="tiles"><div class="tl">' + (HCUST ? clogo(HCUST, 1) : '<div class="ic">C</div>') + '<div style="flex:1;min-width:110px"><b data-ek="t1">Customer</b><span>' + (HCUST ? 'Showing ' + esc(HCUST) + ' only' : 'Showing all customers') + '</span></div><button class="cpk" id="yqCpk">' + (HCUST ? clogo(HCUST) : '<span class="clg" style="--h:95"><b>All</b></span>') + '<span class="t">' + esc(HCUST || "All customers") + '</span>▾</button><select id="yqCs" style="display:none"><option value="">All customers</option>' + nk.map(function(n){ return '<option' + (n === HCUST ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") + '</select>' + (HCUST ? '<button class="ub" id="yqFull">More detail ›</button>' + (OWNER ? '<button class="ub b2" id="yqShr">🔗 Buyer link</button>' : '') : '') + '</div>' +
     '<button class="tl' + (lockOk() ? '' : ' lk') + '" id="yqTi"><div class="ic">' + (lockOk() ? 'IS' : '🔒') + '</div><div style="flex:1"><b data-ek="t2">Inspection Summary</b><span data-ek="t2d">Daily floor and external data, wastage, reports and presentations</span></div><span class="op">Open ›</span></button>' +
+    '<button class="tl" id="yqCa"><div class="ic">CA</div><div style="flex:1"><b>CAPA tracker</b><span>Complaints, root cause, actions and who closes them</span></div><span class="op">Open ›</span></button>' +
+    '<button class="tl" id="yqDr"><div class="ic">✉</div><div style="flex:1"><b>Today\'s report</b><span>One tap to send the day\'s quality summary on WhatsApp</span></div><span class="op">Share ›</span></button>' +
     (ISED ? '<div class="tl"><div class="ic">⇪</div><div style="flex:1;min-width:140px"><b data-ek="t3">Upload inspections</b><span data-ek="t3d">Excel or CSV. Each row goes to its customer by itself.</span></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="ub" id="yqUpB">Upload file</button><a class="tp" id="yqTpl">Download template</a></div><input type="file" id="yqUpF" accept=".xlsx,.xls,.csv" style="display:none"></div>' : '<div class="tl"><div class="ic">👁</div><div style="flex:1;min-width:140px"><b>View only</b><span>You can see all data. Only the owner can change it.</span></div></div>') + '</div>' + (HMSG ? '<div class="cd msgb">' + HMSG + '</div>' : '');
   if(!HD || !EXT){ h.innerHTML = '<div class="hw"><div class="hero">' + head + '<div class="ring"></div></div><div class="big"><div><span>Loading</span><b>…</b><i>all customers</i></div></div></div>' + tiles + '<div class="cd em"><img class="leaf" src="' + LEAF + '" alt="" style="margin:0 auto 8px">Loading all customers…</div></div>'; applyEdits(h); bindHome(); return; }
   var inR = function(d){ return d && d >= rg.from && d <= rg.to; }, isC = function(c){ return !HCUST || canonC(c) === HCUST; };
-  var LOTS = buildLots(HD, EXT, wsHas).filter(function(q){ return isC(q.cust) && inR(q.date); });
+  var ALLL = buildLots(HD, EXT, wsHas); window.YQLOTS = ALLL; if(!fromC) setTimeout(function(){ failAlerts(ALLL); }, 1500);
+  var LOTS = ALLL.filter(function(q){ return isC(q.cust) && inR(q.date); });
   var done = LOTS.filter(function(q){ return q.first !== "pend"; });
   var W = function(a){ return a.reduce(function(t, q){ return t + (q.w || 1); }, 0); };
   var nAll = W(done), p1 = W(done.filter(function(q){ return q.first === "pass"; })), rp = W(done.filter(function(q){ return q.final === "repass"; })), fl = W(done.filter(function(q){ return q.final === "fail"; })), ri = W(done.filter(function(q){ return q.first === "reins"; })), base = nAll - ri;
@@ -914,6 +948,96 @@ function tipInit(){
   document.addEventListener("mousemove", function(e){ if(cur) place(e); });
   document.addEventListener("scroll", function(){ t.style.display = "none"; cur = null; }, true);
 }
+
+// ---------- activity log: who changed which data (written in small batches) ----------
+var AUQ = [], AUT = null;
+function auditHook(){ try{ var P = firebase.firestore.DocumentReference.prototype, C = firebase.firestore.CollectionReference.prototype; if(P.__yqA) return; P.__yqA = 1;
+  var log = function(op, path, d){ if(!ISED || !/^ws\//.test(path) || /\/(audit|seed)\//.test(path)) return; var f = d && typeof d === "object" ? Object.keys(d).filter(function(k){ return !/^_/.test(k); }).slice(0, 8) : [];
+    var x = {op: op, p: path.split("/").slice(1).join("/"), f: f.join(",")}; ["customer", "ytm", "po", "result", "date"].forEach(function(k){ if(d && d[k] != null && typeof d[k] !== "object") x[k] = String(d[k]).slice(0, 40); });
+    AUQ.push(x); clearTimeout(AUT); AUT = setTimeout(auditFlush, 4000); };
+  ["set", "update", "delete"].forEach(function(m){ var o = P[m]; P[m] = function(d){ try{ log(m, this.path, d); }catch(e){} return o.apply(this, arguments); }; });
+  var oa = C.add; C.add = function(d){ var r = oa.apply(this, arguments); try{ log("add", this.path + "/new", d); }catch(e){} return r; };
+}catch(e){} }
+function auditFlush(){ if(!AUQ.length || !FS) return; var items = AUQ.splice(0, 200); FS.collection("ws").doc("_all").collection("audit").add({by: EMAIL, at: Date.now(), n: items.length, items: items}).catch(function(){}); }
+window.addEventListener("pagehide", auditFlush);
+function auditView(){ var o = yqSheet("Activity log", '<div class="ycpSub">Every change to the data, newest first. Kept for you (owner).</div><div id="yqAuL">Loading…</div>');
+  FS.collection("ws").doc("_all").collection("audit").orderBy("at", "desc").limit(80).get().then(function(q){ var h = q.docs.map(function(d){ var x = d.data(); return '<div class="auR"><div class="auH"><b>' + esc(x.by) + '</b><span>' + new Date(x.at).toLocaleString() + ' · ' + (x.n || 0) + ' change' + (x.n > 1 ? "s" : "") + '</span></div>' + (x.items || []).slice(0, 12).map(function(i){ var w = i.p.split("/"), CN = {insp: "Floor inspection", is_ext: "External inspection", is_int: "Internal inspection", is_extday: "Wastage", shadeov: "Shade", capa: "CAPA", activities: "Activity", ext: "External", "int": "Internal"}; return '<div class="auI"><i class="' + i.op + '">' + ({add: "added", set: "saved", update: "changed", "delete": "deleted"}[i.op] || i.op) + '</i> ' + esc(CN[w[1]] || w[1] || (w[0] === "_all" ? "Inspection Summary" : w[0])) + (w[0] && w[0] !== "_all" && w[1] ? ' <small>(' + esc(w[0]) + ')</small>' : '') + (i.customer ? ' · ' + esc(i.customer) : '') + (i.ytm ? ' · YTM ' + esc(i.ytm) : '') + (i.result ? ' · ' + esc(i.result) : '') + (i.f && i.op === "update" ? ' <small>(' + esc(i.f) + ')</small>' : '') + '</div>'; }).join("") + ((x.items || []).length > 12 ? '<div class="auI"><small>+' + (x.items.length - 12) + ' more</small></div>' : '') + '</div>'; }).join("");
+    o.querySelector("#yqAuL").innerHTML = h || '<div class="ycpSub">No changes recorded yet.</div>'; }).catch(function(e){ o.querySelector("#yqAuL").textContent = errTxt(e); }); }
+
+// ---------- simple full-screen sheet used by CAPA, log, roles ----------
+var SHCSS = "#yqSh{position:fixed;inset:0;z-index:2147483300;background:#f4f7f1;color:#16230f;display:flex;flex-direction:column;font-family:Manrope,system-ui,sans-serif}#yqSh .ycpBar{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px calc(12px);padding-top:max(12px,env(safe-area-inset-top));background:linear-gradient(135deg,#123a10,#1f5a17);color:#fff}#yqSh .ycpBar b{font-size:18px}#yqSh .ycpX{border:0;background:rgba(255,255,255,.12);color:#fff;width:38px;height:38px;border-radius:50%;font-size:26px;line-height:1;cursor:pointer}#yqSh .ycpBody{flex:1;overflow:auto;padding:14px 14px 40px;max-width:820px;width:100%;margin:0 auto;box-sizing:border-box}#yqSh .ycpSub{font-size:13px;color:#6b7a63;margin:0 0 10px}" +
+ "#yqSh .caTop{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}#yqSh .caTop button{border:1.5px solid #d3dfc8;background:#fff;border-radius:999px;padding:7px 13px;font:600 13.5px inherit;font-family:inherit;color:#33452a;cursor:pointer}#yqSh .caTop button b{margin-left:4px}#yqSh .caTop button.on{background:#2f6b1c;border-color:#2f6b1c;color:#fff}#yqSh .caTop button.rd b{color:#c8373d}#yqSh .caTop button.rd.on{background:#c8373d;border-color:#c8373d}#yqSh .caTop button.rd.on b{color:#fff}" +
+ "#yqSh .caAct{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}#yqSh .caNew{border:0;background:#3d9a1f;color:#fff;border-radius:12px;padding:11px 18px;font:700 14.5px inherit;font-family:inherit;cursor:pointer}#yqSh .caGh{border:1.5px solid #cfdcc3;background:#fff;color:#2f5a1a;border-radius:12px;padding:10px 16px;font:600 14px inherit;font-family:inherit;cursor:pointer}#yqSh .caGh.rd{color:#c8373d;border-color:#efc5c5}" +
+ "#yqSh .caR{display:block;width:100%;text-align:left;border:0;background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.07);font-family:inherit;color:inherit;cursor:pointer}#yqSh .caR1{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}#yqSh .caR1 b{font-size:15px}#yqSh .caR2{font-size:12.5px;color:#6b7a63;margin-top:3px}#yqSh .caR3{font-size:13px;margin-top:5px;color:#33452a}" +
+ "#yqSh .st{flex:none;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;background:#fff3d6;color:#8a6200}#yqSh .st.Inprogress{background:#e3effa;color:#1f5f99}#yqSh .st.Closed{background:#e2f2d8;color:#2f7d1f}#yqSh .st.ov{background:#fde3e3;color:#b52a2a}" +
+ "#yqSh .caF label{display:block;font-size:12.5px;font-weight:700;color:#4d5e44;margin:10px 0 0}#yqSh .caF input,#yqSh .caF select,#yqSh .caF textarea{display:block;width:100%;box-sizing:border-box;margin-top:5px;border:1.5px solid #d5dfcc;border-radius:12px;padding:10px 12px;font:15px inherit;font-family:inherit;background:#fff;color:inherit}#yqSh .caG{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px}" +
+ "#yqSh .caPre{white-space:pre-wrap;background:#fff;border-radius:14px;padding:14px;font:14px/1.5 Manrope,system-ui,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.07)}#yqSh .auR{background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px}#yqSh .auH{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}#yqSh .auH span{color:#6b7a63}#yqSh .auI{font-size:13px;padding:2px 0}#yqSh .auI i{font-style:normal;font-weight:700;font-size:11px;border-radius:6px;padding:1px 6px;background:#eaf3df;color:#3d7a1f}#yqSh .auI i.delete{background:#fde3e3;color:#b52a2a}#yqSh .auI i.update{background:#e3effa;color:#1f5f99}" +
+ "#yqSh.dk{background:#0f1a0e;color:#e5efdc}#yqSh.dk .caR,#yqSh.dk .auR,#yqSh.dk .caPre,#yqSh.dk .caTop button,#yqSh.dk .caGh,#yqSh.dk .caF input,#yqSh.dk .caF select,#yqSh.dk .caF textarea{background:#1a2918;color:#e5efdc;border-color:#2c4029}";
+function yqSheet(title, body, wide){ var o = document.getElementById("yqSh"); if(!document.getElementById("yqShCss")){ var st = document.createElement("style"); st.id = "yqShCss"; st.textContent = SHCSS; document.head.appendChild(st); } if(o) o.remove(); o = document.createElement("div"); o.id = "yqSh"; if(lsGet("yqi_dark") === "1") o.className = "dk";
+  o.innerHTML = '<div class="ycpBar"><button class="ycpX" aria-label="Back">‹</button><b>' + esc(title) + '</b></div><div class="ycpBody">' + body + '</div>'; document.body.appendChild(o);
+  var close = function(){ o.remove(); }; o.querySelector(".ycpX").onclick = function(){ if(window.YQBACK) YQBACK.back(); else close(); }; if(window.YQBACK) YQBACK.push(function(){ if(document.getElementById("yqSh") === o){ close(); return true; } return false; }); return o; }
+
+// ---------- CAPA tracker: complaint → root cause → action → closed ----------
+var CAPA = null;
+function capaLoad(){ return FS.collection("ws").doc("_all").collection("capa").get().then(function(q){ CAPA = q.docs.map(function(d){ var x = d.data(); x._id = d.id; return x; }); return CAPA; }); }
+var CAPAF = "open";
+function capaView(){ var o = yqSheet("CAPA tracker", '<div id="yqCaB">Loading…</div>'); capaLoad().then(function(){ capaList(o); }).catch(function(e){ o.querySelector("#yqCaB").textContent = errTxt(e); }); }
+function capaList(o){ var L = (CAPA || []).slice(), td = new Date().toISOString().slice(0, 10), od = function(x){ return x.status !== "Closed" && x.due && x.due < td; };
+  var cnt = {open: L.filter(function(x){ return x.status !== "Closed"; }).length, over: L.filter(od).length, closed: L.filter(function(x){ return x.status === "Closed"; }).length};
+  var F = CAPAF === "open" ? L.filter(function(x){ return x.status !== "Closed"; }) : CAPAF === "over" ? L.filter(od) : CAPAF === "closed" ? L.filter(function(x){ return x.status === "Closed"; }) : L;
+  F.sort(function(a, b){ return (b.date || "") < (a.date || "") ? -1 : 1; });
+  var h = '<div class="caTop"><button data-f="open" class="' + (CAPAF === "open" ? "on" : "") + '">Open <b>' + cnt.open + '</b></button><button data-f="over" class="' + (CAPAF === "over" ? "on" : "") + ' rd">Overdue <b>' + cnt.over + '</b></button><button data-f="closed" class="' + (CAPAF === "closed" ? "on" : "") + '">Closed <b>' + cnt.closed + '</b></button><button data-f="all" class="' + (CAPAF === "all" ? "on" : "") + '">All</button></div>';
+  h += '<div class="caAct">' + (ISED ? '<button class="caNew" id="yqCaN">+ New CAPA</button>' : '') + '<button class="caGh" id="yqCaX">⬇ Excel (CSV)</button></div>';
+  h += F.map(function(x){ return '<button class="caR" data-id="' + x._id + '"><div class="caR1"><b>' + esc(x.issue || "—") + '</b><span class="st ' + (od(x) ? "ov" : (x.status || "Open").replace(/\s/g, "")) + '">' + (od(x) ? "Overdue" : esc(x.status || "Open")) + '</span></div><div class="caR2">' + esc([x.customer, x.source, x.date, x.owner ? "owner: " + x.owner : "", x.due ? "due " + x.due : ""].filter(Boolean).join(" · ")) + '</div>' + (x.root ? '<div class="caR3"><i>Root cause:</i> ' + esc(x.root) + '</div>' : '') + '</button>'; }).join("") || '<div class="ycpSub" style="text-align:center;padding:30px 0">Nothing here.</div>';
+  var b = o.querySelector("#yqCaB"); b.innerHTML = h;
+  b.querySelectorAll("[data-f]").forEach(function(x){ x.onclick = function(){ CAPAF = x.dataset.f; capaList(o); }; });
+  b.querySelectorAll(".caR").forEach(function(x){ x.onclick = function(){ capaForm(o, (CAPA || []).filter(function(c){ return c._id === x.dataset.id; })[0]); }; });
+  if($("yqCaN")) $("yqCaN").onclick = function(){ capaForm(o, null); };
+  $("yqCaX").onclick = function(){ var cols = ["date", "customer", "source", "ytm", "issue", "root", "action", "prevent", "owner", "due", "status", "closed"], csv = [cols.join(",")].concat((CAPA || []).map(function(x){ return cols.map(function(k){ return '"' + String(x[k] || "").replace(/"/g, '""') + '"'; }).join(","); })).join("\r\n");
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], {type: "text/csv"})); a.download = "CAPA " + td + ".csv"; a.click(); }; }
+function capaForm(o, x){ var ro = !ISED, v = x || {date: new Date().toISOString().slice(0, 10), status: "Open", source: "Buyer complaint"}, cs = (window.YQCUST || []);
+  var fld = function(k, lbl, type, opts){ var val = esc(v[k] || ""); if(type === "sel") return '<label>' + lbl + '<select data-k="' + k + '"' + (ro ? " disabled" : "") + '>' + opts.map(function(op){ return '<option' + (op === v[k] ? " selected" : "") + '>' + esc(op) + '</option>'; }).join("") + '</select></label>';
+    if(type === "ta") return '<label>' + lbl + '<textarea data-k="' + k + '" rows="3"' + (ro ? " readonly" : "") + '>' + val + '</textarea></label>'; return '<label>' + lbl + '<input data-k="' + k + '" type="' + (type || "text") + '" value="' + val + '"' + (ro ? " readonly" : "") + (k === "customer" ? ' list="yqCaCl"' : '') + '></label>'; };
+  var h = '<div class="caF">' + fld("issue", "Problem / complaint", "ta") + '<div class="caG">' + fld("customer", "Customer") + fld("ytm", "YTM / PO / lot") + fld("source", "Source", "sel", ["Buyer complaint", "Inspection fail", "Internal audit", "Customer audit", "Other"]) + fld("date", "Date", "date") + '</div>' +
+    fld("root", "Root cause (why it happened)", "ta") + fld("action", "Corrective action (fix now)", "ta") + fld("prevent", "Preventive action (stop it coming back)", "ta") +
+    '<div class="caG">' + fld("owner", "Owner (who does it)") + fld("due", "Due date", "date") + fld("status", "Status", "sel", ["Open", "In progress", "Closed"]) + '</div><datalist id="yqCaCl">' + cs.map(function(c){ return '<option value="' + esc(c) + '">'; }).join("") + '</datalist>' +
+    (x && x.by ? '<div class="ycpSub">Added by ' + esc(x.by) + (x.closed ? ' · closed ' + esc(x.closed) : '') + '</div>' : '') +
+    (ro ? '' : '<div class="caAct"><button class="caNew" id="yqCaS">' + (x ? "Save" : "Add CAPA") + '</button><button class="caGh" id="yqCaC">Cancel</button>' + (x ? '<button class="caGh rd" id="yqCaD">Delete</button>' : '') + '</div>') + '</div>';
+  var b = o.querySelector("#yqCaB"); b.innerHTML = h; o.querySelector(".ycpBody").scrollTop = 0;
+  var back = function(){ capaList(o); }; if($("yqCaC")) $("yqCaC").onclick = back;
+  if($("yqCaS")) $("yqCaS").onclick = function(){ var d = {}; b.querySelectorAll("[data-k]").forEach(function(e){ d[e.dataset.k] = e.value.trim(); }); if(!d.issue) return yqAsk("", {title: "Write the problem first", alert: 1});
+    if(d.status === "Closed" && !(x && x.closed)) d.closed = new Date().toISOString().slice(0, 10); d.upd = Date.now(); d.updBy = EMAIL; var col = FS.collection("ws").doc("_all").collection("capa");
+    var pr = x ? col.doc(x._id).update(d) : (d.by = EMAIL, d.at = Date.now(), col.add(d)); this.disabled = true;
+    pr.then(function(){ return capaLoad(); }).then(back).catch(function(e){ yqAsk(errTxt(e), {title: "Not saved", alert: 1}); }); };
+  if($("yqCaD")) $("yqCaD").onclick = function(){ yqAsk("", {title: "Delete this CAPA?", ok: "Delete", danger: 1}).then(function(y){ if(!y) return; FS.collection("ws").doc("_all").collection("capa").doc(x._id).delete().then(capaLoad).then(back); }); };
+}
+
+// ---------- today's report → WhatsApp (one tap) ----------
+function dailyText(){ var lots = (window.YQLOTS || []), td = new Date().toISOString().slice(0, 10), y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  var day = lots.reduce(function(m, l){ return l.date && l.date <= td && l.date > m ? l.date : m; }, "") || td, L = lots.filter(function(l){ return l.date === day; });
+  var pass = L.filter(function(l){ return l.final === "pass" || l.final === "repass"; }).length, fail = L.filter(function(l){ return l.final === "fail"; }).length, re = L.filter(function(l){ return l.final === "repass" || l.first === "reins"; }).length;
+  var by = {}; L.forEach(function(l){ var c = by[l.cust] = by[l.cust] || {n: 0, f: 0}; c.n++; if(l.final === "fail") c.f++; });
+  var dl = {}; L.forEach(function(l){ Object.keys(l.dl || {}).forEach(function(k){ dl[k] = (dl[k] || 0) + l.dl[k]; }); });
+  var top = Object.keys(dl).sort(function(a, b){ return dl[b] - dl[a]; }).slice(0, 5);
+  var t = "*YQI daily quality report*\n" + day + "\n\nInspections: " + L.length + "\nPassed: " + pass + "   Failed: " + fail + (re ? "   Re-inspection: " + re : "") + (L.length ? "\nPass rate: " + Math.round(pass * 100 / L.length) + "%" : "") + "\n";
+  if(Object.keys(by).length) t += "\n*By customer*\n" + Object.keys(by).map(function(c){ return "• " + c + ": " + by[c].n + (by[c].f ? " (" + by[c].f + " failed)" : ""); }).join("\n") + "\n";
+  var fl = L.filter(function(l){ return l.final === "fail"; }); if(fl.length) t += "\n*Failed lots*\n" + fl.slice(0, 10).map(function(l){ return "• " + l.cust + " " + l.lbl + (l.art ? " · " + l.art : "") + (l.unit ? " · " + l.unit : ""); }).join("\n") + "\n";
+  if(top.length) t += "\n*Top defects*\n" + top.map(function(k){ return "• " + k + ": " + dl[k]; }).join("\n") + "\n";
+  return t + "\n_From YQI · Yunus Quality Intelligence_"; }
+function shareDaily(){ var t = dailyText(); var o = yqSheet("Today's report", '<pre class="caPre">' + esc(t) + '</pre><div class="caAct"><button class="caNew" id="yqWa">Send on WhatsApp</button><button class="caGh" id="yqCp">Copy</button></div>');
+  $("yqWa").onclick = function(){ window.open("https://wa.me/?text=" + encodeURIComponent(t), "_blank"); };
+  $("yqCp").onclick = function(){ try{ navigator.clipboard.writeText(t); this.textContent = "Copied ✓"; }catch(e){} }; }
+
+// ---------- inspection fail alert (owner, editors, managers) ----------
+function failAlerts(lots){ if(!(OWNER || ISED || LOCKS.indexOf(EMAIL) >= 0)) return; var key = "yqi_fseen", seen; try{ seen = JSON.parse(lsGet(key) || "null"); }catch(e){ seen = null; }
+  var lim = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10), F = lots.filter(function(l){ return l.final === "fail" && l.date >= lim; });
+  if(!seen){ seen = {}; F.forEach(function(l){ seen[l.rid || l.id] = 1; }); lsSet(key, JSON.stringify(seen)); return; }
+  var nw = F.filter(function(l){ return !seen[l.rid || l.id]; }); if(!nw.length) return; nw.forEach(function(l){ seen[l.rid || l.id] = 1; }); lsSet(key, JSON.stringify(seen));
+  var txt = nw.slice(0, 3).map(function(l){ return l.cust + " " + l.lbl + (l.unit ? " (" + l.unit + ")" : ""); }).join(", ") + (nw.length > 3 ? " +" + (nw.length - 3) + " more" : "");
+  try{ if(window.Notification && Notification.permission === "granted") new Notification("Inspection failed", {body: txt, tag: "yqfail"}); }catch(e){}
+  yqAsk(txt, {title: "⚠ Inspection failed" + (nw.length > 1 ? " (" + nw.length + ")" : ""), alert: 1});
+  try{ if(window.YQCHAT && window.YQCHAT.alert) nw.forEach(function(l){ window.YQCHAT.alert(String(l.rid || l.id), "⚠ Inspection FAILED — " + l.cust + " · " + l.lbl + (l.art ? " · " + l.art : "") + (l.unit ? " · " + l.unit : "") + " · " + l.date); }); }catch(e){} }
+
 function bindHome(){
   var h = $("yqHome"); if(!h) return; tipInit();
   h.querySelectorAll("[data-per]").forEach(function(b){ b.onclick = function(){ HPER = b.dataset.per; if(HPER === "day") HDAY = ""; lsSet("yqi_hper4", HPER); HPLAN = ""; renderHome(); }; });
@@ -935,10 +1059,14 @@ function bindHome(){
   var ck2 = $("yqCpk"); if(ck2) ck2.onclick = function(e){ e.stopPropagation(); custPick(ck2); };
   if($("yqFull")) $("yqFull").onclick = function(){ openCustName(HCUST); };
   var ti = $("yqTi"); if(ti) ti.onclick = function(){ openIS(); };
+  if($("yqCa")) $("yqCa").onclick = capaView; if($("yqDr")) $("yqDr").onclick = shareDaily;
   if($("yqEd")) $("yqEd").onclick = function(){ editOn(); };
   if($("yqIns")) $("yqIns").onclick = function(){ var p = INSTP; if(!p) return; p.prompt(); (p.userChoice || Promise.resolve()).then(function(){ INSTP = null; renderHome(); }); };
   if($("yqAm2")) $("yqAm2").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_lc", ""); lsSet("yqi_admin", "1"); location.reload(); };
+  if($("yqBio")) $("yqBio").onclick = function(){ var on = lsGet("yqi_bio") !== "1", b = this; if(!on){ lsSet("yqi_bio", ""); b.textContent = "Fingerprint lock"; return; }
+    window.YQNATIVE.bio().then(function(){ lsSet("yqi_bio", "1"); b.textContent = "✓ Fingerprint lock"; yqAsk("YQI will ask for your fingerprint (or phone lock) when it opens, and after 1 minute in the background.", {title: "Fingerprint lock is on", alert: 1}); }).catch(function(e){ if(/none/.test(String(e && e.message || e))) yqAsk("Set a fingerprint or screen lock in your phone settings first.", {title: "No fingerprint on this phone", alert: 1}); }); };
   if($("yqOff")) $("yqOff").onclick = function(){ var on = lsGet("yqi_off") !== "1"; yqAsk(on ? "YQI will keep the data you open on this device, so you can still see it without internet. It refreshes when you are online." : "YQI will stop keeping data on this device.", {title: on ? "Turn on offline copy?" : "Turn off offline copy?", ok: on ? "Turn on" : "Turn off"}).then(function(y){ if(!y) return; lsSet("yqi_off", on ? "1" : ""); location.reload(); }); };
+  if($("yqLg")) $("yqLg").onclick = function(){ lsSet("yqi_lang", lsGet("yqi_lang") === "ur" ? "" : "ur"); location.reload(); };
   if($("yqDk")) $("yqDk").onclick = function(){ var on = lsGet("yqi_dark") !== "1"; lsSet("yqi_dark", on ? "1" : ""); h.classList.add("dkt"); h.classList.toggle("dk", on); this.textContent = on ? "☀ Light" : "🌙 Dark"; var cp = $("yqCP"); if(cp) cp.classList.toggle("dk", on); setTimeout(function(){ h.classList.remove("dkt"); }, 600); };
   if($("yqSo2")) $("yqSo2").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); ssSet("yqi_lc", ""); var go = function(){ location.reload(); }; if(AUTH) AUTH.signOut().then(go, go); else go(); };
   if($("yqUpB")) $("yqUpB").onclick = function(){ if(!OWNER){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
@@ -1314,7 +1442,7 @@ function boot(){
   try{ if(!lsGet("yqi_cc2") && window.indexedDB){ indexedDB.deleteDatabase("firestore/[DEFAULT]/" + FIREBASE_CONFIG.projectId + "/main"); lsSet("yqi_cc2", "1"); } }catch(e){}
   Promise.all(SDK.slice(0, 1).map(loadJs)).then(function(){ return Promise.all(SDK.slice(1).map(loadJs)); }).then(function(){
     firebase.initializeApp(FIREBASE_CONFIG);
-    AUTH = firebase.auth(); FS = firebase.firestore();
+    AUTH = firebase.auth(); FS = firebase.firestore(); auditHook();
     try{ FS.settings({ignoreUndefinedProperties: true, merge: true}); }catch(e){}
     // no offline copy of the database: it grew big with photos and made every start slow. Photos are cached separately.
     if(/[?&]offline=1/.test(location.search) || window.YQNATIVE || lsGet("yqi_off") === "1"){ try{ FS.settings({ignoreUndefinedProperties: true, merge: true, cacheSizeBytes: 60 * 1048576}); }catch(e){} try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
@@ -1338,7 +1466,7 @@ var VIEW = "home", TAB = "chats", FILTER = "all", STACK = [], PARAM = {};
 var unMsgs = null, firstChats = true, MSGLIM = 60, REPLY = null, SEARCHQ = "";
 var MAXF = 12 * 1024 * 1024, CHUNK = 700000, DARK = false;
 function ask(m, o){ return window.yqAsk ? window.yqAsk(m, o) : Promise.resolve(window.confirm(m)); }
-window.YQCHAT = {start: start};
+window.YQCHAT = {alert: function(rid, text){ try{ qaAlert(rid, text); }catch(e){} }, start: start};
 
 // ---------- helpers ----------
 function $(id){ return document.getElementById(id); }
@@ -1506,7 +1634,7 @@ function live(){
   FS.collection("inbox").doc(MY).onSnapshot(function(d){ var r = d.exists ? d.data().ring : null; if(r) onRing(r); }, function(){});
   FS.collection("calls").where("members", "array-contains", MY).onSnapshot(function(q){ CALLS = q.docs.map(function(d){ var x = d.data(); x.id = d.id; return x; }).sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 80); if(TAB === "calls") repaint(); }, function(){});
   FS.collection("status").where("at", ">", now() - 864e5).onSnapshot(function(q){ STATUS = q.docs.map(function(d){ var x = d.data(); x.id = d.id; return x; }).filter(function(s){ return now() - s.at < 864e5; }).sort(function(a, b){ return a.at - b.at; }); badge(); if(TAB === "updates") repaint(); }, function(){});
-  FS.collection("meets").where("members", "array-contains", MY).onSnapshot(function(q){ MEETS = {}; q.docs.forEach(function(d){ var x = d.data(); x.id = d.id; MEETS[d.id] = x; }); if($("ycNotes")) notesFeed(); if(VIEW === "meet") repaintMeet(); else if(TAB === "calls") repaint(); }, function(){});
+  FS.collection("meets").where("members", "array-contains", MY).onSnapshot(function(q){ MEETS = {}; TASKS = {}; q.docs.forEach(function(d){ var x = d.data(); x.id = d.id; if(x.kind === "task") TASKS[d.id] = x; else MEETS[d.id] = x; }); taskCheck(); if(TAB === "tasks" && VIEW === "home") repaint(); if($("ycNotes")) notesFeed(); if(VIEW === "meet") repaintMeet(); else if(TAB === "calls") repaint(); }, function(){});
   setInterval(meetReminders, 30000);
   var cq = /[?&]chat=([^&]*)/.exec(location.search); if(cq) setTimeout(function(){ openPanel(); var id = decodeURIComponent(cq[1] || ""); if(id) openChat(id); }, 1500);
 }
@@ -1561,7 +1689,7 @@ function paint(full){
   if(!panelOpen()) return; var w = $("ycW"); if(!w) return; $("ycP").classList.toggle("dk", DARK);
   if(!ME && VIEW !== "profile"){ VIEW = "profile"; PARAM = {setup: 1}; }
   var key = VIEW + ":" + (OPEN || "") + ":" + TAB;
-  if(!full && w.getAttribute("data-v") === key){ if(VIEW === "chat") return chatUpdate(); if(VIEW === "profile" || VIEW === "newgroup" || VIEW === "meetnew" || VIEW === "stext" || VIEW === "meet") return; }
+  if(!full && w.getAttribute("data-v") === key){ if(VIEW === "chat") return chatUpdate(); if(VIEW === "profile" || VIEW === "newgroup" || VIEW === "meetnew" || VIEW === "stext" || VIEW === "meet" || VIEW === "tasknew") return; }
   w.setAttribute("data-v", key);
   var sc = w.querySelector(".ycScroll"), top = sc && !full ? sc.scrollTop : 0;
   if(VIEW === "home") homeView(w);
@@ -1575,6 +1703,7 @@ function paint(full){
   else if(VIEW === "starred") starredView(w);
   else if(VIEW === "stext") statusTextView(w);
   else if(VIEW === "meet") meetView(w);
+  else if(VIEW === "tasknew") taskNewView(w);
   else { VIEW = "home"; homeView(w); }
   var sc2 = w.querySelector(".ycScroll"); if(sc2 && top) sc2.scrollTop = top;
 }
@@ -1586,10 +1715,10 @@ var BACKB = function(){ return ib("back", IC.back, "Back"); };
 function homeView(w){
   var h = bar('', '<b class="ycBrand"><img src="' + WLOGO + '" alt="YQI"><em>Chat</em></b>', '', ib("search", IC.search, "Search") + '<button class="ycIb" data-c="me" title="My profile">' + avU(MY, 32) + '</button>' + ib("menu", IC.dots, "Menu"), "home");
   if(PARAM.search){ h = bar(ib("unsearch", IC.back, "Back"), '<input id="ycQ" class="ycQin" placeholder="Search chats, people, messages" value="' + esc(SEARCHQ) + '">', '', '', "home"); }
-  h += '<div class="ycTabs">' + ["chats:Chats", "updates:Updates", "calls:Calls"].map(function(t){ var a = t.split(":"); return '<button data-c="tab" data-t="' + a[0] + '" class="' + (TAB === a[0] ? "on" : "") + '">' + a[1] + '<i id="ycTabN_' + a[0] + '" class="ycTn" style="display:none"></i></button>'; }).join("") + '</div><div class="ycScroll" id="ycList">';
-  if(TAB === "updates") h += updatesList(); else if(TAB === "calls") h += callsList(); else h += chatsList();
+  h += '<div class="ycTabs">' + ["chats:Chats", "updates:Updates", "calls:Calls", "tasks:Tasks"].map(function(t){ var a = t.split(":"); return '<button data-c="tab" data-t="' + a[0] + '" class="' + (TAB === a[0] ? "on" : "") + '">' + a[1] + '<i id="ycTabN_' + a[0] + '" class="ycTn" style="display:none"></i></button>'; }).join("") + '</div><div class="ycScroll" id="ycList">';
+  if(TAB === "updates") h += updatesList(); else if(TAB === "calls") h += callsList(); else if(TAB === "tasks") h += tasksList(); else h += chatsList();
   h += '</div>';
-  h += TAB === "chats" ? '<button class="ycFab2" data-c="newchat" title="New chat">' + IC.chat + '<i>+</i></button>' : TAB === "updates" ? '<div class="ycFab2s"><button class="ycFab2 sm" data-c="stext" title="Text status">✎</button><button class="ycFab2" data-c="sphoto" title="Photo status">' + IC.cam + '</button></div>' : '<button class="ycFab2" data-c="meetnew" title="New meeting">' + IC.meet + '</button>';
+  h += TAB === "tasks" ? '<button class="ycFab2" data-c="tasknew" title="New task">' + IL.plus + '</button>' : TAB === "chats" ? '<button class="ycFab2" data-c="newchat" title="New chat">' + IC.chat + '<i>+</i></button>' : TAB === "updates" ? '<div class="ycFab2s"><button class="ycFab2 sm" data-c="stext" title="Text status">✎</button><button class="ycFab2" data-c="sphoto" title="Photo status">' + IC.cam + '</button></div>' : '<button class="ycFab2" data-c="meetnew" title="New meeting">' + IC.meet + '</button>';
   w.innerHTML = h; bind(w); badge();
   var q = $("ycQ"); if(q){ q.focus(); try{ q.setSelectionRange(q.value.length, q.value.length); }catch(e){} q.oninput = function(){ SEARCHQ = q.value; var l = $("ycList"); if(l){ l.innerHTML = TAB === "chats" ? chatsList() : TAB === "calls" ? callsList() : updatesList(); bind(l); } }; }
 }
@@ -1618,7 +1747,8 @@ function chatsList(){
     return !q || (chatTitle(c) + " " + (c.last && c.last.t || "")).toLowerCase().indexOf(q) >= 0; });
   h += list.map(chatRow).join("");
   if(q){ var ppl = Object.keys(PEOPLE).filter(function(u){ var p = PEOPLE[u]; return u !== MY && (p.name + " @" + p.uname + " " + (p.dept || "")).toLowerCase().indexOf(q) >= 0; });
-    if(ppl.length) h += '<div class="ycSec">People</div>' + ppl.map(personRow).join(""); }
+    if(ppl.length) h += '<div class="ycSec">People</div>' + ppl.map(personRow).join("");
+    var hits = q.length >= 2 ? msgSearch(q) : []; if(hits.length) h += '<div class="ycSec">Messages and files</div>' + hits.map(msgHitRow).join(""); }
   if(!list.length && !q) h += '<div class="ycEmpty">' + (FILTER === "all" ? '<b>Start chatting</b><span>Tap the green button to message a colleague, make a group or start a meeting.</span>' : '<span>Nothing here.</span>') + '</div>';
   return h;
 }
@@ -1699,7 +1829,7 @@ function callsList(){
 }
 
 // ---------- pickers ----------
-function pickView(w){
+function pickView(w){ if(PARAM.mode === "chat") setTimeout(function(){ var l = w.querySelector(".ycScroll"); if(l && !l.querySelector(".ycCg")){ var d = document.createElement("div"); d.className = "ycCg"; d.innerHTML = custGroupsHtml(); l.appendChild(d); bind(d); } }, 0);
   var mode = PARAM.mode, sel = PARAM.sel || (PARAM.sel = {}), q = PARAM.q || "", multi = mode === "group" || mode === "meet" || mode === "add" || mode === "fwd" || mode === "meetsel";
   var title = {chat: "New chat", group: "New group", meet: "Meeting people", add: "Add members", call: "Call someone", fwd: "Forward to"}[mode] || "Select";
   var n = Object.keys(sel).length;
@@ -1711,7 +1841,7 @@ function pickView(w){
 }
 function pickRows(){
   var mode = PARAM.mode, sel = PARAM.sel, q = (PARAM.q || "").toLowerCase(), multi = mode !== "chat" && mode !== "call", h = "";
-  if(mode === "chat" && !q) h += '<button class="ycRow" data-c="newgroup0"><span class="ycAv" style="width:46px;height:46px;background:#3d9a1f">' + IC.meet + '</span><div class="ycRm"><div class="ycR1"><b>New group</b></div></div></button><button class="ycRow" data-c="meetnew"><span class="ycAv" style="width:46px;height:46px;background:#2a5a8a">📅</span><div class="ycRm"><div class="ycR1"><b>New meeting</b></div></div></button><div class="ycSec">People on YQI</div>';
+  if(mode === "chat" && !q) h += '<button class="ycRow" data-c="newgroup0"><span class="ycAv" style="width:46px;height:46px;background:#3d9a1f">' + IC.meet + '</span><div class="ycRm"><div class="ycR1"><b>New group</b></div></div></button><button class="ycRow" data-c="meetnew"><span class="ycAv" style="width:46px;height:46px;background:#2a5a8a;color:#fff;display:grid;place-items:center">' + IL.cal + '</span><div class="ycRm"><div class="ycR1"><b>New meeting</b></div></div></button><div class="ycSec">People on YQI</div>';
   if(mode === "fwd"){ var cs = visibleChats(false).filter(function(c){ return !q || chatTitle(c).toLowerCase().indexOf(q) >= 0; }); h += '<div class="ycSec">Recent chats</div>' + cs.map(function(c){ return '<button class="ycRow ycSel' + (sel["c:" + c.id] ? " on" : "") + '" data-c="psel" data-k="c:' + c.id + '">' + avC(c, 44) + '<div class="ycRm"><div class="ycR1"><b>' + esc(chatTitle(c)) + '</b></div></div><i class="ycCkb">' + (sel["c:" + c.id] ? "✓" : "") + '</i></button>'; }).join("") + '<div class="ycSec">People</div>'; }
   var ex = mode === "add" && OPEN && CHATS[OPEN] ? CHATS[OPEN].members || [] : [];
   var ids = Object.keys(PEOPLE).filter(function(u){ return u !== MY && ex.indexOf(u) < 0; }).filter(function(u){ var p = PEOPLE[u]; return !q || (p.name + " @" + p.uname + " " + (p.dept || "") + " " + (p.email || "")).toLowerCase().indexOf(q) >= 0; })
@@ -1847,6 +1977,7 @@ function linkify(t, hl){ var s = esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a hre
 function post(m, preview){
   var id = OPEN, c = CHATS[id]; if(!c) return Promise.reject(new Error("no chat"));
   m.by = MY; m.at = now(); if(REPLY){ m.rp = REPLY; REPLY = null; replyBar(); }
+  var tg = []; if(c.cu) tg.push(c.cu); String(m.t || "").replace(/\b(YTM|PO|LOT)\s*[-#:]?\s*([A-Z0-9-]{3,})/gi, function(a, k, n){ tg.push(k.toUpperCase() + " " + n.toUpperCase()); }); if(tg.length) m.tg = tg.filter(function(x, i, a){ return a.indexOf(x) === i; }).slice(0, 6);
   var ref = FS.collection("chats").doc(id).collection("m").doc();
   var u = {at: m.at, last: {t: preview, by: MY, at: m.at, k: m.k}}; u["ty." + MY] = 0; u["rd." + MY] = m.at;
   (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
@@ -2117,7 +2248,7 @@ function groupPhoto(kind){ var f = $("ycPhF"); f.onchange = function(){ var x = 
     var u = {pt: a[0] ? a[0].u : "", ph: a[1].id}; if(VIEW === "newgroup"){ PARAM.pt = u.pt; PARAM.ph = u.ph; $("ycW").removeAttribute("data-v"); return paint(true); }
     return FS.collection("chats").doc(OPEN).update(u); }).catch(function(e){ toast(e.message || e); }); }; f.click(); }
 function leaveGroup(){ var id = OPEN; ask("", {title: "Exit this group?", ok: "Exit", danger: 1}).then(function(y){ if(y) leaveGroup2(id); }); }
-function leaveGroup2(id){ FS.collection("chats").doc(id).collection("m").add({k: "sys", t: first(MY) + " left", by: MY, at: now()}).then(function(){ return FS.collection("chats").doc(id).update({members: FV.arrayRemove(MY), admins: FV.arrayRemove(MY)}); }).then(function(){ OPEN = null; STACK = []; VIEW = "home"; stopMsgs(); paint(true); }).catch(function(e){ toast(e.code || e.message); }); }
+function leaveGroup2(id){ try{ var jx = {}; jx["join." + id] = FV.delete(); FS.collection("people").doc(MY).update(jx); var ox = {}; ox["out." + MY] = now(); FS.collection("chats").doc(id).update(ox); }catch(e){} FS.collection("chats").doc(id).collection("m").add({k: "sys", t: first(MY) + " left", by: MY, at: now()}).then(function(){ return FS.collection("chats").doc(id).update({members: FV.arrayRemove(MY), admins: FV.arrayRemove(MY)}); }).then(function(){ OPEN = null; STACK = []; VIEW = "home"; stopMsgs(); paint(true); }).catch(function(e){ toast(e.code || e.message); }); }
 function archivedView(w){ var list = visibleChats(true); w.innerHTML = bar(BACKB(), '<b>Archived</b>', list.length + " chats") + '<div class="ycScroll">' + (list.map(chatRow).join("") || '<div class="ycEmpty"><span>No archived chats. Long-press a chat → Archive.</span></div>') + '</div>'; bind(w); }
 var STARS = null;
 function starredView(w){ w.innerHTML = bar(BACKB(), '<b>Starred messages</b>', "") + '<div class="ycScroll" id="ycStars"><div class="ycEmpty sm"><span>Loading…</span></div></div>'; bind(w);
@@ -2153,7 +2284,76 @@ function agendaOf(t){ return String(t || "").split(/\n+/).map(function(x){ retur
 function adhocMeet(mem, title, video, agenda){ mem = [MY].concat(mem).filter(function(u, i, a){ return a.indexOf(u) === i; });
   var ref = FS.collection("meets").doc(), doc = {title: title, at: now(), dur: 60, members: mem, by: MY, video: !!video, made: now(), agenda: agenda || [], adhoc: 1};
   ref.set(doc).catch(function(){}); doc.id = ref.id; MEETS[ref.id] = doc; startCall({members: mem, group: true, title: title, cid: "meet_" + ref.id, video: !!video, meet: ref.id}); }
-var REMIND = {}; function meetReminders(){ Object.keys(MEETS).forEach(function(k){ var m = MEETS[k], dt = m.at - now(); if(dt < 5 * 60000 && dt > -60000 && !REMIND[k]){ REMIND[k] = 1; msgSound(); var e = document.createElement("div"); e.className = "ycPop"; e.innerHTML = '<span class="ycAv" style="width:40px;height:40px;background:#2a5a8a">📅</span><div><b>' + esc(m.title) + '</b><span>Starts at ' + hm(m.at) + ' — tap to join</span></div>'; e.onclick = function(){ e.remove(); meetJoin(k); }; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 12000); } }); }
+var REMIND = {}; function meetReminders(){ Object.keys(MEETS).forEach(function(k){ var m = MEETS[k], dt = m.at - now(); if(dt < 5 * 60000 && dt > -60000 && !REMIND[k]){ REMIND[k] = 1; msgSound(); var e = document.createElement("div"); e.className = "ycPop"; e.innerHTML = '<span class="ycAv ycCalIc" style="width:40px;height:40px">' + IL.cal + '</span><div><b>' + esc(m.title) + '</b><span>Starts at ' + hm(m.at) + ' — tap to join</span></div>'; e.onclick = function(){ e.remove(); meetJoin(k); }; document.body.appendChild(e); setTimeout(function(){ e.classList.add("on"); }, 10); setTimeout(function(){ e.classList.remove("on"); setTimeout(function(){ e.remove(); }, 400); }, 12000); } }); }
+
+// ---------- open groups: QA Alerts, YQI Team, one per customer (join on request, added by any member) ----------
+var GROUPS0 = [["grp_qa_alerts", "QA Alerts", "Inspection fail alerts and urgent quality issues", 1], ["grp_team", "YQI Team", "Everyone using YQI", 1]];
+function gslug(n){ return "grp_c_" + String(n).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40); }
+function wantJoin(gid){ var j = {}; j["join." + gid] = now(); return FS.collection("people").doc(MY).update(j).then(function(){ ME.join = ME.join || {}; ME.join[gid] = now(); }).catch(function(){}); }
+function ensureGroup(gid, name, desc, cu){ var ref = FS.collection("chats").doc(gid), t = now();
+  if(CHATS[gid]) return Promise.resolve(true);
+  var doc = {type: "group", open: 1, title: name, desc: desc || "", members: [MY], admins: [MY], at: t, made: t, by: MY, n: {}, rd: {}, last: {t: name + " group is ready", by: MY, at: t, k: "sys"}}; if(cu) doc.cu = cu;
+  return ref.set(doc).then(function(){ return true; }).catch(function(){ return wantJoin(gid).then(function(){ return false; }); }); }
+function autoGroups(){ if(!ME) return; GROUPS0.forEach(function(g){ if(!CHATS[g[0]] && !(ME.join && ME.join[g[0]])){ wantJoin(g[0]); setTimeout(function(){ if(!CHATS[g[0]]) ensureGroup(g[0], g[1], g[2]); }, 4000 + Math.random() * 3000); } }); }
+function autoAdd(){ Object.keys(CHATS).forEach(function(gid){ var c = CHATS[gid]; if(!c.open || c.type !== "group") return; var add = Object.keys(PEOPLE).filter(function(u){ var p = PEOPLE[u]; return p && p.join && p.join[gid] && (c.members || []).indexOf(u) < 0 && !(c.out && c.out[u] && c.out[u] > p.join[gid]); });
+  if(add.length) FS.collection("chats").doc(gid).update({members: FV.arrayUnion.apply(null, add)}).catch(function(){}); }); }
+setInterval(function(){ if(MY && ME){ if(!window.__yqAG){ window.__yqAG = 1; autoGroups(); } autoAdd(); } }, 10000);
+function custGroupsHtml(){ var cs = (window.YQCUST || []).slice(0, 60); if(!cs.length) return "";
+  return '<div class="ycSec">Customer groups</div>' + cs.map(function(n){ var gid = gslug(n), mem = !!CHATS[gid], req = ME && ME.join && ME.join[gid];
+    return '<div class="ycRow"><span class="ycAv ycCalIc" style="width:44px;height:44px">' + IL.users + '</span><div class="ycRm"><div class="ycR1"><b>' + esc(n) + '</b></div><div class="ycR2"><span>' + (mem ? "You are in this group" : req ? "Request sent — a member will add you" : "Chat and files for " + esc(n)) + '</span></div></div>' + (mem ? '<button class="ycMk" data-c="open" data-id="' + gid + '">Open</button>' : req ? '' : '<button class="ycMk" data-c="cjoin" data-n="' + esc(n) + '">Join</button>') + '</div>'; }).join(""); }
+function custJoin(n){ var gid = gslug(n); wantJoin(gid).then(function(){ return ensureGroup(gid, n, "Quality chat for " + n, n); }).then(function(made){ toast(made ? n + " group created" : "Request sent"); paint(true); }); }
+// inspection fail → message in QA Alerts (fixed id: posted once even if many phones see it)
+function qaAlert(rid, text){ var gid = "grp_qa_alerts", c = CHATS[gid]; if(!c) return; var id = "al_" + String(rid).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60), t = now();
+  var ref = FS.collection("chats").doc(gid).collection("m").doc(id);
+  ref.get().then(function(d){ if(d.exists) return; return ref.set({k: "text", t: text, by: MY, at: t, alert: 1}).then(function(){ return FS.collection("chats").doc(gid).update({last: {t: text, by: MY, at: t, k: "text"}, at: t}); }); }).catch(function(){}); }
+// ---------- search inside all messages and files kept on this phone ----------
+function msgSearch(q){ var out = []; Object.keys(CHATS).forEach(function(cid){ var L = lsJ("yqc_m_" + cid, []); L.forEach(function(m){ if(m.del || m.k === "sys") return; var hay = [m.t, m.fn, m.f && m.f.n, m.name, (m.tg || []).join(" ")].filter(Boolean).join(" ").toLowerCase(); if(hay.indexOf(q) >= 0) out.push({c: cid, m: m}); }); });
+  out.sort(function(a, b){ return b.m.at - a.m.at; }); return out.slice(0, 40); }
+function msgHitRow(h){ var c = CHATS[h.c], m = h.m, kind = m.k === "img" ? "📷 " : m.k === "file" ? "📄 " : m.k === "voice" ? "🎤 " : "";
+  return '<button class="ycRow" data-c="openmsg" data-id="' + h.c + '" data-m="' + m.id + '">' + avC(c, 44) + '<div class="ycRm"><div class="ycR1"><b>' + esc(chatTitle(c)) + '</b><time>' + esc(shortT(m.at)) + '</time></div><div class="ycR2"><span>' + (m.by === MY ? "You: " : "") + kind + esc(preview(m)).slice(0, 90) + ((m.tg || []).length ? ' <i class="ycTg">' + esc(m.tg.join(" · ")) + '</i>' : '') + '</span></div></div></button>'; }
+
+// ---------- tasks: decisions from meetings and chats, with due-time reminders ----------
+var TASKS = {};
+function taskList(){ return Object.keys(TASKS).map(function(k){ return TASKS[k]; }); }
+function dueTxt(t){ if(!t.due) return "no due date"; var d = t.due - now(), lbl = dayLbl(t.due) + " " + hm(t.due); return (d < 0 && !t.done ? "overdue · " : "due ") + lbl; }
+function taskRow(t){ var mine = t.who === MY, od = t.due && t.due < now() && !t.done;
+  return '<div class="ycRow ycTask' + (t.done ? " done" : "") + '" data-c="taskopen" data-id="' + t.id + '"><button class="ycTk' + (t.done ? " on" : "") + '" data-c="tdone" data-id="' + t.id + '" title="Mark done">' + (t.done ? IL.check : "") + '</button><div class="ycRm"><div class="ycR1"><b>' + esc(t.t) + '</b></div><div class="ycR2"><span class="' + (od ? "od" : "") + '">' + (mine ? (t.by === MY ? "My task" : "from " + esc(first(t.by))) : "to " + esc(first(t.who))) + ' · ' + esc(dueTxt(t)) + (t.mid && MEETS[t.mid] ? ' · ' + esc(MEETS[t.mid].title) : '') + '</span></div></div></div>'; }
+function tasksList(){ var L = taskList(), q = (SEARCHQ || "").toLowerCase(); if(q) L = L.filter(function(t){ return (t.t + " " + (t.note || "")).toLowerCase().indexOf(q) >= 0; });
+  var by = function(a, b){ return (a.due || 9e15) - (b.due || 9e15); };
+  var my = L.filter(function(t){ return t.who === MY && !t.done; }).sort(by), gv = L.filter(function(t){ return t.by === MY && t.who !== MY && !t.done; }).sort(by), dn = L.filter(function(t){ return t.done; }).sort(function(a, b){ return (b.doneAt || 0) - (a.doneAt || 0); }).slice(0, 25);
+  if(!L.length) return '<div class="ycEmpty"><span>' + IL.check + '</span><b>No tasks yet</b><span>Add a task with the + button, or turn a meeting point into a task from its minutes.</span></div>';
+  return (my.length ? '<div class="ycSec">My tasks (' + my.length + ')</div>' + my.map(taskRow).join("") : '') + (gv.length ? '<div class="ycSec">Given by me (' + gv.length + ')</div>' + gv.map(taskRow).join("") : '') + (dn.length ? '<div class="ycSec">Done</div>' + dn.map(taskRow).join("") : ''); }
+function taskNewView(w){ var P = PARAM, ppl = Object.keys(PEOPLE).filter(function(u){ return PEOPLE[u].uname; }).sort(function(a, b){ return fullName(a).localeCompare(fullName(b)); });
+  if(P.mid && MEETS[P.mid]) ppl = (MEETS[P.mid].members || []).slice();
+  var t = P.id ? TASKS[P.id] : null, dv = function(ms){ var d = new Date(ms - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+  var due = t && t.due ? dv(t.due) : dv(now() + 864e5);
+  w.innerHTML = bar(BACKB(), '<b>' + (t ? "Edit task" : "New task") + '</b>', P.mid && MEETS[P.mid] ? esc(MEETS[P.mid].title) : "") + '<div class="ycScroll"><div class="ycForm">' +
+    '<label>Task</label><textarea id="ycKt" rows="2" maxlength="300" placeholder="What needs to be done?">' + esc(t ? t.t : (P.t || "")) + '</textarea>' +
+    '<label>Who will do it</label><select id="ycKw">' + ppl.map(function(u){ return '<option value="' + u + '"' + ((t ? t.who : MY) === u ? " selected" : "") + '>' + esc(u === MY ? fullName(u) + " (me)" : fullName(u)) + '</option>'; }).join("") + '</select>' +
+    '<label>Due</label><input id="ycKd" type="datetime-local" value="' + due + '">' +
+    '<label>Note <small>(optional)</small></label><textarea id="ycKn" rows="2" maxlength="600">' + esc(t ? t.note || "" : "") + '</textarea></div></div>' +
+    '<div class="ycFoot">' + (t && (t.by === MY) ? '<button class="ycPb ghost" data-c="taskdel" data-id="' + t.id + '" style="flex:0 0 auto;color:#c8373d">Delete</button>' : '') + '<button class="ycPb" data-c="tasksave">' + (t ? "Save" : "Add task") + '</button></div>';
+  bind(w); var f = $("ycKt"); if(f && !t) f.focus(); }
+function taskSave(){ var t = ($("ycKt").value || "").trim(); if(!t) return toast("Write the task"); var who = $("ycKw").value, due = new Date($("ycKd").value).getTime() || 0, note = ($("ycKn").value || "").trim(), id = PARAM.id;
+  var mem = [MY, who].filter(function(u, i, a){ return a.indexOf(u) === i; });
+  var p = id ? FS.collection("meets").doc(id).update({t: t, who: who, due: due, note: note, members: FV.arrayUnion.apply(null, mem)}) : FS.collection("meets").add({kind: "task", t: t, who: who, by: MY, members: mem, due: due, note: note, done: false, made: now(), mid: PARAM.mid || ""});
+  p.then(function(){ toast(id ? "Task saved" : (who === MY ? "Task added" : "Task sent to " + first(who))); navBack(); }).catch(function(e){ toast(e.code || e.message); }); }
+function taskDone(id){ var t = TASKS[id]; if(!t) return; var d = !t.done; t.done = d; repaint(); FS.collection("meets").doc(id).update({done: d, doneAt: d ? now() : 0, doneBy: MY}).then(function(){ if(d) toast("Done ✓"); }).catch(function(e){ toast(e.code || e.message); }); }
+function sysPop(title, body, onClick){ msgSound();
+  if(document.hidden && window.Notification && Notification.permission === "granted"){ try{ navigator.serviceWorker.getRegistration().then(function(r){ if(r) r.showNotification(title, {body: body, tag: "task" + title, icon: "icon-192.png"}); }); }catch(e){} }
+  var e = document.createElement("div"); e.className = "ycPop"; e.innerHTML = '<span class="ycAv ycCalIc" style="width:40px;height:40px">' + IL.check + '</span><div><b>' + esc(title) + '</b><span>' + esc(body).slice(0, 110) + '</span></div>'; e.onclick = function(){ e.remove(); if(onClick) onClick(); }; document.body.appendChild(e); setTimeout(function(){ e.remove(); }, 7000); }
+var TSEEN = null;
+function taskCheck(){ var key = "yqc_tseen_" + MY, seen = TSEEN || (function(){ try{ return JSON.parse(lsGet(key) || "{}"); }catch(e){ return {}; } })(), first0 = !TSEEN; TSEEN = seen; var ch = 0, nOpen = 0;
+  taskList().forEach(function(t){ if(t.who !== MY || t.done) return; nOpen++;
+    var k = t.id, st = seen[k] || {};
+    if(!st.n){ st.n = 1; ch = 1; if(!first0 && t.by !== MY) sysPop("New task from " + first(t.by), t.t + (t.due ? " · " + dueTxt(t) : ""), function(){ openPanelTab("tasks"); }); }
+    if(t.due && !st.s && t.due - now() < 30 * 60000 && t.due > now()){ st.s = 1; ch = 1; sysPop("Task due soon", t.t + " · " + dueTxt(t), function(){ openPanelTab("tasks"); }); }
+    if(t.due && !st.o && t.due < now()){ st.o = 1; ch = 1; sysPop("Task overdue", t.t, function(){ openPanelTab("tasks"); }); }
+    seen[k] = st; });
+  if(ch) lsSet(key, JSON.stringify(seen));
+  var tn = $("ycTabN_tasks"); if(tn){ var od = taskList().filter(function(t){ return t.who === MY && !t.done && t.due && t.due < now(); }).length; tn.textContent = od || ""; tn.style.display = od ? "" : "none"; } }
+function openPanelTab(t){ TAB = t; STACK = []; VIEW = "home"; PARAM = {}; var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); else paint(true); }
+setInterval(function(){ if(MY) taskCheck(); }, 60000);
 
 // ---------- meeting details: agenda, points, live notes, minutes ----------
 function txOf(id){ var m = MEETS[id]; return ((m && m.tx) || []).slice().sort(function(a, b){ return a.at - b.at; }); }
@@ -2172,7 +2372,7 @@ function minutes(m, tx){
 }
 function minutesHtml(m, tx){
   if(!tx.length) return '<div class="ycEmpty sm"><span>Minutes appear here once the meeting starts. Everyone\'s spoken words (auto notes) and typed notes are collected here.</span></div>';
-  var r = minutes(m, tx), line = function(l){ return '<div class="ycTxL"><time>' + hm(l.at) + '</time><b style="color:' + colorOf(l.by) + '">' + esc(first(l.by)) + '</b><span>' + (l.k === "n" ? '<i class="ycNt">note</i> ' : '') + esc(l.t) + '</span></div>'; };
+  var r = minutes(m, tx), line = function(l){ return '<div class="ycTxL"><time>' + hm(l.at) + '</time><b style="color:' + colorOf(l.by) + '">' + esc(first(l.by)) + '</b><span>' + (l.k === "n" ? '<i class="ycNt">note</i> ' : '') + esc(l.t) + '</span><button class="ycMk" data-c="tasknew" data-mid="' + m.id + '" data-t="' + esc(l.t.replace(/^decision:\s*/i, "")) + '" title="Make this a task">+ task</button></div>'; };
   var h = '<div class="ycMinHd"><span>' + hm(r.start) + ' – ' + hm(r.end) + ' · ' + Math.max(1, Math.round((r.end - r.start) / 60000)) + ' min</span><span>' + Object.keys(r.who).map(function(u){ return esc(first(u)) + " " + r.who[u]; }).join(" · ") + '</span></div>';
   h += r.items.map(function(it, i){ return '<div class="ycMinI' + (it.lines.length ? "" : " no") + '"><div class="ycMinT"><b>' + (i + 1) + '. ' + esc(it.t) + '</b><em>' + (it.lines.length ? it.lines.length + (it.lines.length > 1 ? " points · " : " point · ") + r.span(it.lines) : "Not discussed") + '</em></div>' + it.lines.map(line).join("") + '</div>'; }).join("");
   h += '<div class="ycMinI other"><div class="ycMinT"><b>Other discussion</b><em>' + (r.other.length ? r.other.length + (r.other.length > 1 ? " points · " : " point · ") + r.span(r.other) : "None") + '</em></div>' + r.other.map(line).join("") + '</div>';
@@ -2190,6 +2390,8 @@ function meetView(w){
   h += '<div class="ycSec" style="padding-left:0">' + IL.agenda + ' Agenda</div>' + (ag.length ? '<ol class="ycAg">' + ag.map(function(a){ return '<li>' + esc(a.t) + (a.add ? ' <small>added by ' + esc(first(a.by)) + '</small>' : '') + '</li>'; }).join("") + '</ol>' : '<div class="ycSoft" style="padding:4px 0 8px">No agenda yet — add the first point.</div>');
   h += '<div class="ycAddPt"><input id="ycPt" maxlength="140" placeholder="Add a point to the agenda"><button data-c="addpt">' + IL.plus + '</button></div>';
   h += '<button class="ycPb" data-c="meetjoin" data-id="' + m.id + '" style="width:100%;margin:12px 0 4px">' + (live ? "Join meeting (in progress)" : "Start / join meeting") + '</button></div>';
+  var mt = taskList().filter(function(t){ return t.mid === m.id; });
+  h += '<div class="ycSec">' + IL.check + ' Tasks from this meeting</div>' + mt.map(taskRow).join("") + '<button class="ycRow" data-c="tasknew" data-mid="' + m.id + '"><span class="ycAv ycCalIc" style="width:40px;height:40px">' + IL.plus + '</span><div class="ycRm"><div class="ycR1"><b>Add a task</b></div><div class="ycR2"><span>Who does what, by when</span></div></div></button>';
   h += '<div class="ycSec">' + IL.notes + ' Minutes</div><div class="ycMin">' + minutesHtml(m, tx) + '</div>';
   if(tx.length) h += '<div style="padding:4px 14px 18px;display:flex;gap:8px"><button class="ycPb ghost" data-c="minshare" style="flex:1">Share minutes in chat</button><button class="ycPb ghost" data-c="mindl" style="flex:1">Download</button></div>';
   w.innerHTML = h + '</div>'; bind(w);
@@ -2266,6 +2468,8 @@ function act(a, el){
   case "gcard": return groupCard();
   case "setcover": return pickPhoto("cover");
   case "open": return openChat(id);
+  case "openmsg": var mid = el.getAttribute("data-m"); openChat(id); var tries = 0, jt = setInterval(function(){ var e = document.getElementById("m_" + mid); if(e || ++tries > 20){ clearInterval(jt); if(e){ e.scrollIntoView({block: "center"}); var bb = e.querySelector(".ycB"); if(bb){ bb.classList.add("ycPick"); setTimeout(function(){ bb.classList.remove("ycPick"); }, 1600); } } } }, 150); return;
+  case "cjoin": return custJoin(el.getAttribute("data-n"));
   case "dm": return openDm(u);
   case "newchat": return go("pick", {mode: "chat", sel: {}});
   case "newgroup0": return go("pick", {mode: "group", sel: {}});
@@ -2318,6 +2522,11 @@ function act(a, el){
   case "meetstart": var mem = [MY].concat(Object.keys(PARAM.sel || {}).map(function(x){ return x.slice(2); })); var vid = !!PARAM.video, ttl = ($("ycMt").value || "").trim() || "Meeting"; var ag = agendaOf(($("ycMa") || {}).value); STACK = []; VIEW = "home"; TAB = "calls"; paint(true); return adhocMeet(mem, ttl, vid, ag);
   case "meetjoin": return meetJoin(id);
   case "meetinfo": return go("meet", {id: id});
+  case "tasknew": return go("tasknew", {mid: el.getAttribute("data-mid") || "", t: el.getAttribute("data-t") || ""});
+  case "taskopen": return go("tasknew", {id: id});
+  case "tdone": return taskDone(id);
+  case "tasksave": return taskSave();
+  case "taskdel": return ask("", {title: "Delete this task?", ok: "Delete", danger: 1}).then(function(y){ if(y) FS.collection("meets").doc(id).delete().then(function(){ toast("Task deleted"); navBack(); }); });
   case "addpt": return addPoint();
   case "minshare": return shareMinutes();
   case "mindl": return downloadMinutes();
@@ -2602,6 +2811,9 @@ function css(){
   "#ycNotes{position:absolute;left:8px;right:8px;bottom:110px;max-height:58%;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.97);color:#16230f;border-radius:18px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:5;font-family:Manrope,system-ui,sans-serif}#ycNotes .ycNh{display:flex;align-items:center;justify-content:space-between}#ycNotes .ycNh b{display:flex;gap:6px;align-items:center;font-size:15px}#ycNotes .ycNh button{border:0;background:none;color:#5f6f57;cursor:pointer}",
   "#ycNotes .ycNsub{display:flex;gap:6px;flex-wrap:wrap;font-size:12.5px;color:#5d6b54}#ycNotes .ycNsub button{border:1.5px solid #cfdcc3;background:#fff;border-radius:16px;padding:5px 10px;font:600 12.5px inherit;font-family:inherit;color:#3d5a2c;cursor:pointer;display:flex;align-items:center;gap:6px}#ycNotes .ycNsub button i{width:8px;height:8px;border-radius:50%;background:#aab4a3}#ycNotes .ycNsub button.on{border-color:#e05252;color:#b52a2a}#ycNotes .ycNsub button.on i{background:#e53935;animation:ycBl 1s infinite}@keyframes ycBl{50%{opacity:.3}}",
   "#ycNotes .ycAg.sm{margin:0;padding-left:20px;font-size:13px;color:#3d4a36;max-height:80px;overflow:auto}#ycNotes .ycNfeed{flex:1;min-height:60px;overflow:auto;border-top:1px solid #e6ece0;padding-top:6px}",
+  "#ycP .ycTask{align-items:center}#ycP .ycTk{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid #9bb38a;background:#fff;color:#fff;display:grid;place-items:center;padding:0;cursor:pointer;margin-right:2px}#ycP .ycTk.on{background:#3d9a1f;border-color:#3d9a1f}#ycP .ycTk svg{width:16px;height:16px}#ycP .ycTask.done .ycR1 b{text-decoration:line-through;color:#8a9783}#ycP .ycR2 .od{color:#c8373d;font-weight:600}",
+  "#ycP .ycMk{flex:none;border:1px solid #cfdcc3;background:#fff;color:#3d7a1f;border-radius:10px;font:700 11px inherit;font-family:inherit;padding:2px 7px;cursor:pointer;align-self:center}#ycP .ycForm select,#ycP .ycForm input[type=datetime-local]{width:100%;box-sizing:border-box;border:1.5px solid #d5dfcc;border-radius:12px;padding:11px 12px;font:15px inherit;font-family:inherit;background:#fff;color:inherit}#ycP .ycTabs button{font-size:14.5px!important}",
+  "#ycP .ycTg{font-style:normal;font-size:11px;font-weight:700;background:#eaf3df;color:#3d7a1f;border-radius:6px;padding:1px 6px;margin-left:4px}",
   "#ycSheet .ycShT{font-weight:800;font-size:15px;padding:8px 14px 10px;color:#5d6b54}#ycSheet .ycAct{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;padding:13px 14px;font:600 15.5px inherit;font-family:inherit;color:inherit;text-align:left;border-radius:12px;cursor:pointer}#ycSheet .ycAct:hover{background:rgba(127,127,127,.12)}#ycSheet .ycAct span{width:26px;display:grid;place-items:center;font-size:18px;color:#3d9a1f}#ycSheet .ycAct.red{color:#d0393f}#ycSheet .ycAct.red span{color:#d0393f}",
   "#ycSheet .ycReact{display:flex;justify-content:space-around;padding:6px 6px 10px;border-bottom:1px solid rgba(127,127,127,.18);margin-bottom:4px}#ycSheet .ycReact button{border:0;background:rgba(127,127,127,.1);width:46px;height:46px;border-radius:50%;font-size:24px;cursor:pointer}#ycSheet .ycReact button.on{background:#dff3cf;box-shadow:0 0 0 2px #3d9a1f}",
   "#ycSheet .ycAttach{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px 6px 8px}#ycSheet .ycAttach button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:8px;font:700 13px inherit;font-family:inherit;color:inherit;cursor:pointer}#ycSheet .ycAttach span{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;box-shadow:0 4px 10px rgba(0,0,0,.15)}",
