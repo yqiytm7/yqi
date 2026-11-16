@@ -90,6 +90,12 @@ service cloud.firestore {
       allow update: if canWrite() || (isStaff() && (resource.data.email == em() || resource.data.get('asg', '') == em() || duty('lead')) && request.resource.data.email == resource.data.email);
       allow delete: if canWrite();
     }
+    // one-liner (weekly plan): one doc per YTM, uploaded by SOMOS, line managers or editors
+    match /ol/{id} { allow read: if isStaff(); allow write: if canWrite() || (isStaff() && (duty('somos') || duty('lead'))); }
+    // Amazon label (FNSKU) -> product page, learned once
+    match /fnsku/{id} { allow read: if isStaff(); allow write: if canAll(); }
+    // Transparency / serial codes seen in inspections (duplicate check)
+    match /tcodes/{id} { allow read: if isStaff(); allow create: if isStaff() && request.resource.data.by == em(); allow update, delete: if canWrite(); }
     // repacking reports
     match /repack/{id} {
       allow read: if canAll() || (canRead() && resource.data.email == em());
