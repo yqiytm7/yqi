@@ -844,7 +844,7 @@ function ring(segs, total){
 }
 function heroLeaves(){ var s = '<div class="hlv">'; for(var i = 0; i < 7; i++) s += '<img src="' + LEAF + '" alt="" style="left:' + (8 + i * 13) + '%;width:' + (10 + (i * 5) % 12) + 'px;animation-duration:' + (11 + (i * 4) % 9) + 's;animation-delay:' + (-i * 2.3) + 's">'; return s + '</div>'; }
 // ---------- Front screen: 4 module cards, live numbers, needs-you, search, PIN lock. The old home is the "Quality Intelligence dashboard" behind it ----------
-var FRONT = ssGet("yqi_front") !== "0", FRONTEL = null, FRM = null, FRD = {qi: null, capa: null, rp: null, at: 0}, FRANIM = true, FRQ = "";
+var FRONT = true, FRONTEL = null, FRM = null, FRD = {qi: null, capa: null, rp: null, at: 0}, FRANIM = true, FRQ = "";
 var FRCSS = "#yqFront{position:fixed;inset:0;z-index:50;overflow:auto;background:#070b07;color:#eef5ea;font:14px/1.45 Inter,Manrope,'Segoe UI',Roboto,Arial,sans-serif;-webkit-overflow-scrolling:touch;--line:rgba(255,255,255,.085);--mut:#8e9c88;--lime:#b6f36a;--red:#ff8e7e;--fd:'Inter Tight',Inter,Manrope,'Segoe UI',Arial,sans-serif}" +
   "#yqFront *{box-sizing:border-box}#yqFront button{font:inherit;color:inherit;margin:0}#yqFront :focus-visible{outline:2px solid var(--lime);outline-offset:2px}#yqHome #yqSm{z-index:80!important}" +
   "#yqFront .yf-glow{position:fixed;inset:0;pointer-events:none;background:radial-gradient(700px 380px at 30% -8%,rgba(96,190,40,.28),transparent 70%),radial-gradient(520px 320px at 95% 105%,rgba(40,120,200,.15),transparent 70%)}" +
