@@ -1,5 +1,5 @@
 // YQI app shell: always fetch fresh from the network (data stays live); only the icons are kept for offline start.
-self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v7").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
+self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v8").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
 // The app page: kept on the phone so YQI opens instantly; the newest copy is fetched in the background.
 const PAGE = "yqi-page-v3", PKEY = "/__yqi_page", LIB = "yqi-lib-v1";
@@ -23,9 +23,9 @@ self.addEventListener("fetch", e => {
     if (hit) {
       e.waitUntil(net.then(r => {
         if (!r || !r.ok) return;
-        const tag = x => x.headers.get("etag") || x.headers.get("last-modified") || "";
-        const same = tag(hit) && tag(r) ? Promise.resolve(tag(hit) === tag(r)) : Promise.all([hit.clone().text(), r.clone().text()]).then(t => t[0] === t[1]);
-        return same.then(eq => c.put(PKEY, r.clone()).then(() => { if (!eq) return self.clients.matchAll({ type: "window" }).then(l => l.forEach(w => w.postMessage({ yqiUpdate: 1 }))); }));
+        // compare the page itself (servers send a different etag now and then for the same file)
+        const hs = t => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return t.length + "-" + (h >>> 0).toString(36); };
+        return Promise.all([hit.clone().text(), r.clone().text()]).then(t => { const a = hs(t[0]), b = hs(t[1]); if (a === b) return; return c.put(PKEY, r.clone()).then(() => self.clients.matchAll({ type: "window" }).then(l => l.forEach(w => w.postMessage({ yqiUpdate: 1, h: b })))); });
       }).catch(() => {}));
       return hit;
     }
