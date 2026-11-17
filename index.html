@@ -2329,16 +2329,16 @@ async function wstParse(file, st){ st("Opening the file…", 2); var buf = await
 function wstEnc(rows){ var D = [], Dm = {}, flat = []; rows.forEach(function(r){ for(var j = 0; j < 11; j++){ var s = r[j]; if(!(s in Dm)){ Dm[s] = D.length; D.push(s); } flat.push(Dm[s]); } flat.push(r[11]); }); return {D: D, flat: flat}; }
 function wstDec(D, flat){ var out = []; for(var i = 0; i + 11 < flat.length; i += WSTN){ var r = []; for(var j = 0; j < 11; j++) r.push(D[flat[i + j]]); r.push(flat[i + 11]); out.push(r); } return out; }
 async function wstReadMonth(M, mon){ var info = (M.mon || {})[mon]; if(!info) return []; var ds = await Promise.all(Array.from({length: info.c}, function(_, i){ return FS.collection("wst").doc("m" + mon + "_" + i).get(); })), out = [];
-  ds.forEach(function(d){ if(d.exists){ var x = d.data(); out = out.concat(wstDec(x.D || [], x.r || [])); } }); return out; }
+  ds.forEach(function(d){ if(d.exists){ var x = d.data(), D = typeof x.D === "string" ? JSON.parse(x.D) : (x.D || []), r = typeof x.r === "string" ? JSON.parse(x.r) : (x.r || []); out = out.concat(wstDec(D, r)); } }); return out; }
 // merge: days in the new file replace those days; all other days stay as they were
 async function wstSave(d, file, st){ var mref = FS.collection("wst").doc("meta"), md = await mref.get(), M = md.exists ? md.data() : {}; M.mon = M.mon || {};
   var byM = {}, days = {}; d.rows.forEach(function(r){ var mon = r[0].slice(0, 7); (byM[mon] = byM[mon] || []).push(r); days[r[0]] = 1; });
-  var mons = Object.keys(byM).sort(), k = 0; for(var mi = 0; mi < mons.length; mi++){ var mon = mons[mi]; st("Merging " + wstMn(mon) + "…", 80 + Math.round(mi / mons.length * 18));
-    var keep = (await wstReadMonth(M, mon)).filter(function(r){ return !days[r[0]]; }), all = keep.concat(byM[mon]), CH = 1800, parts = [];
+  var mons = Object.keys(byM).sort(), k = 0; st("Saving…", 82); var olds = await Promise.all(mons.map(function(mon){ return wstReadMonth(M, mon); })); await Promise.all(mons.map(async function(mon, mi){
+    var keep = olds[mi].filter(function(r){ return !days[r[0]]; }), all = keep.concat(byM[mon]), CH = 6000, parts = [];
     for(var i = 0; i < all.length; i += CH) parts.push(wstEnc(all.slice(i, i + CH)));
-    for(i = 0; i < parts.length; i++) await FS.collection("wst").doc("m" + mon + "_" + i).set({D: parts[i].D, r: parts[i].flat});
+    await Promise.all(parts.map(function(pt, j){ return FS.collection("wst").doc("m" + mon + "_" + j).set({D: JSON.stringify(pt.D), r: JSON.stringify(pt.flat)}); }));
     var oc = (M.mon[mon] || {}).c || 0; for(i = parts.length; i < oc; i++) FS.collection("wst").doc("m" + mon + "_" + i).delete().catch(function(){});
-    M.mon[mon] = {c: parts.length, n: all.length, at: Date.now()}; k += byM[mon].length; }
+    M.mon[mon] = {c: parts.length, n: all.length, at: Date.now()}; k += byM[mon].length; st("Saved " + wstMn(mon), 90); }));
   var dl = Object.keys(days).sort(), hist = (M.hist || []).slice(-29); hist.push({file: file.name, at: Date.now(), by: EMAIL, from: dl[0], to: dl[dl.length - 1], days: dl.length, rows: d.n});
   await mref.set({mon: M.mon, hist: hist, at: Date.now(), by: EMAIL, file: file.name, from: dl[0], to: dl[dl.length - 1], last: (M.last && M.last > dl[dl.length - 1]) ? M.last : dl[dl.length - 1]});
   WST = null; WSTP = null; return {days: dl.length, from: dl[0], to: dl[dl.length - 1]}; }
