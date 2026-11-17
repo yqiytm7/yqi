@@ -1,5 +1,5 @@
 // YQI app shell: always fetch fresh from the network (data stays live); only the icons are kept for offline start.
-self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v8").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
+self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v9").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
 // The app page: kept on the phone so YQI opens instantly; the newest copy is fetched in the background.
 const PAGE = "yqi-page-v3", PKEY = "/__yqi_page", LIB = "yqi-lib-v1";
@@ -17,20 +17,12 @@ self.addEventListener("fetch", e => {
   const scope = self.registration.scope.replace(location.origin, "");
   const isPage = e.request.mode === "navigate" || u.pathname === scope || /\/index\.html$/.test(u.pathname);
   if (!isPage || u.searchParams.has("nc")) { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); return; }
-  // Open at once from the copy kept on the phone; fetch the newest copy in the background and tell the page when it changed.
-  e.respondWith(caches.open(PAGE).then(c => c.match(PKEY).then(hit => {
-    const net = fetch(u.origin + u.pathname, { cache: "no-store", credentials: "same-origin" });
-    if (hit) {
-      e.waitUntil(net.then(r => {
-        if (!r || !r.ok) return;
-        // compare the page itself (servers send a different etag now and then for the same file)
-        const hs = t => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return t.length + "-" + (h >>> 0).toString(36); };
-        return Promise.all([hit.clone().text(), r.clone().text()]).then(t => { const a = hs(t[0]), b = hs(t[1]); if (a === b) return; return c.put(PKEY, r.clone()).then(() => self.clients.matchAll({ type: "window" }).then(l => l.forEach(w => w.postMessage({ yqiUpdate: 1, h: b })))); });
-      }).catch(() => {}));
-      return hit;
-    }
-    return net.then(r => { if (r.ok) c.put(PKEY, r.clone()).catch(() => {}); return r; }).catch(() => c.match(PKEY));
-  })));
+  // Always open the newest app: try the network first (up to 4 s), keep that copy; without internet open the kept copy.
+  e.respondWith(caches.open(PAGE).then(c => {
+    const net = fetch(u.origin + u.pathname, { cache: "no-store", credentials: "same-origin" }).then(r => { if (r && r.ok) { c.put(PKEY, r.clone()).catch(() => {}); return r; } throw new Error("bad"); });
+    const late = new Promise(res => setTimeout(res, 4000)).then(() => c.match(PKEY)).then(hit => hit || net);
+    return Promise.race([net.catch(() => c.match(PKEY).then(hit => hit || Promise.reject())), late]).catch(() => c.match(PKEY)).then(h => h || Response.error());
+  }));
 });
 // YQI Chat: messages and calls that arrive while the app is closed (push server) or in the background
 self.addEventListener("push", e => {
