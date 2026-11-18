@@ -6918,7 +6918,7 @@ const setOn=v=>{ED.on=v;document.body.classList.toggle('edon',v);f.querySelector
 f.addEventListener('click',e=>{e.stopPropagation();setOn(!ED.on)});
 window.addEventListener('click',e=>{if(!ED.on)return;const t=e.target;if(t.closest('#edp,#edf,#edbar,#tlf,#tlp'))return;const app=document.getElementById('app');if(!app||!app.contains(t))return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();edOpen(t)},true);
 }
-function edObs(){const mo=new MutationObserver(()=>{if(ED.busy)return;cancelAnimationFrame(edObs.r);edObs.r=requestAnimationFrame(edApply)});mo.observe(document.getElementById('app'),{childList:true,subtree:true});edApply()}
+function edObs(){const mo=new MutationObserver(()=>{if(ED.busy)return;edApply();mo.takeRecords()});mo.observe(document.getElementById('app'),{childList:true,subtree:true});edApply()}
 setTimeout(()=>{try{edObs();edMount()}catch(e){}},0);
 /* ===== Cutting module ===== */
 const CUTT={duvet:'Duvet cover',pillow:'Pillowcase',sham:'Pillow sham',flat:'Flat sheet',fitted:'Fitted sheet',rect:'Custom piece'};
