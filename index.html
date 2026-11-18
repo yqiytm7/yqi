@@ -2793,11 +2793,17 @@ function tgFam(a){ a = String(a || "").toLowerCase(); return /shower/.test(a) ? 
 function tgChan(c){ c = String(c || "").toLowerCase(); return /both/.test(c) ? "Store + online" : /online|dot ?com|web/.test(c) ? "Online" : /store/.test(c) ? "Stores" : (c ? c : "—"); }
 function tgImg(n, w){ if(!n) return ""; return "https://target.scene7.com/is/image/Target/" + String(n).replace(/^G_/, "GUEST_") + "?wid=" + (w || 160) + "&hei=" + (w || 160) + "&qlt=80&fmt=webp"; }
 function tgToday(){ var d = new Date(Date.now() + 5 * 3600e3); return d.toISOString().slice(0, 10); }
+// Target inspections come from YQI's own Inspection Summary, so the Desk and the customer page always show the same numbers
+function tgLiveInsp(){ var I = typeof isRows === "function" ? isRows("is_int") : null, E = typeof isRows === "function" ? isRows("is_ext") : null; if(!I || !E) return null;
+  var isT = function(x){ try{ return canonC(x.customer) === "Target"; }catch(e){ return /^target/i.test(String(x.customer || "")); } }, df = function(x){ var o = []; (x.dlist || []).forEach(function(d){ for(var k = 0; k < (+d.q || 1); k++) o.push([d.n]); }); return o; };
+  var int = I.filter(isT).map(function(x){ var k = rkind(x.result); return {d: String(x.date || "").slice(0, 10), fl: x.floor || "", res: k === "pass" ? "PASS" : k === "fail" ? "FAIL" : String(x.result || "").toUpperCase(), pc: x.productCat || "", pr: x.product || "", df: df(x)}; }).filter(function(c){ return c.d; });
+  var ext = E.filter(isT).map(function(x){ return {date: String(x.date || "").slice(0, 10), unit: x.unit || "", building: x.bldg || "", article: x.article || "", po: x.po || "", offer: +x.qty || 0, sample: +x.sample || 0, major: +x.major || 0, result: x.result || "", defects: (x.dlist || []).map(function(d){ return ["", d.n, +d.q || 1]; })}; }).filter(function(e){ return e.date; });
+  return {int: int, ext: ext, live: 1}; }
 async function tgLoad(force){ if(TG && !force) return TG; if(TGP && !force) return TGP;
   TGP = (async function(){ var c = tgCol(), r = await Promise.all([c.doc("cat").get(), c.doc("meta").get(), c.doc("live").get(), c.doc("insp").get()]);
     var cat = r[0].exists ? JSON.parse(r[0].data().v || "[]") : [], meta = r[1].exists ? r[1].data() : {days: []}, live = r[2].exists ? JSON.parse(r[2].data().v || "{}") : {}, insp = r[3].exists ? JSON.parse(r[3].data().v || "{}") : {int: [], ext: []};
     var days = (meta.days || []).slice().sort(), S = {}; await Promise.all(days.map(function(d){ return c.doc("s" + d).get().then(function(x){ if(x.exists){ var v = x.data(); S[d] = {src: v.src, R: JSON.parse(v.R || "{}"), at: v.at}; } }); }));
-    days = days.filter(function(d){ return S[d]; }); TG = {cat: cat, meta: meta, live: live, insp: insp, days: days, S: S}; TGP = null; return TG; })();
+    days = days.filter(function(d){ return S[d]; }); TG = {cat: cat, meta: meta, live: live, insp: tgLiveInsp() || insp, insp0: insp, days: days, S: S}; TGP = null; return TG; })();
   return TGP; }
 async function tgReviews(d){ if(!d) return null; if(TGV[d]) return TGV[d]; var x = await tgCol().doc("v" + d).get(); TGV[d] = x.exists ? {V: JSON.parse(x.data().V || "[]"), I: JSON.parse(x.data().I || "{}")} : {V: [], I: {}}; return TGV[d]; }
 async function tgSaveMeta(add, last){ var m = await tgCol().doc("meta").get(), v = m.exists ? m.data() : {days: []}, s = {}; (v.days || []).concat(add || []).forEach(function(d){ s[d] = 1; }); v.days = Object.keys(s).sort(); if(last) v.last = last; v.at = Date.now(); v.by = EMAIL; await tgCol().doc("meta").set(v); }
@@ -2939,7 +2945,7 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
     d.querySelectorAll("[data-ps]").forEach(function(r){ r.onclick = function(){ cl(); drawer(r.dataset.ps); }; }); }
   // ---------- frame ----------
   var TABS = [["ov", "Overview"], ["pr", "Products"], ["fa", "Families"], ["cm", "Compare"], ["rv", "Reviews"], ["in", "Inspections"], ["hp", "How to use"]];
-  async function draw(){ if(!TG){ B.innerHTML = '<div class="wt"><button class="wb" data-x>‹</button><div><h1>Target Desk</h1><div class="ws">Loading…</div></div></div>'; wire(); try{ await tgLoad(); }catch(e){ B.innerHTML = '<div class="wt"><button class="wb" data-x>‹</button><div><h1>Target Desk</h1><div class="ws">' + esa(errTxt(e)) + '</div></div></div>'; wire(); return; } }
+  async function draw(){ if(TG){ var li = tgLiveInsp(); if(li) TG.insp = li; } if(!TG){ B.innerHTML = '<div class="wt"><button class="wb" data-x>‹</button><div><h1>Target Desk</h1><div class="ws">Loading…</div></div></div>'; wire(); try{ await tgLoad(); }catch(e){ B.innerHTML = '<div class="wt"><button class="wb" data-x>‹</button><div><h1>Target Desk</h1><div class="ws">' + esa(errTxt(e)) + '</div></div></div>'; wire(); return; } }
     var M = model(), m = TG.meta || {}, last = m.last, canUp = OWNER || ISED || (window.lvlDuty && lvlDuty("somos"));
     var head = '<div class="wt"><button class="wb" data-x aria-label="Back">‹</button><div><h1>Target Desk</h1><div class="ws">' + (last ? '<b class="wcv">Last ' + (last.src === "live" ? "live check" : "upload") + ': ' + esa(dmy(last.d)) + ' · ' + new Date(last.at).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"}) + '</b> · ' : '') + f0(TG.cat.length) + ' products · ' + TG.days.length + ' rating days' + (TG.days.length ? ' (' + esa(dmy(TG.days[0])) + ' → ' + esa(dmy(TG.days[TG.days.length - 1])) + ')' : '') + '</div></div><div class="wa">' + (canUp ? '<label class="wbt g">⬆ Upload ratings Excel<input type="file" accept=".xlsx,.xls,.csv" data-tup></label>' : '') + '<button class="wbt g" data-csv>⬇ Export CSV</button></div></div><div class="wcard olst" style="display:none"><b>Working…</b><div class="olbar"><i></i></div></div>';
     if(!TG.cat.length){ B.innerHTML = head + '<div class="wcard wan" style="text-align:center;padding:40px 20px"><div style="font-size:46px">🎯</div><h2 style="margin:10px 0 6px">No Target products yet</h2><div class="ws">Upload the Target ratings Excel (DPCI, TCIN, program…). The daily live check fills in the rest.</div></div>'; wire(); return; }
@@ -3699,7 +3705,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-000947", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-002849", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
