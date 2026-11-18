@@ -3840,14 +3840,14 @@ function openWs(w){
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
   if(WS === "_all" && HASALL) return;
-  var go = function(){ if(WS === "_all"){ if(YQBACK.has("is")) YQBACK.back(); else showHome(true); return; } if(YQBACK.has("ws")){ YQBACK.back(); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
+  var go = function(){ if(WS === "_all"){ if(YQBACK.has("is")) YQBACK.back(); else showHome(true); return; } try{ YQBACK.killTag("ws"); }catch(e){} lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
   // customer pages: the way back lives in the left menu (no small floating button)
   if(WS !== "_all"){ var lbl = HASALL ? ["‹ YQI Home", "‹ YQI"] : ["‹ Switch customer", "‹ Switch"], qd = 0, put = function(){ qd = 0; var n = document.querySelector(".nav"); if(!n || n.querySelector(".yqAllB")) return; var b = document.createElement("button"); b.type = "button"; b.className = "xl yqAllB"; b.innerHTML = '<span class="xf">' + lbl[0] + '</span><span class="xs">' + lbl[1] + '</span>'; b.onclick = function(e){ e.preventDefault(); e.stopPropagation(); go(); }; var gh = n.querySelector('[data-a="gohome"]'); if(gh) n.insertBefore(b, gh); else n.appendChild(b); };
     var st2 = document.createElement("style"); st2.textContent = ".nav .yqAllB{color:#a6dd5e!important;font-weight:800!important}.nav .yqAllB:hover{background:rgba(166,221,94,.12)!important}@media(max-width:899px){.nav .yqAllB{order:-1;flex:none!important;padding:0 8px!important}.nav [data-a=gohome]{display:none!important}body.yqapp #tlf{bottom:calc(74px + env(safe-area-inset-bottom,0px))!important}}"; document.head.appendChild(st2);
     put(); new MutationObserver(function(){ if(!qd){ qd = 1; requestAnimationFrame(put); } }).observe(document.body, {childList: true, subtree: true}); return; }
   p.innerHTML = '<a id="yqSw">‹ ' + (HASALL ? "Home" : "Switch customer") + '</a>';
   document.body.appendChild(p);
-  $("yqSw").onclick = function(){ if(WS === "_all"){ if(YQBACK.has("is")) YQBACK.back(); else showHome(true); return; } if(YQBACK.has("ws")){ YQBACK.back(); return; } lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
+  $("yqSw").onclick = function(){ if(WS === "_all"){ if(YQBACK.has("is")) YQBACK.back(); else showHome(true); return; } try{ YQBACK.killTag("ws"); }catch(e){} lsSet(LSK, HASALL ? "_all" : ""); ssSet("yqi_cur", ""); location.reload(); };
 
 }
 var started = false;
