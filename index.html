@@ -803,7 +803,9 @@ function homeTrend(ALLL, INT, WST, rg, today){ var K = HCUST ? canonC(HCUST) : "
   var B = {}, g = function(k){ return B[k] = B[k] || {n: 0, p: 0, s: 0, m: 0, in: 0, ip: 0, w: []}; };
   (ALLL || []).forEach(function(q){ if(!q.date || q.date < lo || q.date > to || !isC(q.cust) || q.first === "pend" || q.first === "reins") return; var b = g(key(q.date)), w = q.w || 1; b.n += w; if(q.first === "pass") b.p += w; b.s += q.sample || 0; b.m += q.major || 0; });
   (INT || []).forEach(function(r){ var d = String(r.date || "").slice(0, 10); if(!d || d < lo || d > to || (K && !(r.customer && canonC(r.customer) === K))) return; var b = g(key(d)), c = +r.count || 1, k = rkind(r.result); if(k !== "pass" && k !== "fail") return; b.in += c; if(k === "pass") b.ip += c; });
-  (WST || []).forEach(function(dd){ var d = String(dd.date || dd._id || "").slice(0, 10); if(!d || d < lo || d > to) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = (dd.cust[cn] || {}).wpct; if(v != null && !isNaN(+v)) g(key(d)).w.push(+v * 100); }); });
+  var MW = window.YQWST && YQWST.rows && YQWST.rows.length ? YQWST.rows : null;
+  if(MW){ var WC = {}, cm1 = {}; MW.forEach(function(r){ var d = r.d; if(!d || d < lo || d > to) return; var okc = cm1[r.cu]; if(okc === undefined) okc = cm1[r.cu] = isC(r.cu); if(!okc) return; var k = key(d), o = WC[k] = WC[k] || {c: 0, w: 0}; if(r.cut) o.c += +r.v || 0; else o.w += +r.v || 0; }); Object.keys(WC).forEach(function(k){ if(WC[k].c) g(k).w.push(WC[k].w / WC[k].c * 100); }); }
+  else (WST || []).forEach(function(dd){ var d = String(dd.date || dd._id || "").slice(0, 10); if(!d || d < lo || d > to) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = (dd.cust[cn] || {}).wpct; if(v != null && !isNaN(+v)) g(key(d)).w.push(+v * 100); }); });
   var ks = Object.keys(B).sort(); if(ks.length < 2) return '';
   var lab = function(k){ return wk ? dmy(k).slice(0, 5) : mName(k + "-01").replace(" 20", " ’"); };
   var S1 = [{n: "External pass % (1st go)", c: "#5BA32A", v: ks.map(function(k){ return B[k].n ? B[k].p / B[k].n * 100 : null; })}, {n: "Internal pass %", c: "#2d8fe0", v: ks.map(function(k){ return B[k].in ? B[k].ip / B[k].in * 100 : null; })}];
@@ -1212,6 +1214,10 @@ function renderHome(){
   var it = {n: 0, p: 0, f: 0}; IR.forEach(function(r){ var c = +r.count || 1, k = rkind(r.result); it.n += c; if(k === "pass") it.p += c; else if(k === "fail") it.f += c; });
   var WR = []; (WST || []).forEach(function(dd){ if(!inR(dd.date || dd._id)) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = dd.cust[cn] || {}; WR.push({date: dd.date || dd._id, cust: canonC(cn), wpct: v.wpct, wmtr: v.wmtr, rem: v.remarks || "", unit: v.unit || ""}); }); });
   var wp = WR.filter(function(w){ return w.wpct != null; }), wavg = wp.length ? wp.reduce(function(a, w){ return a + (+w.wpct); }, 0) / wp.length : null, wm = WR.reduce(function(a, w){ return a + (+w.wmtr || 0); }, 0);
+  // the Wastage report (Accounts YTML wastage upload) is the real source: wastage meters ÷ cutting meters, by date and customer
+  var MW = window.YQWST && YQWST.rows && YQWST.rows.length ? YQWST.rows : null, WSRC = "", wdays = 0;
+  if(!MW && !window.__hwl && window.yqWstGet){ window.__hwl = 1; yqWstGet().then(function(ok){ if(ok && HOMEON && !HEDIT) renderHome(); }); }
+  if(MW){ var wc0 = 0, ww0 = 0, nd0 = {}, cm0 = {}; MW.forEach(function(r){ if(!r.d || !inR(r.d)) return; var okc = cm0[r.cu]; if(okc === undefined) okc = cm0[r.cu] = isC(r.cu); if(!okc) return; if(r.cut) wc0 += +r.v || 0; else ww0 += +r.v || 0; nd0[r.d] = 1; }); wdays = Object.keys(nd0).length; if(wc0){ wavg = ww0 / wc0; wm = ww0; WSRC = "m"; } else if(wdays || !wp.length){ wavg = null; wm = 0; WSRC = "m"; } }
   var ccount = {}; done.forEach(function(q){ ccount[q.cust] = 1; });
   var oql = smp ? Math.round(maj / smp * 10000) / 100 : null;
   // hero
@@ -1247,7 +1253,7 @@ function renderHome(){
     kpi("OQL", oql == null ? "—" : oql + "%", oql != null && oql > 2.5 ? "#c0392b" : "#7DB82E", smp ? maj + " major in " + smp + " samples" : "from Inspection Summary", "Outgoing quality level = major defects ÷ samples", "") + '</div>';
   var nfl = {}; IR.forEach(function(r){ if(r.floor) nfl[r.floor] = 1; });
   x += '<div class="yqsec" data-ek="s2">Internal inspections and wastage</div><div class="kp">' + kpi("Internal inspections", it.n, "#2F5A1A", HCUST ? "for " + esc(HCUST) : "all floors", "Floor (internal) inspections in " + rg.lbl, "") + kpi("Internal passed", it.p, "#5BA32A", pc(it.p, it.n) + " pass rate", "", "") + kpi("Internal failed", it.f, "#c0392b", pc(it.f, it.n) + " of internal", "", "") +
-    kpi("Floors", Object.keys(nfl).length, "#7DB82E", "with internal data", Object.keys(nfl).slice(0, 12).join("\n"), "") + kpi("Wastage", wavg != null ? (Math.round(wavg * 10000) / 100) + "%" : "—", "#a66b00", wp.length ? "average of " + wp.length + " entries" : "no wastage in this period", WR.slice(0, 8).map(function(w){ return dmy(w.date) + " " + w.cust + " " + (w.wpct != null ? (Math.round(w.wpct * 10000) / 100) + "%" : "") + (w.wmtr ? " · " + w.wmtr + " m" : ""); }).join("\n"), "") + kpi("Wastage MTR", wm ? Math.round(wm).toLocaleString() : "—", "#a66b00", WR.length + " entries", "", "") + '</div>';
+    kpi("Floors", Object.keys(nfl).length, "#7DB82E", "with internal data", Object.keys(nfl).slice(0, 12).join("\n"), "") + kpi("Wastage", wavg != null ? (Math.round(wavg * 10000) / 100) + "%" : "—", "#a66b00", WSRC === "m" ? (wavg != null ? "wastage report · " + wdays + " day" + (wdays === 1 ? "" : "s") : "no wastage in this period") : wp.length ? "average of " + wp.length + " entries" : "no wastage in this period", WR.slice(0, 8).map(function(w){ return dmy(w.date) + " " + w.cust + " " + (w.wpct != null ? (Math.round(w.wpct * 10000) / 100) + "%" : "") + (w.wmtr ? " · " + w.wmtr + " m" : ""); }).join("\n"), "") + kpi("Wastage MTR", wm ? Math.round(wm).toLocaleString() : "—", "#a66b00", WSRC === "m" ? "wastage meters" : WR.length + " entries", "", "") + '</div>';
   x += homeTrend(ALLL, INT, WST, rg, today);
   // left card
   var left, list = done;
@@ -4002,7 +4008,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-123000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-133000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
