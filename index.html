@@ -4372,7 +4372,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-001800", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-002500", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -5411,7 +5411,9 @@ var FDORD = {G: "GROUND", GROUND: "GROUND", "1": "FIRST", "1ST": "FIRST", FIRST:
 function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UNIT/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); var known = (window.yqFloors && window.yqFloors()) || [];
   var cmp = function(x){ return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ""); }, k0 = known.filter(function(x){ return cmp(x) === cmp(v) || cmp(x) === cmp(v + " FLOOR"); })[0]; if(k0) return k0;
   var m = /^(?:YTM\s*)?(\d+)\s*([A-Z])?\s*(GROUND|G|FIRST|SECOND|THIRD|FOURTH|FIFTH|\d(?:ST|ND|RD|TH)?)$/.exec(u); if(!m) return "";
-  var nm = "YTM-" + m[1] + (m[2] ? " " + m[2] : "") + " " + FDORD[m[3]] + " FLOOR"; var k1 = known.filter(function(x){ return cmp(x) === cmp(nm); })[0]; return k1 || nm; }
+  var key = m[1] + "|" + (m[2] || "") + "|" + FDORD[m[3]], nm = "YTM-" + m[1] + (m[2] ? " " + m[2] : "") + " " + FDORD[m[3]] + " FLOOR";
+  var k1 = known.filter(function(x){ var y = String(x).toUpperCase().replace(/FLOOR|FLR/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(), q = /^(?:YTM\s*)?(\d+)\s*([A-Z])?\s*(GROUND|G|FIRST|SECOND|THIRD|FOURTH|FIFTH|\d(?:ST|ND|RD|TH)?)$/.exec(y); return q && q[1] + "|" + (q[2] || "") + "|" + FDORD[q[3]] === key; });
+  k1.sort(function(a, b){ return /FLOOR/.test(b) - /FLOOR/.test(a); }); return k1[0] || nm; }
 function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).slice(1).forEach(function(l){ var m = /^\s*([A-Za-z .\/]+?)\s*[:=]\s*(.*)$/.exec(l); if(m) F[m[1].toLowerCase().replace(/[^a-z]/g, "")] = m[2].trim(); });
   var g = function(){ for(var i = 0; i < arguments.length; i++){ var v = F[arguments[i]]; if(v != null && v !== "") return v; } return ""; }, err = [];
   var date = fdDate(g("date")); if(!date) err.push("Date (write DD-MM-YYYY)");
