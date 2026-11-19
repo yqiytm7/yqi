@@ -215,7 +215,7 @@ const PF=r=>S.prog==='All Programs'||(S.prog==='Selected programs'?S.psel.indexO
 let h=hero('__YQI',rangeTxt(),progSel('hp',S.prog,true)).replace('class="hero"','class="hero big"');
 if(!x.n&&!allRows().length&&!/bedsure|bedshe/i.test(cixName()))return h+'<div class="jmp" style="display:none"></div>'+cixView()+impInsp()+recent();
 if(!x.n){const rg=S.rf||S.rt;return h+'<div class="jmp" style="display:none"></div>'+(rg?'':anHtml())+`<div class="card" style="margin-top:20px"><div class="empty">${rg?'No inspections in this date range. Change the dates above or tap All dates.':'No articles for this program yet.'}</div></div>`+(rg?'':impInsp()+recent())}
-if(IS_BS())h+=BSK(x,zz);h+=`<div class="jmp">${[['sx-mo','Monthly'],['sx-an','Colour'],['sx-df','Defects'],['sx-rem','Reminders']].map(j=>`<button class="pill" data-a="jump" data-id="${j[0]}">${j[1]}</button>`).join('')}</div>`;
+h+=`<div class="jmp">${[['sx-mo','Monthly'],['sx-an','Colour'],['sx-df','Defects'],['sx-rem','Reminders']].map(j=>`<button class="pill" data-a="jump" data-id="${j[0]}">${j[1]}</button>`).join('')}</div>`;if(IS_BS())h+=BSK(x,zz);
 if(S.prog==='Selected programs')h+=`<div class="card" style="margin-top:16px"><div class="note">Combined result for these programs:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${S.psel.map(p=>`<span class="chip nv">${esc(p)}</span>`).join('')}</div><button class="btn ghost full" data-a="pback">Back to all programs</button></div>`;
 const v1=pc(x.p1,x.off),CR=2*Math.PI*58,fails=x.off-x.p1;
 const segs=[['#256B4B','Passed 1st go',x.p1,'p1'],['#92620F','Passed after re-inspection',x.re,'re'],['#A63D2A','Rejected',x.rej,'rej'],['#C27A2C','Failed, re-inspection pending',x.fl,'fl']].filter(z=>z[2]);
