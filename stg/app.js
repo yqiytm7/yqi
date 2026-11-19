@@ -611,7 +611,9 @@ function hubSub(c, ref, fn, er){
 var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA", atc: "ATC", gli: "GLI", glidreamtex: "Dreamtex", dreamtex: "Dreamtex", jla: "JLA Home", jlahome: "JLA Home", revman: "Revman", revmanindustries: "Revman", revmaninternationalinc: "Revman", holtex: "Holtex", holtexdelafronterasderldecv: "Holtex", tradelinks: "Tradelinks", tradelinksinternational: "Tradelinks", stc: "STC", turnerbianca: "Turner Bianca", jlyhome: "JLA Home", sainsbury: "Sainsbury's", sainsburys: "Sainsbury's", thewarehousegroup: "The Warehouse Group"};
 var CREG = {};
 function ckey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
-function canonC(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; if(w) return w.name; var t = String(n || "").trim(); if(!k) return t; if(!CREG[k] || (CREG[k] === CREG[k].toLowerCase() && t !== t.toLowerCase())) CREG[k] = t; return CREG[k]; }
+var CCM = {}, CCL = null, CCA = null, CCN = 0;
+function canonC(n){ if(CCL !== CLIST || CCA !== CALIAS || CCN > 20000){ CCM = {}; CCL = CLIST; CCA = CALIAS; CCN = 0; } var key = typeof n === "string" ? n : String(n == null ? "" : n); var hit = CCM[key]; if(hit !== undefined) return hit; var r = canonC0(n); CCM[key] = r; CCN++; return r; }
+function canonC0(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; if(w) return w.name; var t = String(n || "").trim(); if(!k) return t; if(!CREG[k] || (CREG[k] === CREG[k].toLowerCase() && t !== t.toLowerCase())) CREG[k] = t; return CREG[k]; }
 
 // ---------- Inspection Summary: one shared store for all customers + customer picker ----------
 var ISROOT = null, ISCUST = "", ISL = [], CUSTS = {};
@@ -4418,7 +4420,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-230452", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-230631", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
