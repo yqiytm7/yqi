@@ -215,6 +215,7 @@ css.textContent = "#yqiGate.lowz{z-index:2147481000}body.yqapp:not(.onland) #ycF
 document.head.appendChild(css);
 var gate = document.createElement("div"); gate.id = "yqiGate";
 function showGate(html){ if(EARLY && /^<h1>(YQI<\/h1>|Loading…<\/h1>|Opening all|Opening All)/.test(html)) return; if(!gate.parentNode) (document.body || document.documentElement).appendChild(gate); gate.style.display = "flex";
+  if(/^<h1>Opening (Bedsure|…)/.test(html) && (/Bedsure/.test(html) || ssGet("yqi_cur") === "bedsure")){ bsGate(); return; }
   var lm = /^<h1>(YQI<\/h1>|Loading…<\/h1>|Opening[^<]*<\/h1>)/.exec(html);
   if(lm){ gate.className = "ld"; gate.innerHTML = '<img class="leaf" src="' + LEAF + '" alt=""><div class="lt">' + (/^Opening/.test(lm[1]) ? esc(lm[1].replace(/<\/h1>$/, "")) : "Loading…") + '</div><div id="yqMsg" class="msg" style="max-width:420px;text-align:center"></div>'; return; }
   gate.className = ""; gate.innerHTML = '<div class="bx">' + html + '<div class="foot">YQI · Yunus Quality Intelligence · Developed by Hamza Khan</div></div>'; }
@@ -295,6 +296,24 @@ function yqCamEnhance(){ var f = document.getElementById("f_files"); if(!f || f.
 (function(){ var st = document.createElement("style"); st.textContent = ".yqcam{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:2px 0 10px}.yqcamb{border:0;border-radius:12px;padding:12px 16px;font:800 14px Manrope,system-ui,sans-serif;color:#fff;background:linear-gradient(135deg,#4c8a2a,#2F5A1A);box-shadow:0 6px 16px rgba(47,90,26,.3);cursor:pointer}.yqcamn{font-size:12px;color:#6b7a60}.yqcamt{display:flex;flex-wrap:wrap;gap:8px;width:100%}.yqcamt .ph{position:relative;width:64px;height:64px;border-radius:10px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.2)}.yqcamt .ph img{width:100%;height:100%;object-fit:cover}.yqcamt .ph b{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font:700 13px/20px sans-serif;text-align:center;cursor:pointer}";
   (document.head || document.documentElement).appendChild(st);
   try{ new MutationObserver(function(){ yqCamEnhance(); }).observe(document.documentElement, {childList: true, subtree: true}); }catch(e){ setInterval(yqCamEnhance, 800); } })();
+function bsGate(){ if(!document.getElementById("bsgCss")){ var st = document.createElement("style"); st.id = "bsgCss"; st.textContent = "#yqiGate.bsg{background:#070b07;padding:0;align-items:stretch;justify-content:stretch;color:#eef5ea;font-family:Inter,Manrope,system-ui,sans-serif}#yqiGate.bsg .g{display:flex;height:100%;width:100%}#yqiGate.bsg .sd{width:230px;flex:none;background:#0b100b;border-right:1px solid rgba(255,255,255,.085);padding:22px 14px}#yqiGate.bsg .sd img{height:44px;width:auto;background:#fff;border-radius:14px;padding:8px 14px;box-sizing:content-box}#yqiGate.bsg .sd small{display:block;font-size:10.5px;letter-spacing:2.6px;color:#8e9c88;margin:12px 0 18px;font-weight:700}#yqiGate.bsg .mn{flex:1;padding:26px 28px;min-width:0}#yqiGate.bsg h1{font:800 30px Inter,Manrope,sans-serif;margin:0 0 6px;color:#fff}#yqiGate.bsg .lv{font-size:13.5px;color:#8e9c88}#yqiGate.bsg .lv b{color:#b6f36a}#yqiGate.bsg .k{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:14px;margin-top:22px}#yqiGate.bsg .sk{height:150px;border-radius:18px;border:1px solid rgba(255,255,255,.085);background:linear-gradient(90deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.07) 40%,rgba(255,255,255,.03) 80%);background-size:300% 100%;animation:bsgS 1.2s linear infinite}#yqiGate.bsg .sk.b{height:260px;margin-top:16px}#yqiGate.bsg .ln{height:42px;border-radius:12px;margin:8px 0}@keyframes bsgS{from{background-position:100% 0}to{background-position:-50% 0}}@media(max-width:899px){#yqiGate.bsg .sd{display:none}#yqiGate.bsg .mn{padding:18px 16px}#yqiGate.bsg .k{grid-template-columns:1fr 1fr}#yqiGate.bsg .k .sk:first-child{grid-column:1/-1}}"; document.head.appendChild(st); }
+  if(!gate.parentNode) (document.body || document.documentElement).appendChild(gate); gate.style.display = "flex"; gate.className = "bsg"; gate.innerHTML = '<div class="g"><div class="sd">' + LOGO_Q + '<small>QUALITY INTELLIGENCE</small><div class="sk ln"></div><div class="sk ln" style="opacity:.6"></div><div class="sk ln" style="opacity:.6"></div><div class="sk ln" style="opacity:.6"></div></div><div class="mn"><h1>Overview</h1><div class="lv"><b>● Live</b> · Bedsure · loading the latest data…</div><div class="k"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div><div class="sk b"></div></div></div><div id="yqMsg" class="msg" style="position:fixed;bottom:20px;left:0;right:0;text-align:center;color:#ff8e7e"></div>'; }
+// ===== Bedsure desk: its own light module (bsd.js), opens over the front page without a reload =====
+var BSDP = null;
+function bsUrl(){ var s = document.querySelector('script[src*="app.js"]'); return s ? s.src.replace(/app\.js/, "bsd.js") : "bsd.js"; }
+function bsDb(){ var w0 = WS, r0 = ROLE; WS = "bedsure"; var bw = (CLIST || []).filter(function(x){ return x.id === "bedsure"; })[0]; ROLE = OWNER ? "owner" : (bw && bw.role) || ROLE; var db = makeDb(); WS = w0; ROLE = r0; return db; }
+function bsBuyer(){ var E = typeof isRows === "function" ? isRows("is_ext") : null; if(!E) return null; var L = E.filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return /beds/i.test(String(x.customer || "")); } }); var p = 0, mj = 0, sm = 0; L.forEach(function(x){ if(rkind(x.result) === "pass") p++; mj += +x.major || 0; sm += +x.sample || 0; }); return {n: L.length, p: p, oql: sm ? Math.round(1000 * mj / sm) / 10 : null}; }
+function bsBlob(id){ var w0 = WS; WS = "bedsure"; try{ return blobUrl(id); }catch(e){ return Promise.reject(e); } finally{ WS = w0; } }
+function bsPrefetch(){ if(bsPrefetch.d) return; bsPrefetch.d = 1; setTimeout(function(){ try{ if(!FS || !(CLIST || []).some(function(w){ return w.id === "bedsure"; })){ bsPrefetch.d = 0; return; } if(!window.YQBSD && !BSDP) BSDP = loadJs(bsUrl()); (BSDP || Promise.resolve()).then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){ BSDP = null; }); }catch(e){} }, 3500); }
+function bsOpen(o){ o = o || {}; var bw = (CLIST || []).filter(function(x){ return x.id === "bedsure"; })[0], role = o.role || (OWNER ? "owner" : bw && bw.role) || "viewer";
+  if(!window.YQBSD){ bsGate(); if(!BSDP) BSDP = loadJs(bsUrl()); BSDP.then(function(){ hideGate(); bsOpen(o); }).catch(function(){ BSDP = null; hideGate(); try{ yqToast && yqToast("Could not open Bedsure. Check internet."); }catch(e){} }); return; }
+  try{ if(HOMEON){ var t = $("yqTip"); if(t) t.style.display = "none"; } }catch(e){}
+  try{ if(!o.single && window.YQBACK) YQBACK.push(function(){ if(window.YQBSD) YQBSD.close(); }, "bsd"); }catch(e){}
+  YQBSD.open({FS: FS, dec: dec, LOGO_Q: LOGO_Q, LOGO_BED: LOGO_BED, EMAIL: EMAIL, canEdit: OWNER || role === "owner" || role === "editor", db: bsDb(), xlsx: needXlsx, buyer: bsBuyer, blob: bsBlob, single: !!o.single, onClose: function(){ try{ if(window.YQBACK && YQBACK.has("bsd")) YQBACK.killTag("bsd"); }catch(e){} if(o.single){ setTimeout(function(){ bsOpen(o); }, 50); } }}); }
+// Amazon catalog for the Bedsure desk: sent from an Amazon page (owner only), kept in ws/bedsure/amzcat
+window.addEventListener("message", function(e){ var d = e.data; if(!d || d.type !== "yqBsCat" || !/^https:\/\/www\.amazon\.(com|de)$/.test(e.origin) || !OWNER || !FS) return; var mk = /\.de$/.test(e.origin) ? "de" : "com", js = typeof d.v === "string" ? d.v : JSON.stringify(d.v || {});
+  if(js.length > 900000){ try{ e.source.postMessage({type: "yqBsCatAck", ok: 0, err: "too big"}, e.origin); }catch(x){} return; }
+  FS.collection("ws").doc("bedsure").collection("amzcat").doc(mk).set({v: js, at: Date.now(), by: EMAIL}).then(function(){ try{ e.source.postMessage({type: "yqBsCatAck", ok: 1, mk: mk, n: js.length}, e.origin); }catch(x){} if(window.YQBSD) YQBSD.reload(); }).catch(function(er){ try{ e.source.postMessage({type: "yqBsCatAck", ok: 0, err: String(er && er.message || er)}, e.origin); }catch(x){} }); });
 function hideGate(){ gate.style.display = "none"; }
 function msg(t, bad){ var m = $("yqMsg"); if(m){ m.textContent = t || ""; m.className = "msg " + (bad ? "bad" : "ok"); } }
 function errTxt(e){ var c = e && e.code || "", M = {"auth/invalid-credential": "Wrong email or password.", "auth/wrong-password": "Wrong email or password.", "auth/user-not-found": "No account with this email. Create one first.", "auth/email-already-in-use": "This email already has an account. Sign in instead.", "auth/weak-password": "Password must be at least 6 characters.", "auth/invalid-email": "This email address is not valid.", "auth/too-many-requests": "Too many tries. Wait a few minutes and try again.", "permission-denied": "You do not have access to this. Ask the YQI owner."}; return M[c] || (e && e.message) || String(e); }
@@ -455,7 +474,7 @@ function afterLogin(u){
     var allW = list.filter(function(w){ return w.id === "_all"; })[0];
     if(!allW) allW = {id: "_all", name: "All customers", role: OWNER ? "owner" : "viewer"};
     HASALL = !!allW;
-    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
+    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; if(cp && cp.id === "bedsure"){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); setTimeout(function(){ bsOpen(); }, 400); } return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
     if(pick) return openWs(pick);
     if(list.length === 1 && !OWNER) return openWs(list[0]);
     chooseWs(list);
@@ -1399,7 +1418,7 @@ function monthReport(d, dl){
   (function f(){ var w = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentWindow && fr.contentWindow.__yqDeck && fr.contentDocument.getElementById("nav")) w = fr.contentWindow; }catch(e){} });
     if(w && w.__yqReady && w.__yqReady()){ try{ w.__yqDeck("month", d, dl); }catch(e){} return; } if(++n < 120) setTimeout(f, 250); })();
 }
-function openCust(id){ if(!id) return; lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); if(id === "bedsure" && !started && WS === "_all"){ var bw = (CLIST || []).filter(function(x){ return x.id === id; })[0]; if(bw){ DBX = null; openWs({id: bw.id, name: bw.name || "Bedsure", role: bw.role || ROLE}); return; } } showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
   var w = CLIST.filter(function(x){ return ckey(x.name) === ckey(n) || x.id === slug(n); })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
@@ -4148,7 +4167,7 @@ function showHome(on){
     try{ new MutationObserver(function(rs){ var m = HPX || HOV.x; if(!m || !window.YQE || !Object.keys(m).length) return; for(var i = 0; i < rs.length; i++){ var a = rs[i].addedNodes; for(var j = 0; j < a.length; j++) if(a[j].nodeType === 1){ try{ YQE.apply(h, m); }catch(e){} return; } } }).observe(h, {childList: true, subtree: true}); }catch(e){} }
   HOMEON = !!on; h.style.display = on ? "block" : "none"; try{ document.body.classList.toggle("yqfr", !!on && FRONT); }catch(e){} try{ document.body.classList.toggle("yqh", !!on); }catch(e){}
   var c = $("yqCust"); if(c && on) c.style.display = "none";
-  if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
+  if(on){ renderHome(); if(!HDATA) loadHomeTry(0); try{ bsPrefetch(); }catch(e){} }
 }
 function goDirect(){
   var fresh = ssGet("yqi_direct") === "bed"; ssSet("yqi_direct", "");
@@ -4161,7 +4180,7 @@ function goDirect(){
     if(++n < 80) setTimeout(f, 150); })();
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
-function startHome(){ try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
+function startHome(){ bsPrefetch(); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits();
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening && WS === "_all") showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
@@ -4392,15 +4411,16 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  if(w && w.id === "bedsure" && !CUSTMODE){ WS = WS || "_all"; hideGate(); bsOpen({single: !HASALL, role: w.role}); return; }
   if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
   WS = w.id; WSNAME = w.name; ROLE = w.role; lsSet(LSK, WS); ssSet("yqi_cur", WS);
   if(WS !== "_all"){ EARLY = false; if(HOMEON) showHome(false); if(HASALL) try{ YQBACK.onGesture(function(){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); showGate('<h1>Opening all customers…</h1>'); location.reload(); }, "ws"); }catch(e){} }
   showGate('<h1>Opening ' + esc(WSNAME) + '…</h1><div class="sub">' + esc(EMAIL) + '</div><div id="yqMsg" class="msg"></div>');
-  Promise.all([FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
+  Promise.all([WS === "bedsure" ? FS.collection("ws").doc(WS).collection("seed").get({source: "cache"}).then(function(q){ return q.empty ? FS.collection("ws").doc(WS).collection("seed").get() : q; }).catch(function(){ return FS.collection("ws").doc(WS).collection("seed").get(); }) : FS.collection("ws").doc(WS).collection("seed").get(), pickIsRoot()]).then(function(a){
     var sd = {}; a[0].docs.forEach(function(d){ sd[d.id] = dec(d.data().v); });
     window.__SEED = sd; window.__YQI_WS = {id: WS, name: WSNAME, role: ROLE, email: EMAIL, logo: WS === "_all" ? "" : logoUrl(WSNAME)};
-  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); hideGate(); pill(); try{ pingWatch(); }catch(e){} startCustUi(); if(WS === "_all"){ startHome(); } else { document.body.classList.add("yqapp"); runApp(); goDirect(); qcApp(); } }).catch(function(e){ msg(errTxt(e), 1); });
+  }).then(function(){ try{ performance.mark("yq-run"); }catch(e){} installClaude(); if(WS === "bedsure"){ var gn = 0; (function gw(){ if(document.querySelector("#app .bsh") || ++gn > 160) hideGate(); else setTimeout(gw, 50); })(); } else hideGate(); pill(); try{ pingWatch(); }catch(e){} startCustUi(); if(WS === "_all"){ startHome(); } else { document.body.classList.add("yqapp"); runApp(); goDirect(); qcApp(); } }).catch(function(e){ msg(errTxt(e), 1); });
 }
 function pill(){
   var p = document.createElement("div"); p.id = "yqiPill";
@@ -4461,7 +4481,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-010925", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-020144", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
