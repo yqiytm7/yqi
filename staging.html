@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
-<head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>// ===== YQI shared helpers: one date range for every screen + Edit tool with fixed (pakki) IDs =====
+<head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>window.__yqErrQ=[];addEventListener("error",function(e){try{if(!e||!e.message||/ResizeObserver|^Script error/.test(e.message))return;__yqErrQ.push({m:String(e.message).slice(0,300),f:String(e.filename||"").split("/").pop().split("?")[0],l:e.lineno||0,c:e.colno||0,s:String(e.error&&e.error.stack||"").slice(0,600)});if(window.yqErrSend)setTimeout(yqErrSend,500)}catch(x){}});addEventListener("unhandledrejection",function(e){try{var r=e.reason||{},m=String(r&&r.message||r||"");if(!m||/network|offline|unavailable|permission|Failed to fetch|aborted|quota|cancel/i.test(m))return;__yqErrQ.push({m:("Promise: "+m).slice(0,300),f:"",l:0,c:0,s:String(r&&r.stack||"").slice(0,600)});if(window.yqErrSend)setTimeout(yqErrSend,500)}catch(x){}});
+// ===== YQI shared helpers: one date range for every screen + Edit tool with fixed (pakki) IDs =====
 (function(){
 "use strict";
 // ---------- one date range for all screens (this tab; a new open starts on all data) ----------
@@ -82,8 +83,8 @@ function key(sc, o){ var t = [sc || "", o.id, o.k === "t" ? "t" : "h"].join("~")
 function boxOf(el, root){ var b = el.parentElement && el.parentElement.closest(BOXES); if(!b || b === root || !root.contains(b)) return null; return b; }
 window.YQE = {pid: pid, sig: sig, ownText: ownText, ownNode: ownNode, apply: apply, unhideAll: unhideAll, key: key, boxOf: boxOf, setText: setText, BOXES: BOXES};
 })();
-</script><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><meta charset="utf-8"><script src="app.js?v=20261119-221206"></script><script src="chat.js?v=20261119-221206"></script>
-<script src="wash.js?v=20261119-221206"></script>
+</script><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><meta charset="utf-8"><script src="app.js?v=20261119-223914"></script><script src="chat.js?v=20261119-223914"></script>
+<script src="wash.js?v=20261119-223914"></script>
 <meta name="author" content="Hamza Khan">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -399,10 +400,10 @@ body.onland{background:radial-gradient(60% 50% at 100% 0%,#DCEBC8,transparent 65
 <div id="app"></div>
 <div id="toast" role="status"></div><div id="drw"></div>
 <div id="lb" data-a="lbclose" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.9);z-index:20;padding:16px;overflow:auto"><div style="color:#fff;font:600 13px Manrope,sans-serif;text-align:right;margin-bottom:10px">Tap to close</div><img id="lbi" alt="Card picture" style="width:100%;max-width:900px;display:block;margin:0 auto"></div>
-<script type="text/yqi" data-src="ws1.js?v=20261119-221206"></script><script type="text/yqi" data-src="ws2.js?v=20261119-221206"></script>
-<script type="text/yqi" data-src="ws3.js?v=20261119-221206"></script>
-<script type="text/yqi" data-src="ws4.js?v=20261119-221206"></script>
-<script type="text/yqi" data-src="ws5.js?v=20261119-221206"></script>
-<script type="text/yqi" data-src="ws6.js?v=20261119-221206"></script>
-<script type="text/yqi" data-src="ws7.js?v=20261119-221206"></script></body>
+<script type="text/yqi" data-src="ws1.js?v=20261119-223914"></script><script type="text/yqi" data-src="ws2.js?v=20261119-223914"></script>
+<script type="text/yqi" data-src="ws3.js?v=20261119-223914"></script>
+<script type="text/yqi" data-src="ws4.js?v=20261119-223914"></script>
+<script type="text/yqi" data-src="ws5.js?v=20261119-223914"></script>
+<script type="text/yqi" data-src="ws6.js?v=20261119-223914"></script>
+<script type="text/yqi" data-src="ws7.js?v=20261119-223914"></script></body>
 </html>

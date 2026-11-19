@@ -113,9 +113,19 @@ export default {
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     if (req.method === "GET" && new URL(req.url).searchParams.has("feed")) { try { return json(Object.assign({ ok: true }, await feedRun(env))); } catch (e) { return json({ ok: false, error: e.message }); } }
-    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok, v: 5 }); }
+    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok, v: 6 }); }
     let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
     const at = await accessToken(env);
+    // ---- app error from a phone or computer: one record per error per day, with a count ----
+    if (b.op === "err") {
+      const u = await whoIs(b.idToken); if (!u) return json({ error: "not signed in" }, 401);
+      const e = b.e || {}, day = new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 10), key = day + "_" + (fdHash(String(e.m) + "|" + e.f + "|" + e.l) >>> 0).toString(36);
+      const name = "projects/" + PROJECT + "/databases/(default)/documents/ws/_all/errs/" + key;
+      const f = { day, m: String(e.m || "").slice(0, 300), f: String(e.f || "").slice(0, 60), l: Number(e.l) || 0, c: Number(e.c) || 0, s: String(e.s || "").slice(0, 600), v: String(b.v || "").slice(0, 20), p: String(b.p || "").slice(0, 80), ua: String(b.ua || "").slice(0, 160), email: u.email || "", last: Date.now() };
+      const w = await fetch(DOCS.replace(/\/$/, "") .replace(/documents$/, "documents:commit"), { method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
+        body: JSON.stringify({ writes: [{ update: { name, fields: fields(f) }, updateMask: { fieldPaths: Object.keys(f) }, updateTransforms: [{ fieldPath: "n", increment: { integerValue: "1" } }] }] }) });
+      return json({ ok: w.ok });
+    }
     // ---- computer asks: has a phone approved this QR yet? ----
     if (b.op === "qrpoll") {
       if (!okSid(b.sid)) return json({ error: "bad" }, 400);

@@ -127,7 +127,7 @@
       m.note = V("note");
       go.disabled = true; go.textContent = "Sending…";
       upPhotos(P, st).then(function(ph){ m.ph = ph; m.t = TY[t].ic + " " + m.no + " · YTM " + m.ytm + (m.qty ? " · " + n0(m.qty) + " pcs" : m.res ? " · " + m.res : "");
-        return post(m, m.t); }).then(function(){ toast("Sent to " + GNAME); o.__close(); }).catch(function(e){ go.disabled = false; go.textContent = "Try again"; st("Not sent: " + (e.code || e.message)); });
+        return post(m, m.t); }).then(function(){ toast(navigator.onLine === false ? "No internet – saved on this phone, it will send by itself" : "Sent to " + GNAME); o.__close(); }).catch(function(e){ go.disabled = false; go.textContent = "Try again"; st("Not sent: " + (e.code || e.message)); });
     };
   }
   function ackForm(id, ok){ var m = ROWS.filter(function(x){ return x.id === id; })[0] || (window.YQCHAT && YQCHAT.msg && YQCHAT.msg(id)); if(!m) return toast("Message not found");
@@ -147,7 +147,7 @@
       if(!okv && !note) return st("Write what the issue is");
       go.disabled = true; go.textContent = "Saving…";
       upPhotos(P, st).then(function(ph){ var a = {by: uid(), at: Date.now(), q: q, ok: okv, note: note}; if(ph.length) a.ph = ph;
-        return fs().collection("chats").doc(GID).collection("m").doc(id).update({ack: a}).then(function(){
+        var aref = fs().collection("chats").doc(GID).collection("m").doc(id); return (navigator.onLine === false && window.yqSave ? yqSave(aref, {ack: a}, true) : aref.update({ack: a})).then(function(){
           var txt = (okv ? "✓ " : "⚠ ") + (m.wt === "gp" ? "Washing received " : "Floor QC received ") + m.no + " · " + n0(q) + " pcs" + (q !== +m.qty ? " (" + (q - m.qty > 0 ? "+" : "") + n0(q - m.qty) + ")" : "") + (okv ? "" : " · ISSUE") + (note ? " · " + note : "");
           return YQCHAT.washPost(GID, {k: "text", t: txt, rp: {id: m.id, by: m.by, t: m.t || m.no}}, txt); }); })
         .then(function(){ toast("Saved"); o.__close(); }).catch(function(e){ go.disabled = false; go.textContent = "Try again"; st("Not saved: " + (e.code || e.message)); });
