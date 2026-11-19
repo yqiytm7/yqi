@@ -1984,7 +1984,7 @@ function qiList(o){ sheetTop(); var B = o.querySelector("#yqRpB"), F = o.__qf ||
     var csv = cols.join(",") + "\n" + L.map(function(x){ var c = x.calc || {}; return [x.date, qiName(x.type), x.cust, x.ytm, x.po, x.design, x.factory, x.line, x.email, x.lot, c.n, c.cr, c.ma, c.mi, x.pcs, c.df, c.dhu, x.res, x.remarks].map(q).join(","); }).join("\n");
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], {type: "text/csv"})); a.download = "YQI-inspections-" + ymd(new Date()) + ".csv"; document.body.appendChild(a); a.click(); a.remove(); };
   o.querySelector(".ycpBody").scrollTop = 0; }
-function qiPick(o){ sheetStep(o, function(){ qiList(o); }); var B = o.querySelector("#yqRpB"); var D = {aql: "AQL sample, accept / reject", dhu: "Pieces checked, DHU %", fabric: "Rolls, points per 100 sq yd", note: "Attendees, points, risks", lab: "Tests and results", fri: "Step by step, Inspectorio format"};
+function qiPick(o){ sheetStep(o, function(){ qiList(o); }); var B = o.querySelector("#yqRpB"); var D = {aql: "AQL sample, accept / reject", dhu: "Pieces checked, DHU %", fabric: "Rolls, points per 100 sq yd", note: "Attendees, points, risks", lab: "Tests and results", fri: "Step by step, Inspectorio format", qx: "Buyer questions, step by step"};
   B.innerHTML = '<div class="ycpSub" style="margin-bottom:8px">Which inspection?</div><div class="qiTy">' + QI_TYPES.map(function(t){ return '<button data-qt="' + t[0] + '">' + esc(t[1]) + '<small>' + D[t[2]] + '</small></button>'; }).join("") + '</div><div class="caAct"><button class="caGh" id="yqQiB">‹ Back</button></div>';
   B.querySelectorAll("[data-qt]").forEach(function(b){ b.onclick = function(){ qiForm(o, {type: b.dataset.qt, date: ymd(new Date()), aqlMa: "2.5", aqlMi: "4.0", target: 5, limit: 40, defects: [], rolls: [{}], tests: [{}]}); }; });
   $("yqQiB").onclick = function(){ qiList(o); }; }
@@ -2518,8 +2518,8 @@ function qxDefaults(x){ var D = qxDef(x); x.qa = x.qa || {}; D.secs.forEach(func
   if(!x.signs || !x.signs.length || x.__sg !== x.type){ x.signs = D.signs.map(function(r){ return {role: r, name: "", sig: ""}; }); x.__sg = x.type; }
   x.wf = x.wf || D.wf; x.fac = x.fac || "252437_F299296 - YTM 7"; x.loc = x.loc || "HX 7/3, LANDHI INDUSTRIAL AREA, KARACHI"; x.photos = x.photos || []; x.docs = x.docs || []; x.parts = x.parts || []; x.actions = x.actions || []; return x; }
 function qxCalc(x){ var D = qxDef(x), sec = [], nc = [], res = "", ans = 0, need = 0;
-  D.secs.forEach(function(s, si){ if(s[2] && canonC(x.cust || "") !== s[2]) return; var bad = 0, any = 0, all = 0; s[1].forEach(function(q, qi){ var a = ((x.qa || {})[si + "_" + qi] || {}).a; if(QXOPT[q[1]]){ need++; if(a) ans++; } if(a && a !== "N/A") any++; if(QXOPT[q[1]]) all++; if(qxBad(q[1], a)){ bad++; nc.push({s: s[0], q: q[0], a: a, c: ((x.qa || {})[si + "_" + qi] || {}).c || ""}); } if(q[1] === "res" && a) res = a === "Failed" ? "Fail" : "Pass"; });
-    sec.push({n: s[0], r: bad ? "FAIL" : any ? "PASS" : all ? "N/A" : "PASS"}); });
+  D.secs.forEach(function(s, si){ if(s[2] && canonC(x.cust || "") !== s[2]) return; var bad = 0, any = 0, all = 0; s[1].forEach(function(q, qi){ var a = ((x.qa || {})[si + "_" + qi] || {}).a; if(QXOPT[q[1]]){ need++; if(a) ans++; } if(a && a !== "N/A") any++; if(a) all++; if(qxBad(q[1], a)){ bad++; nc.push({s: s[0], q: q[0], a: a, c: ((x.qa || {})[si + "_" + qi] || {}).c || ""}); } if(q[1] === "res" && a) res = a === "Failed" ? "Fail" : "Pass"; });
+    sec.push({n: s[0], r: bad ? "FAIL" : any ? "PASS" : "N/A"}); });
   var auto = res || (ans ? (nc.length ? "Fail" : "Pass") : "");
   var r = x.ovr || auto; return {sec: sec, nc: nc, res: r, auto: auto, ans: ans, need: need}; }
 function qxForm(o, x){ sheetStep(o, function(){ if(x && (x.st === "booked" || x.st === "assigned") && x._id) qiBooked(o, x); else qiList(o); }); qiCss();
@@ -4371,7 +4371,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-210000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-212000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
