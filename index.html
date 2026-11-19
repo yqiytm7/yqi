@@ -782,6 +782,7 @@ function loadHomeTry(n){
   setTimeout(function(){ if(!done && !HDATA && my === HLOAD && n < 4) loadHomeTry(n + 1); }, 8000 + n * 4000);
 }
 // Inspection Summary data, already loaded by the app (no extra reading)
+window.yqFloors = function(){ var I = isRows("is_int") || [], o = {}; I.forEach(function(x){ if(x.floor) o[String(x.floor).trim()] = 1; }); return Object.keys(o); };
 function isRows(c){ var L = ISL.filter(function(x){ return x.c === c && x.q; })[0]; return L ? L.q.docs.map(function(d){ var x = d.data() || {}; x._id = d.id; return x; }) : null; }
 // one inspection = one shipping plan (customer workspace) or one YTM / PO (Inspection Summary)
 // ----- someone else changed shared data: show who and when, the screen changes only after Refresh -----
@@ -4371,7 +4372,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-235500", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-001500", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -4405,7 +4406,7 @@ window.YQCHAT = {setToken: function(t, k){ setToken(t, k); },
   washOpen: function(gid, name, desc){ try{ var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); }catch(e){}
     var go1 = function(){ if(CHATS[gid]){ openChat(gid); return true; } return false; };
     setTimeout(function(){ if(go1()) return; wantJoin(gid).then(function(){ return ensureGroup(gid, name, desc); }).then(function(made){ if(made){ var n = 0, iv = setInterval(function(){ if(go1() || ++n > 20) clearInterval(iv); }, 300); toast(name + " group is ready – add Production QC and Washing people from Group info"); } else { toast("Request sent – a member of the group will add you"); paint(true); } }); }, 120); },
-  msg: function(id){ return msgById(id); }, pushInit: function(){ pushInit(); }, openChat: function(cid){ try{ var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); if(cid && CHATS[cid]) openChat(cid); }catch(e){} }, alert: function(rid, text){ try{ qaAlert(rid, text); }catch(e){} }, dmSend: function(uidOrEmail, t){ if(!MY) return Promise.resolve(false); var u = PEOPLE[uidOrEmail] ? uidOrEmail : Object.keys(PEOPLE).filter(function(k){ return String(PEOPLE[k].email || "").toLowerCase() === String(uidOrEmail).toLowerCase(); })[0]; if(!u || u === MY) return Promise.resolve(false);
+  msg: function(id){ return msgById(id); }, feedGroups: FEEDG, feedJoin: function(){ Object.keys(FEEDG).forEach(function(g){ if(!CHATS[g]) wantJoin(g); }); return Object.keys(FEEDG).map(function(g){ return g + ":" + (CHATS[g] ? "member" : "requested"); }); }, pushInit: function(){ pushInit(); }, openChat: function(cid){ try{ var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); if(cid && CHATS[cid]) openChat(cid); }catch(e){} }, alert: function(rid, text){ try{ qaAlert(rid, text); }catch(e){} }, dmSend: function(uidOrEmail, t){ if(!MY) return Promise.resolve(false); var u = PEOPLE[uidOrEmail] ? uidOrEmail : Object.keys(PEOPLE).filter(function(k){ return String(PEOPLE[k].email || "").toLowerCase() === String(uidOrEmail).toLowerCase(); })[0]; if(!u || u === MY) return Promise.resolve(false);
   var id = dmId(MY, u), at = now(), ref = FS.collection("chats").doc(id), m = {k: "text", t: String(t).slice(0, 5000), by: MY, at: at};
   return ref.set({type: "dm", members: [MY, u].sort(), made: at, by: MY}, {merge: true}).then(function(){ var up = {at: at, last: {t: m.t.slice(0, 120), by: MY, at: at, k: "text"}}; up["rd." + MY] = at; up["n." + u] = FV.increment(1); return ref.collection("m").add(m).then(function(){ return ref.update(up); }); }).then(function(){ try{ pushSend([u], fullName(MY), m.t.slice(0, 160), id, "msg", null); }catch(e){} return true; }).catch(function(){ return false; }); },
   people: function(){ return PEOPLE; }, setDark: function(v){ DARK = !!v; try{ var p = $("ycP"); if(p){ p.classList.toggle("dk", DARK); var w = $("ycW"); if(w) w.removeAttribute("data-v"); if(p.classList.contains("on")) paint(true); } }catch(e){} },
@@ -4907,7 +4908,7 @@ function chatHead(){
   var sub = typers(c) || (g ? (c.members || []).map(first).join(", ") : (oth === MY ? "Message yourself" : lastSeen(p)));
   var acts = g ? ib("vcall", IC.videoO, "Video meeting") + ib("call", IC.callO, "Voice meeting") : (oth === MY || iBlocked(oth) || blockedMe(oth) ? "" : ib("vcall", IC.videoO, "Video call") + ib("call", IC.callO, "Voice call"));
   return '<div id="ycHdW">' + bar(BACKB() + '<button class="ycIb ycHav" data-c="info">' + avC(c, 40) + '</button>', '<b data-c="info">' + (c.type === "group" ? esc(chatTitle(c)) + (grpCust(c) && !custOf(MY) ? '<span class="ycVl cu">EXTERNAL</span>' : '') : nmT(chatOther(c), chatTitle(c))) + '</b>', '<span class="' + (typers(c) ? "ycTy" : "") + '" data-c="info">' + esc(sub) + '</span>', acts + ib("cmenu", IC.dots, "More"), "chat") +
-    (CALL && CALL.cid === OPEN ? '<div class="ycLive" data-c="showcall">● Call in progress — tap to return</div>' : '') + (OPEN === "grp_wash" && window.YQWASH ? window.YQWASH.strip() : '') + (PARAM.find ? '<div class="ycSearch"><input id="ycFind" placeholder="Search in this chat" value="' + esc(PARAM.find === true ? "" : PARAM.find) + '"></div>' : '') + '</div>';
+    (CALL && CALL.cid === OPEN ? '<div class="ycLive" data-c="showcall">● Call in progress — tap to return</div>' : '') + (OPEN === "grp_wash" && window.YQWASH ? window.YQWASH.strip() : '') + (FEEDG[OPEN] ? '<div class="wqStrip"><button data-yqf="' + FEEDG[OPEN] + '">📋 ' + (FEEDG[OPEN] === "int" ? "#INTERNAL" : "#EXTERNAL") + ' format</button><span class="ycFedH">Send in this format → saved to Inspection Summary live</span></div>' : '') + (PARAM.find ? '<div class="ycSearch"><input id="ycFind" placeholder="Search in this chat" value="' + esc(PARAM.find === true ? "" : PARAM.find) + '"></div>' : '') + '</div>';
 }
 function chatView(w){
   MKEY = "";
@@ -4938,7 +4939,7 @@ function renderMsgs(){
   var box = $("ycMsgs"); if(!box) return; var c = CHATS[OPEN] || {}, g = c.type === "group", hid = c.hid && c.hid[MY] || 0, fq = typeof PARAM.find === "string" ? PARAM.find.toLowerCase() : "";
   var bo = !g ? chatOther(c) : "", bat = bo && iBlocked(bo) ? blkMap()[bo] : 0;
   var list = MSGS.filter(function(m){ return m.at > hid && !(m.dm && m.dm[MY]) && !(bat && m.by === bo && m.at > bat); });
-  var key = list.map(function(m){ return m.id + (m.pend ? "p" : "") + (m.del ? "d" : "") + JSON.stringify(m.re || 0) + (m.st && m.st[MY] ? "s" : "") + (m.ack ? "a" + m.ack.at : ""); }).join(",") + "|" + JSON.stringify(c.rd || {}) + JSON.stringify(c.dl || {}) + "|" + Object.keys(PEOPLE).length + "|" + fq;
+  var key = list.map(function(m){ return m.id + (m.pend ? "p" : "") + (m.del ? "d" : "") + JSON.stringify(m.re || 0) + (m.st && m.st[MY] ? "s" : "") + (m.ack ? "a" + m.ack.at : "") + (m.fed ? "f" + m.fed.at + (m.fed.gone ? "g" : "") : ""); }).join(",") + "|" + JSON.stringify(c.rd || {}) + JSON.stringify(c.dl || {}) + "|" + Object.keys(PEOPLE).length + "|" + fq;
   if(key === MKEY) return; MKEY = key;
   var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160 || !box.getAttribute("data-r");
   var h = MSGS.length >= MSGLIM ? '<div class="ycMore"><button data-c="more">Load earlier messages</button></div>' : "", lastDay = "", lastBy = "", lastAt = 0;
@@ -4962,6 +4963,7 @@ function renderMsgs(){
       else if(m.k === "meet") body += '<div class="ycMeetM"><b>' + IL.cal + ' ' + esc(m.t) + '</b><small>' + esc(dayLbl(m.mat) + " at " + hm(m.mat)) + '</small><div class="ycMeetB"><button data-c="meetinfo" data-id="' + esc(m.mid) + '" class="gh">Agenda & minutes</button><button data-c="meetjoin" data-id="' + esc(m.mid) + '">Join</button></div></div>';
       else body += '<div class="ycTxt' + (/^\p{Extended_Pictographic}{1,3}$/u.test(m.t || "") ? " big" : "") + '">' + linkify(m.t, fq) + '</div>';
     }
+    if(m.fed && !m.del && fdKind(m.t)) body += m.fed.ok ? '<div class="ycFed ok">✓ Saved to YQI · ' + esc(m.fed.s || "") + '</div>' : '<div class="ycFed bad">⚠ Not saved – fix: ' + esc((m.fed.err || []).join(", ")) + ' (long-press → Edit)</div>';
     var meta = media && !m.t && !m.del && m.k === "img" ? "" : '<span class="ycMeta">' + (m.st && m.st[MY] ? '<i class="ycStar">' + IC.star + '</i>' : '') + (m.ed ? "edited " : "") + hm(m.at) + (mine && !m.del ? " " + (m.pend ? '<i class="ycTk">🕓</i>' : tickOf(c, m.at)) : "") + '</span>';
     var re = m.re && Object.keys(m.re).length ? '<div class="ycRe" data-c="reinfo" data-id="' + m.id + '">' + reacts(m.re) + '</div>' : "";
     var who = g && !mine && firstOf ? '<div class="ycWho" style="color:' + colorOf(m.by) + '">' + nmT(m.by) + '</div>' : "";
@@ -5126,7 +5128,7 @@ var EMO = ["👍", "❤️", "😂", "😮", "😢", "🙏"], EMOALL = "👍 �
 function msgMenu(id, reactOnly){
   var m = msgById(id); if(!m || m.pend || m.k === "sys") return; var mine = m.by === MY, c = CHATS[OPEN];
   var acts = [];
-  if(!m.del){ acts.push(["reply", IL.reply, "Reply"]); if(m.t) acts.push(["copy", IL.copy, "Copy"]); acts.push(["fwd", IL.fwd, "Forward"]); acts.push(["star", IL.star, m.st && m.st[MY] ? "Unstar" : "Star"]); if(mine && m.k === "text" && now() - m.at < 15 * 60000) acts.push(["edit", IL.edit, "Edit"]); if(mine) acts.push(["info", IL.info, "Info"]); }
+  if(!m.del){ acts.push(["reply", IL.reply, "Reply"]); if(m.t) acts.push(["copy", IL.copy, "Copy"]); acts.push(["fwd", IL.fwd, "Forward"]); acts.push(["star", IL.star, m.st && m.st[MY] ? "Unstar" : "Star"]); if(mine && m.k === "text" && (now() - m.at < 15 * 60000 || fdKind(m.t))) acts.push(["edit", IL.edit, "Edit"]); if(mine) acts.push(["info", IL.info, "Info"]); }
   acts.push(["delme", IL.trash, "Delete for me"]); if(mine && !m.del && now() - m.at < 48 * 3600000) acts.push(["delall", IL.trash, "Delete for everyone"]);
   closeSheet(); var s = document.createElement("div"); s.id = "ycSheet"; s.className = "ycMsgOv" + (DARK ? " dk" : "");
   var pill = m.del ? "" : '<div class="ycPill2">' + EMO.map(function(e){ return '<button data-a="re" data-e="' + e + '" class="' + (m.re && m.re[MY] === e ? "on" : "") + '">' + e + '</button>'; }).join("") + '<button data-a="more" class="pl">' + IL.plus + '</button></div>';
@@ -5395,6 +5397,57 @@ function custGroupsHtml(){ var cs = (window.YQCUST || []).slice(0, 60); if(!cs.l
   return '<div class="ycSec">Customer groups</div>' + cs.map(function(n){ var gid = gslug(n), mem = !!CHATS[gid], req = ME && ME.join && ME.join[gid];
     return '<div class="ycRow"><span class="ycAv ycCalIc" style="width:44px;height:44px">' + IL.users + '</span><div class="ycRm"><div class="ycR1"><b>' + esc(n) + '</b></div><div class="ycR2"><span>' + (mem ? "You are in this group" : req ? "Request sent — a member will add you" : "Chat and files for " + esc(n)) + '</span></div></div>' + (mem ? '<button class="ycMk" data-c="open" data-id="' + gid + '">Open</button>' : req ? '' : '<button class="ycMk" data-c="cjoin" data-n="' + esc(n) + '">Join</button>') + '</div>'; }).join(""); }
 function custJoin(n){ var gid = gslug(n); wantJoin(gid).then(function(){ return ensureGroup(gid, n, "Quality chat for " + n, n); }).then(function(made){ toast(made ? n + " group created" : "Request sent"); paint(true); }); }
+// ---------- #INTERNAL / #EXTERNAL messages in the inspection groups → Inspection Summary (live) ----------
+var FEEDG = {grp_insp_int: "int", grp_insp_ext: "ext"}, FEEDU = {}, FEEDNO = false;
+function fdHash(t){ var h = 0; t = String(t || ""); for(var i = 0; i < t.length; i++){ h = (h * 31 + t.charCodeAt(i)) | 0; } return h; }
+function fdKind(t){ var m = /^\s*#\s*(INTERNAL|EXTERNAL)\b/i.exec(String(t || "")); return m ? (m[1].toUpperCase() === "INTERNAL" ? "int" : "ext") : ""; }
+function fdNum(v){ var n = parseFloat(String(v || "").replace(/,/g, "")); return isFinite(n) ? n : 0; }
+function fdDate(v){ v = String(v || "").trim(); if(/^today$/i.test(v)){ var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  var m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(v); if(m){ var y = +m[3]; if(y < 100) y += 2000; if(+m[2] > 12 || +m[1] > 31) return ""; return y + "-" + pad(+m[2]) + "-" + pad(+m[1]); }
+  m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v); return m ? m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]) : ""; }
+function fdRes(v, kind){ v = String(v || "").trim().toLowerCase().replace(/[^a-z]/g, ""); var M = {pass: "Pass", passed: "Pass", ok: "Pass", fail: "Fail", failed: "Fail", abort: "Abort", aborted: "Abort", inprocess: "In process", inprogress: "In process", pending: "Pending"}; var r = M[v] || ""; if(r === "In process" && kind === "ext") r = "Pending"; if(r === "Pending" && kind === "int") r = "In process"; return r; }
+function fdDefects(v){ var L = []; String(v || "").split(/[,;\n]+/).forEach(function(p){ p = p.trim(); if(!p || /^(nil|none|no|-|0)$/i.test(p)) return; var m = /^(.*?)[\s:x×-]*(\d+)\s*(pcs)?$/i.exec(p), n = m && m[1].trim() ? m[1].trim() : p, q = m && m[1].trim() ? +m[2] : 1; var c = /sew|stitch|seam|pleat|skip|broken/i.test(n) ? "Sewing" : /pack|label|carton|poly|sticker/i.test(n) ? "Packaging" : /fabric|hole|slub|shade|weav/i.test(n) ? "Fabric" : /measure|size/i.test(n) ? "Measurement" : /stain|spot|dirt|oil/i.test(n) ? "Stain" : "Other"; var ex = L.filter(function(x){ return x.n.toLowerCase() === n.toLowerCase(); })[0]; if(ex) ex.q += q; else L.push({n: n, q: q, c: c}); }); return L; }
+var FDORD = {G: "GROUND", GROUND: "GROUND", "1": "FIRST", "1ST": "FIRST", FIRST: "FIRST", "2": "SECOND", "2ND": "SECOND", SECOND: "SECOND", "3": "THIRD", "3RD": "THIRD", THIRD: "THIRD", "4": "FOURTH", "4TH": "FOURTH", FOURTH: "FOURTH", "5": "FIFTH", "5TH": "FIFTH", FIFTH: "FIFTH"};
+function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UNIT/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); var known = (window.yqFloors && window.yqFloors()) || [];
+  var cmp = function(x){ return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ""); }, k0 = known.filter(function(x){ return cmp(x) === cmp(v) || cmp(x) === cmp(v + " FLOOR"); })[0]; if(k0) return k0;
+  var m = /^(?:YTM\s*)?(\d+)\s*([A-Z])?\s*(GROUND|G|FIRST|SECOND|THIRD|FOURTH|FIFTH|\d(?:ST|ND|RD|TH)?)$/.exec(u); if(!m) return "";
+  var nm = "YTM-" + m[1] + (m[2] ? " " + m[2] : "") + " " + FDORD[m[3]] + " FLOOR"; var k1 = known.filter(function(x){ return cmp(x) === cmp(nm); })[0]; return k1 || nm; }
+function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).slice(1).forEach(function(l){ var m = /^\s*([A-Za-z .\/]+?)\s*[:=]\s*(.*)$/.exec(l); if(m) F[m[1].toLowerCase().replace(/[^a-z]/g, "")] = m[2].trim(); });
+  var g = function(){ for(var i = 0; i < arguments.length; i++){ var v = F[arguments[i]]; if(v != null && v !== "") return v; } return ""; }, err = [];
+  var date = fdDate(g("date")); if(!date) err.push("Date (write DD-MM-YYYY)");
+  var ytm = g("ytm", "ytmno").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; try{ var O = window.YQOL || {}; ol = O[ytm] || null; }catch(e){}
+  var cust = g("customer", "buyer") || (ol && ol.cust) || ""; try{ if(cust && window.yqCanonC) cust = yqCanonC(cust); }catch(e){} if(!cust) err.push("Customer");
+  var res = fdRes(g("result", "status"), kind), dl = fdDefects(g("defects", "defect", "defectlist"));
+  var r = {date: date, customer: cust, result: res, count: 1, src: "chat", at: new Date().toISOString(), dlist: dl, defects: dl.map(function(d){ return d.n + " " + d.q; }).join(", ")};
+  if(ytm) r.ytm = ytm; var insp = g("inspector", "inspectedby", "qc"); if(insp) r.inspector = insp;
+  if(kind === "int"){
+    var fl = fdFloor(g("unit", "floor", "line")); if(!fl) err.push("Unit (write like YTM-3 FIRST FLOOR)"); r.floor = fl;
+    r.product = g("article", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.qty = fdNum(g("offerqty", "offerquantity", "qty", "quantity")); r.sample = fdNum(g("sample", "samplesize")); r.allowed = fdNum(g("allowed", "alloweddefects")); r.found = fdNum(g("found", "founddefects")); r.major = r.found; r.minor = 0; r.critical = 0; r.inspection = g("inspection", "type") || "PARTIAL FRI";
+    var pk = fdRes(g("packaging", "packing"), kind), wk = fdRes(g("workmanship"), kind); if(pk) r.packaging = pk; if(wk) r.workmanship = wk;
+    if(!res && (pk || wk)) r.result = pk === "Fail" || wk === "Fail" ? "Fail" : "Pass";
+    if(r.result === "Pass" && (pk === "Fail" || wk === "Fail")) err.push("Result says Pass but Packaging / Workmanship is Fail");
+  } else {
+    r.po = g("po", "pono"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty")); r.sample = fdNum(g("sample", "samplesize"));
+    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor")), cr = /^\s*([\d.]+)/.exec(g("critical"));
+    r.major = mj ? +mj[1] : 0; r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
+    if(!r.sample) err.push("Sample"); r.oql = r.sample ? r.major / r.sample : 0;
+  }
+  if(!r.result) err.push("Result (Pass / Fail / Abort / " + (kind === "int" ? "In process" : "Pending") + ")");
+  return {kind: kind, rec: r, err: err}; }
+function fdCol(kind){ return FS.collection("ws").doc("_all").collection(kind === "int" ? "is_int" : "is_ext"); }
+function fdProc(gid, d){ var m = d.data() || {}, mid = d.id, kind = fdKind(m.t), f = m.fed || {}, id = "chat_" + gid.slice(-3) + "_" + mid;
+  if(m.del){ if(f.ok && !f.gone){ fdCol(f.k || FEEDG[gid]).doc(f.id || id).delete().then(function(){ return d.ref.update({"fed.gone": 1}); }).catch(function(){}); } return; }
+  if(!kind || FEEDNO) return; var h = fdHash(m.t); if(f.h === h) return;
+  var P = fdParse(m.t); if(P.kind !== FEEDG[gid]) P.err.unshift("Send #" + (FEEDG[gid] === "int" ? "INTERNAL" : "EXTERNAL") + " in this group");
+  if(P.err.length){ d.ref.update({fed: {ok: 0, h: h, at: now(), err: P.err.slice(0, 4)}}).catch(function(){}); if(f.ok) fdCol(f.k).doc(f.id).delete().catch(function(){}); return; }
+  var r = P.rec; r.chat = {gid: gid, mid: mid, by: m.by || "", name: fullName(m.by)}; r.by = EMAIL;
+  var ph = MSGS.length ? null : null; if(m.k === "img" && m.f && m.f.id) r.photo = m.f.id;
+  fdCol(P.kind).doc(id).set(r).then(function(){ return d.ref.update({fed: {ok: 1, h: h, at: now(), id: id, k: P.kind, s: r.customer + " · " + r.result + (P.kind === "ext" && r.sample ? " · OQL " + (r.oql * 100).toFixed(1) + "%" : "") + (r.floor ? " · " + r.floor : "")}}); })
+    .then(function(){ try{ window.yqDataPing && yqDataPing(P.kind === "int" ? "is_int" : "is_ext", (P.kind === "int" ? "an internal" : "an external") + " inspection from chat", ""); }catch(e){} })
+    .catch(function(e){ if(e && e.code === "permission-denied") FEEDNO = true; }); }
+function feedWatch(){ if(!MY || !FS || window.__RO !== false) return; Object.keys(FEEDG).forEach(function(gid){ if(FEEDU[gid] || !CHATS[gid]) return;
+  FEEDU[gid] = FS.collection("chats").doc(gid).collection("m").orderBy("at", "desc").limit(40).onSnapshot(function(q){ q.docChanges().forEach(function(ch){ if(ch.type !== "removed") fdProc(gid, ch.doc); }); }, function(){ FEEDU[gid] = null; }); }); }
+setInterval(feedWatch, 8000);
 // inspection fail → message in QA Alerts (fixed id: posted once even if many phones see it)
 function qaAlert(rid, text){ var gid = "grp_qa_alerts", c = CHATS[gid]; if(!c) return; var id = "al_" + String(rid).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60), t = now();
   var ref = FS.collection("chats").doc(gid).collection("m").doc(id);
@@ -5900,7 +5953,7 @@ function css(){
   // global overlays
   ".ycToast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:#16230f;color:#fff;padding:10px 16px;border-radius:12px;font:600 13.5px Manrope,system-ui,sans-serif;z-index:2147483500;opacity:0;transition:all .3s;max-width:86vw;text-align:center;pointer-events:none}.ycToast.on{opacity:1;transform:translate(-50%,0)}",
   ".ycPop{position:fixed;top:12px;left:50%;transform:translate(-50%,-150%);width:min(430px,calc(100% - 24px));background:#fff;border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.28);display:flex;gap:12px;align-items:center;padding:12px 14px;z-index:2147483200;transition:transform .35s cubic-bezier(.2,1.2,.4,1);cursor:pointer;font-family:Manrope,system-ui,sans-serif}.ycPop.on{transform:translate(-50%,0)}.ycPop div{display:flex;flex-direction:column;min-width:0}.ycPop b{font-size:15px;color:#16230f}.ycPop span{font-size:13.5px;color:#5d6b54;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-  ".ycView{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:2147483300;display:grid;place-items:center}.ycView img{max-width:100vw;max-height:92vh;object-fit:contain}.ycViewT{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;display:flex;gap:8px}.ycViewT button{width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:19px;cursor:pointer}",
+  ".ycFed{margin-top:6px;padding:5px 8px;border-radius:8px;font-size:12px;font-weight:700}.ycFed.ok{background:#DDF1C6;color:#2a5216}.ycFed.bad{background:#FDEBEA;color:#B3261E}.ycFedH{align-self:center;font-size:11.5px;color:#55664d;white-space:nowrap}.ycView{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:2147483300;display:grid;place-items:center}.ycView img{max-width:100vw;max-height:92vh;object-fit:contain}.ycViewT{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;display:flex;gap:8px}.ycViewT button{width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:19px;cursor:pointer}",
   ".ycAvT{display:inline-grid;flex:none}.ycCard{display:flex!important;flex-direction:column;place-items:stretch!important;align-items:stretch!important;background:#000!important;color:#fff;font-family:Manrope,system-ui,sans-serif}.ycCardT{display:flex;align-items:center;gap:8px;padding:10px;padding-top:max(10px,env(safe-area-inset-top))}.ycCardT button{border:0;background:none;color:#fff;width:44px;height:44px;cursor:pointer}.ycCardT div{display:flex;flex-direction:column}.ycCardT b{font-size:17px}.ycCardT span{font-size:12.5px;opacity:.75}",
   ".ycCardI{flex:1;display:grid;place-items:center;min-height:0;overflow:hidden}.ycCardI img{max-width:100vw;max-height:100%;width:min(100vw,560px);object-fit:contain}.ycCardA{display:flex;justify-content:space-around;padding:14px 10px max(22px,env(safe-area-inset-bottom));background:#111;flex:none}.ycCardA button{border:0;background:none;color:#a6dd5e;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:20px;cursor:pointer;min-width:64px}.ycCardA small{font:700 12px Manrope,system-ui,sans-serif;color:#fff}",
   ".ycCrop{display:flex!important;flex-direction:column;align-items:stretch!important;justify-items:stretch!important;background:#000!important;color:#fff;font-family:Manrope,system-ui,sans-serif;touch-action:none}.ycCropM{flex:1;display:grid;place-items:center;min-height:0}.ycCropB{position:relative;overflow:hidden;background:#222;touch-action:none;cursor:grab;box-shadow:0 0 0 2000px rgba(0,0,0,.55)}.ycCropB img{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;object-fit:fill!important;user-select:none;-webkit-user-drag:none;pointer-events:none;border-radius:0!important}",
@@ -6173,6 +6226,9 @@ function css(){
   function viewImg(id){ var o = ov('<div class="wqImgV"><button data-x>✕</button><img alt=""></div>', "wqi"); YQCHAT.fileUrl(id).then(function(u){ o.querySelector("img").src = u; }).catch(function(){ toast("Photo not available"); }); }
   function openGroup(){ if(!window.YQCHAT || !YQCHAT.washOpen) return toast("Chat is loading – try again in a moment"); YQCHAT.washOpen(GID, GNAME, GDESC); }
 
+  var TPL = {int: "#INTERNAL\nDate: {d}\nCustomer: \nYTM: \nArticle: \nUnit: \nOffer Qty: \nSample: \nAllowed: \nFound: \nPackaging: Pass\nWorkmanship: Pass\nResult: \nDefects: \nInspector: ", ext: "#EXTERNAL\nDate: {d}\nCustomer: \nYTM: \nPO: \nArticle: \nUnit: \nInspector: \nQty: \nSample: \nMajor: /\nMinor: /\nResult: \nDefects: "};
+  document.addEventListener("click", function(e){ var b = e.target.closest && e.target.closest("[data-yqf]"); if(!b) return; e.stopPropagation(); e.preventDefault(); var tx = $("ycTx"); if(!tx) return; var d = new Date();
+    tx.value = TPL[b.getAttribute("data-yqf")].replace("{d}", pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + d.getFullYear()); tx.dispatchEvent(new Event("input")); tx.focus(); var k = tx.value.indexOf("Customer: ") + 10; try{ tx.setSelectionRange(k, k); }catch(x){} }, true);
   // clicks from chat cards / strip (chat stops bubbling, so listen in capture)
   document.addEventListener("click", function(e){ var b = e.target.closest && e.target.closest("[data-wq]"); if(!b) return; e.stopPropagation(); e.preventDefault(); var a = b.getAttribute("data-wq");
     if(a === "new"){ listen(); return newForm(b.getAttribute("data-t")); } if(a === "rep") return report(); if(a === "img") return viewImg(b.getAttribute("data-f"));
