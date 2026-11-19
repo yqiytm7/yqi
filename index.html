@@ -1,6 +1,88 @@
 <!doctype html>
 <html lang="en">
-<head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><meta charset="utf-8"><script>/* YQI company edition — login, customer workspaces, Firebase storage. Developed by Hamza Khan. */
+<head><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0e240e"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="favicon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YQI"><script>// ===== YQI shared helpers: one date range for every screen + Edit tool with fixed (pakki) IDs =====
+(function(){
+"use strict";
+// ---------- one date range for all screens (this tab; a new open starts on all data) ----------
+var RK = "yqi_rng1", SEEN = {};
+function rGet(){ try{ return JSON.parse(sessionStorage.getItem(RK) || "null") || {f: "", t: "", v: 0}; }catch(e){ return {f: "", t: "", v: 0}; } }
+function rPut(f, t){ var g = {f: f || "", t: t || "", v: Date.now() + Math.random()}; try{ sessionStorage.setItem(RK, JSON.stringify(g)); }catch(e){} return g; }
+// key: screen name; get(): {f,t} the screen shows now; set(f,t): make the screen show this range
+window.yqRng = {
+  get: rGet,
+  sync: function(key, get, set){
+    var g = rGet(), s = SEEN[key];
+    if(g.v && s !== g.v){ SEEN[key] = g.v; var l0 = get() || {}; if((l0.f || "") !== g.f || (l0.t || "") !== g.t){ try{ set(g.f, g.t); }catch(e){} } return; }
+    var l = get() || {}; if((l.f || "") !== g.f || (l.t || "") !== g.t){ SEEN[key] = rPut(l.f, l.t).v; }
+  }
+};
+
+// ---------- fixed IDs for any box / heading / number on a screen ----------
+var BOXES = "section,article,details,table,tr,li,.card,.cd,.sec,.blk,.kpi,.k,.tile,.tl,.box,.row,.wcard,.hero,.g2,.kp,.kpg,.big,.tiles";
+function orig(el){ var o = el.getAttribute && el.getAttribute("data-edo"); return o != null ? o : null; }
+function ownNode(el){ for(var i = 0; i < el.childNodes.length; i++){ var n = el.childNodes[i]; if(n.nodeType === 3 && n.nodeValue.trim()) return n; } return null; }
+function ownText(el){ var o = orig(el); if(o != null) return o; var n = ownNode(el); return n ? n.nodeValue.trim() : ""; }
+function norm(s){ return String(s || "").split(/[·(—|]/)[0].replace(/[0-9.,%+\-−×·:()\/#₨$]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 32); }
+function cls(el){ var c = el.getAttribute("class") || ""; return c.split(/\s+/).filter(function(x){ return x && !/^(on|off|hit|sel|act|active|open|show|hide|edsel|edh|lt|dk|up|dn|pass|fail|ok|bad|warn|cur|in|out)$/i.test(x) && !/^(ed|yqe)/.test(x); }).slice(0, 2).join("."); }
+function sig(el){ var c = cls(el); return el.tagName.toLowerCase() + (c ? "." + c : ""); }
+function textOf(el){ // text of an element, using original text where the tool changed it
+  var o = orig(el); if(o != null) return o; var s = ""; for(var i = 0; i < el.childNodes.length && s.length < 60; i++){ var n = el.childNodes[i]; s += n.nodeType === 3 ? n.nodeValue : n.nodeType === 1 ? " " + textOf(n) + " " : ""; } return s; }
+function label(el){
+  if(el.id) return "#" + el.id;
+  var d = el.dataset || {};
+  if(d.ek) return "k:" + d.ek; if(d.ei) return "i:" + d.ei;
+  var ks = ["a", "k", "p", "per", "tper", "c", "v", "tab", "go", "filt", "qf", "m", "x"], a = [];
+  for(var i = 0; i < ks.length && a.length < 2; i++) if(d[ks[i]] != null && d[ks[i]] !== "" && String(d[ks[i]]).length < 40) a.push(ks[i] + "=" + d[ks[i]]);
+  if(a.length) return a.join("&");
+  var t = el.tagName;
+  if(t === "TR" || t === "LI"){ var c0 = el.firstElementChild; var s = norm(c0 ? textOf(c0) : textOf(el)); if(s) return "r:" + s; return ""; }
+  if(el.matches && el.matches(BOXES) || t === "DIV" || t === "SECTION"){
+    for(var j = 0, jm = el.matches && el.matches(BOXES) ? 3 : 1; j < el.children.length && j < jm; j++){ var ch = el.children[j], tn = ch.tagName;
+      if(/^(H1|H2|H3|H4|H5|SMALL|LABEL|SUMMARY)$/.test(tn) || /(^|\s)(sec|yqsec|ttl|title|lbl|wlab|eyebrow)(\s|$)/.test(ch.getAttribute("class") || "")){ var h = norm(textOf(ch)); if(h) return "h:" + h; }
+    }
+  }
+  return "";
+}
+var CACHE = null;
+function nth(el, s, l){ var n = 0, p = el.previousElementSibling; while(p){ if(sig(p) === s && label(p) === l) n++; p = p.previousElementSibling; } return n ? "~" + n : ""; }
+function seg(el){ var l = label(el), s = sig(el); if(l) return s + "[" + l + "]" + nth(el, s, l);
+  var n = 0, p = el.previousElementSibling; while(p){ if(sig(p) === s && !label(p)) n++; p = p.previousElementSibling; } return s + ":" + n; }
+function pid(el, root){
+  if(CACHE && CACHE.has(el)) return CACHE.get(el);
+  var parts = [], e = el, own = true;
+  while(e && e !== root && e.nodeType === 1){
+    if(e.id && !own){ parts.unshift("#" + e.id); break; }
+    if(own){ // the item itself: by position (its own words can change with the data), unless it has a fixed key
+      var l = label(e), d = e.dataset || {}; var fixed = e.id || d.ek || d.ei || /^(a|k|p|per|tper|c|v|tab|go|filt|qf|m|x)=|^[rh]:/.test(l);
+      if(fixed) parts.unshift(sig(e) + "[" + l + "]" + nth(e, sig(e), l));
+      else { var s = sig(e), n = 0, p = e.previousElementSibling; while(p){ if(sig(p) === s) n++; p = p.previousElementSibling; } parts.unshift(s + ":" + n); }
+      own = false;
+    } else parts.unshift(seg(e));
+    e = e.parentElement;
+  }
+  var id = parts.join(">"); if(CACHE) CACHE.set(el, id); return id;
+}
+function setText(el, nw){ var n = ownNode(el); if(!n && orig(el) == null) return; if(orig(el) == null) el.setAttribute("data-edo", n.nodeValue.trim()); if(n){ var t = n.nodeValue, o = t.trim(); if(o !== nw) n.nodeValue = o ? t.replace(o, nw) : nw; } }
+function hide(el, k){ el.style.setProperty("display", "none", "important"); el.setAttribute("data-edh", k || "h"); }
+// map: {key: {k:'t'|'h'|'d', id, s (leaf sig), nw}}; filter(o) picks entries for this screen
+function apply(root, map, filter){
+  if(!root || !map) return 0; var keys = Object.keys(map), done = 0; if(!keys.length) return 0;
+  CACHE = new WeakMap(); var bySig = {};
+  try{
+    keys.forEach(function(k){ var o = map[k]; if(!o || !o.id || (filter && !filter(o))) return;
+      var c = bySig[o.s]; if(!c){ try{ c = bySig[o.s] = [].slice.call(root.querySelectorAll(o.s)); }catch(x){ c = bySig[o.s] = []; } }
+      for(var i = 0; i < c.length; i++){ if(pid(c[i], root) !== o.id) continue; done++;
+        if(o.k === "t") setText(c[i], o.nw); else if(c[i].getAttribute("data-edh") !== o.k) hide(c[i], o.k); }
+    });
+  } finally { CACHE = null; }
+  return done;
+}
+function unhideAll(root){ [].slice.call(root.querySelectorAll("[data-edh]")).forEach(function(e){ e.style.removeProperty("display"); e.removeAttribute("data-edh"); }); }
+function key(sc, o){ var t = [sc || "", o.id, o.k === "t" ? "t" : "h"].join("~"), h = 0; for(var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return "p" + (h >>> 0).toString(36); }
+function boxOf(el, root){ var b = el.parentElement && el.parentElement.closest(BOXES); if(!b || b === root || !root.contains(b)) return null; return b; }
+window.YQE = {pid: pid, sig: sig, ownText: ownText, ownNode: ownNode, apply: apply, unhideAll: unhideAll, key: key, boxOf: boxOf, setText: setText, BOXES: BOXES};
+})();
+</script><script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});</script><meta charset="utf-8"><script>/* YQI company edition — login, customer workspaces, Firebase storage. Developed by Hamza Khan. */
 (function(){
 "use strict";
 
@@ -822,6 +904,8 @@ function homeCss(){
   "#yqHome.edit [data-ek]{outline:2px dashed #f2c94c;outline-offset:2px;border-radius:4px;cursor:text;min-width:20px}#yqHome.edit [data-ek]:focus{outline-style:solid;background:rgba(242,201,76,.15)}#yqHome.edit [data-ei]{outline:2px dashed #f2c94c;outline-offset:3px;cursor:pointer}",
   "#yqHome .ekh{display:none!important}#yqHome.edit .ekh{display:inline-block!important;min-width:60px;min-height:1em;opacity:.5}#yqHome.edit .ekh:empty:before{content:'(hidden)';font-size:12px}",
   "#yqHome h1 .cur{display:none}#yqHome h1 em{background:linear-gradient(90deg,#a6dd5e,#e4f7a6,#7DB82E,#a6dd5e);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:yqshine 6s linear infinite}@keyframes yqshine{to{background-position:300% 0}}",
+  "#yqHome.edit *:not([data-ek]):not([data-ei]):hover{outline:1px dashed rgba(166,221,94,.9);outline-offset:1px}.yqhxs{outline:2px solid #7DB82E!important;outline-offset:2px}",
+  "#yqHx{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:2147482600;width:min(420px,calc(100% - 24px));background:#fff;color:#1f2d17;border:1px solid #d9e2cf;border-radius:18px;padding:14px;box-shadow:0 18px 50px rgba(16,38,15,.35);font:600 13px Manrope,system-ui,sans-serif}#yqHx .hxh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}#yqHx .hxh b{font:800 14px Manrope,sans-serif;color:#10260f}#yqHx .hxh button{border:0;background:none;font-size:15px;color:#6B7B6D;cursor:pointer}#yqHx label{display:block;font-size:11px;color:#6B7B6D;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}#yqHx input{width:100%;box-sizing:border-box;border:1px solid #cfe0be;border-radius:10px;padding:9px 11px;font:600 14px Manrope,sans-serif;margin-bottom:8px}#yqHx button{border:1px solid #d9e2cf;background:#f4f8ef;color:#1f2d17;border-radius:10px;padding:9px 12px;font:700 12.5px Manrope,sans-serif;cursor:pointer}#yqHx button.s{background:#5BA32A;border-color:#5BA32A;color:#fff;width:100%}#yqHx button.d{color:#C0392B;border-color:rgba(192,57,43,.4);background:#fff}#yqHx button.d[data-ok]{background:#C0392B;color:#fff}#yqHx .hxr{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}#yqHx .hxn{font-size:12px;color:#6B7B6D;margin-top:8px}",
   "#yqEdBar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147482500;background:#10260f;color:#fff;border-radius:16px;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);font:600 12.5px Manrope,system-ui,sans-serif;box-shadow:0 14px 40px rgba(0,0,0,.35)}#yqEdBar button{border:0;border-radius:10px;padding:8px 13px;font:800 12.5px Manrope,sans-serif;cursor:pointer;background:#2a4a22;color:#fff}#yqEdBar button.s{background:#a6dd5e;color:#10260f}",
   "#yqHome .lp.q{padding:3px 8px!important;border-radius:10px!important}#yqHome .lp img.yqlogo{height:32px;width:auto;display:block}@media(max-width:700px){#yqHome .lp img.yqlogo{height:28px}}",
   "@media(max-width:700px){#yqHome .htop{margin:-4px 0 14px}#yqHome .lp img{height:30px}#yqHome .lp svg{height:22px}#yqHome .who span{display:none}#yqHome .umenu button{padding:5px 10px;font-size:11.5px}}",
@@ -1090,6 +1174,8 @@ function pinStart(){ if(lsGet("yqi_pin")) return pinLock();
 function renderHome(){
   var h = $("yqHome"); if(!h) return; h.classList.toggle("dk", yqDarkNow());
   if(HEDIT) return;
+  try{ yqRng.sync("home", function(){ if(HPER === "all") return {f: "", t: ""}; if(HPER === "rng") return {f: HFROM || "", t: HTO || ""}; var r = homeRange(); return {f: r.from === "0000" || r.from === HSTART && HPER === "all" ? "" : r.from, t: r.to === "9999" ? "" : r.to}; },
+    function(f, t){ if(!f && !t) HPER = "all"; else if(f && f === t){ HPER = "day"; HDAY = f; } else { HPER = "rng"; HFROM = f; HTO = t; ssSet("yqi_hf", HFROM); ssSet("yqi_ht", HTO); } HPLAN = ""; }); }catch(e){}
   var sc = h.scrollTop, today = ymd(new Date());
   var EXT = isRows("is_ext"), INT = isRows("is_int"), WST = isRows("is_extday"), fromC = false;
   if(HC){ if(!EXT){ EXT = HC.ext; fromC = true; } if(!INT){ INT = HC["int"]; fromC = true; } if(!WST) WST = HC.wst; if(!HDATA){ fromC = true; } }
@@ -1246,33 +1332,48 @@ function topDef(done, IR){
 }
 // ----- page text and pictures the owner changed (Edit page) -----
 var INSTP = null; try{ window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); INSTP = e; if(HOMEON && !HEDIT) renderHome(); }); window.addEventListener("appinstalled", function(){ INSTP = null; if(HOMEON && !HEDIT) renderHome(); }); }catch(e){}
-var HALLC = false, HEDIT = false, HOV = {t: {}, img: {}}, HPEND = {};
-try{ HOV = JSON.parse(lsGet("yqi_hov") || "null") || HOV; }catch(e){}
-function loadEdits(){ try{ FS.collection("ws").doc("_all").collection("homecfg").doc("page").get().then(function(d){ var v = d.exists ? d.data() : {}; HOV = {t: v.t || {}, img: v.img || {}}; lsSet("yqi_hov", JSON.stringify(HOV)); if(HOMEON && !HEDIT) renderHome(); }).catch(function(){}); }catch(e){} }
+var HALLC = false, HEDIT = false, HOV = {t: {}, img: {}, x: {}}, HPEND = {}, HPX = null;
+try{ HOV = JSON.parse(lsGet("yqi_hov") || "null") || HOV; if(!HOV.x) HOV.x = {}; }catch(e){}
+function loadEdits(){ try{ FS.collection("ws").doc("_all").collection("homecfg").doc("page").get().then(function(d){ var v = d.exists ? d.data() : {}; HOV = {t: v.t || {}, img: v.img || {}, x: v.x || {}}; lsSet("yqi_hov", JSON.stringify(HOV)); if(HOMEON && !HEDIT) renderHome(); }).catch(function(){}); }catch(e){} }
 function applyEdits(h){
   h.querySelectorAll("[data-ek]").forEach(function(el){ if(!el.hasAttribute("data-ed")) el.setAttribute("data-ed", el.textContent); var v = HOV.t[el.dataset.ek]; if(v === "") { el.textContent = ""; el.classList.add("ekh"); } else if(v != null) el.textContent = v; });
   h.querySelectorAll("[data-ei]").forEach(function(el){ var v = HOV.img[el.dataset.ei]; if(!v) return; if(el.tagName === "IMG") el.src = v; else el.innerHTML = '<img src="' + v + '" alt="">'; });
+  try{ if(window.YQE){ YQE.unhideAll(h); YQE.apply(h, HPX || HOV.x || {}); } }catch(e){}
+}
+// ----- Edit tool on YQI Home: any box, heading or number (fixed IDs, so the change stays on the same item when data changes) -----
+function hxClose(){ var p = $("yqHx"); if(p) p.remove(); document.querySelectorAll(".yqhxs").forEach(function(e){ e.classList.remove("yqhxs"); }); }
+function hxOpen(el){ var h = $("yqHome"); if(!h || !window.YQE) return; hxClose(); el.classList.add("yqhxs");
+  var own = YQE.ownNode(el), box = YQE.boxOf(el, h), cur = own ? own.nodeValue.trim() : "", p = document.createElement("div"); p.id = "yqHx";
+  p.innerHTML = '<div class="hxh"><b>Edit this item</b><button data-x="x" aria-label="Close">✕</button></div>' + (own ? '<label>Text</label><input id="yqHxI" value="' + esc(cur).replace(/"/g, "&quot;") + '"><button class="s" data-x="t">Change text</button>' : '<div class="hxn">This item has no text of its own. You can hide or delete it.</div>') +
+    '<div class="hxr"><button data-x="h">Hide item</button>' + (box ? '<button data-x="hb">Hide whole box</button>' : '') + '</div><div class="hxr"><button class="d" data-x="d">Delete item</button>' + (box ? '<button class="d" data-x="db">Delete whole box</button>' : '') + '</div><div class="hxn">Press Save in the bar below to keep the changes.</div>';
+  document.body.appendChild(p);
+  p.onclick = function(e){ var b = e.target.closest("[data-x]"); if(!b) return; var a = b.dataset.x; if(a === "x"){ hxClose(); return; }
+    if(a === "d" || a === "db"){ if(!b.dataset.ok){ p.querySelectorAll("button.d").forEach(function(x){ delete x.dataset.ok; x.textContent = x.dataset.x === "db" ? "Delete whole box" : "Delete item"; }); b.dataset.ok = "1"; b.textContent = "Tap again to delete"; return; } }
+    var t = (a === "hb" || a === "db") ? box : el, o;
+    if(a === "t"){ var nv = $("yqHxI").value.trim(); if(nv === cur){ hxClose(); return; } o = {k: "t", id: YQE.pid(el, h), s: YQE.sig(el), nw: nv}; YQE.setText(el, nv); }
+    else { o = {k: a.charAt(0), id: YQE.pid(t, h), s: YQE.sig(t)}; }
+    HPX[YQE.key("home", o)] = o; YQE.apply(h, HPX); hxClose(); };
 }
 function imgToData(f, mx){ return createImageBitmap(f).then(function(bm){ var sc = Math.min(1, (mx || 600) / Math.max(bm.width, bm.height)), c = document.createElement("canvas"); c.width = Math.round(bm.width * sc); c.height = Math.round(bm.height * sc); c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height); var u = c.toDataURL("image/webp", .9); if(!/^data:image\/webp/.test(u)) u = c.toDataURL("image/png"); return u; }); }
 function editOn(){
-  var h = $("yqHome"); if(!h || !OWNER) return; HEDIT = true; HPEND = {}; h.classList.add("edit"); var t = $("yqTip"); if(t) t.style.display = "none";
+  var h = $("yqHome"); if(!h || !OWNER) return; HEDIT = true; HPEND = {}; HPX = Object.assign({}, HOV.x || {}); h.classList.add("edit"); var t = $("yqTip"); if(t) t.style.display = "none";
   h.querySelectorAll("[data-ek]").forEach(function(el){ el.contentEditable = "true"; el.spellcheck = false; });
-  var b = document.createElement("div"); b.id = "yqEdBar"; b.innerHTML = '<span>Editing: tap any dashed text to change it (delete all of it to hide it). Tap any logo (YQI or a customer) to change the picture.</span><button class="s" id="yqEdS">Save</button><button id="yqEdC">Cancel</button><button id="yqEdR">Reset all</button>'; document.body.appendChild(b);
+  var b = document.createElement("div"); b.id = "yqEdBar"; b.innerHTML = '<span>Editing: tap dashed text to change it. Tap any other box, heading or number to change, hide or delete it. Tap a logo to change the picture.</span><button class="s" id="yqEdS">Save</button><button id="yqEdC">Cancel</button><button id="yqEdR">Reset all</button>'; document.body.appendChild(b);
   var fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; fi.style.display = "none"; b.appendChild(fi); var tgt = null;
   fi.onchange = function(){ var f = fi.files[0]; fi.value = ""; if(!f || !tgt) return; imgToData(f, /^logo:/.test(tgt.dataset.ei) ? 160 : 600).then(function(u){ HPEND[tgt.dataset.ei] = u; if(tgt.tagName === "IMG") tgt.src = u; else tgt.innerHTML = '<img src="' + u + '" alt="">'; }).catch(function(){ yqAsk("This picture could not be read."); }); };
-  h.__edc = function(e){ if(!HEDIT) return; var im = e.target.closest("[data-ei]"); if(im){ e.preventDefault(); e.stopPropagation(); tgt = im; fi.click(); return; } if(e.target.closest("[data-ek]")){ e.stopPropagation(); if(e.target.closest("button,a")) e.preventDefault(); return; } e.preventDefault(); e.stopPropagation(); };
+  h.__edc = function(e){ if(!HEDIT) return; var im = e.target.closest("[data-ei]"); if(im){ e.preventDefault(); e.stopPropagation(); tgt = im; fi.click(); return; } if(e.target.closest("[data-ek]")){ e.stopPropagation(); if(e.target.closest("button,a")) e.preventDefault(); return; } e.preventDefault(); e.stopPropagation(); if(e.target !== h && h.contains(e.target)) hxOpen(e.target.closest("svg") && e.target.closest("svg").parentElement !== h ? e.target.closest("svg") : e.target); };
   h.addEventListener("click", h.__edc, true);
   h.__edk = function(e){ if(HEDIT && e.key === "Enter" && e.target.closest("[data-ek]")){ e.preventDefault(); e.target.blur(); } if(HEDIT && e.key === " " && e.target.closest("button")) e.stopPropagation(); };
   h.addEventListener("keydown", h.__edk, true);
   $("yqEdC").onclick = function(){ editOff(); };
-  $("yqEdR").onclick = function(){ yqAsk("Put all headings and pictures back to the original?", {title: "Reset page", ok: "Reset", danger: 1}).then(function(y){ if(y) saveEdits({t: {}, img: {}}); }); };
+  $("yqEdR").onclick = function(){ yqAsk("Put all headings, boxes and pictures back to the original (hidden and deleted items come back)?", {title: "Reset page", ok: "Reset", danger: 1}).then(function(y){ if(y){ HPX = {}; saveEdits({t: {}, img: {}, x: {}}); } }); };
   $("yqEdS").onclick = function(){ var t = Object.assign({}, HOV.t), img = Object.assign({}, HOV.img, HPEND);
     h.querySelectorAll("[data-ek]").forEach(function(el){ var v = el.textContent.replace(/\s+/g, " ").trim(), d = (el.getAttribute("data-ed") || "").trim(); if(v === d) delete t[el.dataset.ek]; else t[el.dataset.ek] = v; });
-    saveEdits({t: t, img: img}); };
+    saveEdits({t: t, img: img, x: HPX || HOV.x || {}}); };
 }
 function saveEdits(v){ var bar = $("yqEdBar"); if(bar) bar.querySelector("span").textContent = "Saving…";
-  FS.collection("ws").doc("_all").collection("homecfg").doc("page").set({t: v.t, img: v.img, at: Date.now(), by: EMAIL}).then(function(){ HOV = v; lsSet("yqi_hov", JSON.stringify(HOV)); editOff(); }).catch(function(e){ if(bar) bar.querySelector("span").textContent = "Not saved: " + errTxt(e); }); }
-function editOff(){ var h = $("yqHome"); HEDIT = false; HPEND = {}; var b = $("yqEdBar"); if(b) b.remove(); if(h){ h.classList.remove("edit"); if(h.__edc) h.removeEventListener("click", h.__edc, true); if(h.__edk) h.removeEventListener("keydown", h.__edk, true); } renderHome(); }
+  FS.collection("ws").doc("_all").collection("homecfg").doc("page").set({t: v.t, img: v.img, x: v.x || {}, at: Date.now(), by: EMAIL}).then(function(){ HOV = v; lsSet("yqi_hov", JSON.stringify(HOV)); editOff(); }).catch(function(e){ if(bar) bar.querySelector("span").textContent = "Not saved: " + errTxt(e); }); }
+function editOff(){ var h = $("yqHome"); HEDIT = false; HPEND = {}; HPX = null; hxClose(); var b = $("yqEdBar"); if(b) b.remove(); if(h){ h.classList.remove("edit"); if(h.__edc) h.removeEventListener("click", h.__edc, true); if(h.__edk) h.removeEventListener("keydown", h.__edk, true); } renderHome(); }
 // ----- the front page keeps a copy of its data on this device, so it opens at once next time -----
 var HC = null, HCT = null;
 function hcKey(){ return location.origin + "/__yqi_home/v1/" + encodeURIComponent(EMAIL || "x"); }
@@ -3176,6 +3277,7 @@ function wstView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2"
   var cover = function(){ if(!WST || !WST.meta) return ''; var D = wstDays(); if(!D.length) return ''; var g = wstGaps(D); return '<div class="wcov"><div><span class="wlab">Data saved</span><b>' + esc(wstDd(D[0])) + ' → ' + esc(wstDd(D[D.length - 1])) + '</b><small>' + D.length + ' days</small></div><div class="' + (g.length ? 'warn' : 'ok') + '"><span class="wlab">Missing days</span><b>' + (g.length ? g.length + ' (Sundays not counted)' : 'None') + '</b>' + (g.length ? '<small>' + esc(wstRanges(g).slice(0, 4).join(' · ')) + (g.length > 4 ? ' …' : '') + '</small>' : '<small>Every working day is in</small>') + '</div><div><span class="wlab">Next upload</span><b>From ' + esc(wstDd(new Date(new Date(D[D.length - 1] + 'T00:00:00Z').getTime() + 864e5).toISOString().slice(0, 10))) + '</b><small>Days already saved are kept as they are</small></div></div>'; };
   function count(el){ var to = +el.dataset.to, dec = +el.dataset.dec || 0, suf = el.dataset.suf || "", t0 = performance.now(); (function f(t){ var k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3), v = to * e; el.textContent = (dec ? v.toFixed(dec) : Math.round(v).toLocaleString("en-US")) + suf; if(k < 1) requestAnimationFrame(f); })(t0); }
   function draw(){ var W = WST, M = W && W.meta;
+    try{ if(M) yqRng.sync("wst", function(){ return {f: F.d1 || "", t: F.d2 || ""}; }, function(f, t){ F.m = ""; F.d1 = f || (t ? (wstDays()[0] || "") : ""); F.d2 = t || (f ? (wstDays().slice(-1)[0] || "") : ""); }); }catch(e){}
     if(!M){ B.innerHTML = head("Floor, customer, program and YTM wastage") + '<div class="wcard wemp wan"><div style="font-size:54px">📊</div><h2>No wastage data yet</h2><div class="ws" style="max-width:520px;margin:0 auto 18px">Upload the Accounts YTML wastage Excel. The app reads the ALL CUSTOMERS sheet. Every new file adds its days; days already here stay as they are, and a day sent again is replaced, never doubled.</div>' + (wstCanUp() ? '<label class="wbt p">⬆ Upload data<input type="file" accept=".xlsx" data-up></label>' : '<div class="ws">Ask QA to upload the file.</div>') + '</div>'; wire(); return; }
     if(!TB) TB = wstTabsMake({F: F, O: O, B: B, f0: f0, draw: draw, head: head});
     var DD0 = wstDays(), cov0 = DD0.length ? '<b class="wcv">Wastage data: ' + esc(wstDd(DD0[0])) + ' → ' + esc(wstDd(DD0[DD0.length - 1])) + '</b> · ' : "";
@@ -3580,7 +3682,9 @@ function uploadInsp(f){
 }
 function showHome(on){
   homeCss(); var h = $("yqHome");
-  if(!h){ h = document.createElement("div"); h.id = "yqHome"; document.body.appendChild(h); }
+  if(!h){ h = document.createElement("div"); h.id = "yqHome"; document.body.appendChild(h);
+    // owner edits (hide / delete / text by fixed ID) stay on when parts of the page redraw (front page, lists)
+    try{ new MutationObserver(function(rs){ var m = HPX || HOV.x; if(!m || !window.YQE || !Object.keys(m).length) return; for(var i = 0; i < rs.length; i++){ var a = rs[i].addedNodes; for(var j = 0; j < a.length; j++) if(a[j].nodeType === 1){ try{ YQE.apply(h, m); }catch(e){} return; } } }).observe(h, {childList: true, subtree: true}); }catch(e){} }
   HOMEON = !!on; h.style.display = on ? "block" : "none"; try{ document.body.classList.toggle("yqfr", !!on && FRONT); }catch(e){} try{ document.body.classList.toggle("yqh", !!on); }catch(e){}
   var c = $("yqCust"); if(c && on) c.style.display = "none";
   if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
@@ -3894,7 +3998,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-044500", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-120000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -6228,7 +6332,7 @@ jobs.forEach(j=>io.observe(j.host));
 setTimeout(()=>{try{io.disconnect()}catch(e){}jobs.forEach(j=>{if(!j.done){}})},60000)}
 function fin(el,an,prop){an.onfinish=()=>{try{an.cancel()}catch(e){}el.style[prop]=''}}
 function motion(){try{let ct='',it='';try{ct=S.view==='cut'?CU().tab:''}catch(e){}try{it=S.view==='int'?IN().tab:''}catch(e){}const k=[S.view,S.tab||'',ct,it,S.prog||'',S.shp||''].join('|');if(k===_mk)return;_mk=k;const a=document.getElementById('app');if(!a)return;a.classList.remove('mot');void a.offsetWidth;a.classList.add('mot');clearTimeout(window.__mt);window.__mt=setTimeout(()=>{const x=document.getElementById('app');x&&x.classList.remove('mot')},1500);cuAuto(a,'.kpis b,.kpg b,.kpi b,.lt b,.mgt,.l3x b');try{gfx(a)}catch(e){}}catch(e){}}
-function render(){if(S.view==='land'&&VIEW&&window.__SEL){}if(S.view==='pre'){document.body.classList.remove('onland','oninsp');document.body.classList.add('oncut');preView()}else render0();try{preBtn()}catch(e){}try{motion()}catch(e){}try{if(VIEW&&window.__SEL&&S.view==='land')document.querySelectorAll('.l3c').forEach(b=>{if(window.__SEL.indexOf(b.dataset.v)<0)b.remove()})}catch(e){}try{const a=document.getElementById('app');if(a&&!a.querySelector('.devby')){const d=document.createElement('div');d.className='devby';d.innerHTML='Developed by <b>Hamza Khan</b> | Yunus Quality Intelligence';a.appendChild(d)}}catch(e){}}
+function render(){try{if(window.yqRng)yqRng.sync('cust',()=>({f:S.rf||'',t:S.rt||''}),(f,t)=>{S.rf=f;S.rt=t})}catch(e){}if(S.view==='land'&&VIEW&&window.__SEL){}if(S.view==='pre'){document.body.classList.remove('onland','oninsp');document.body.classList.add('oncut');preView()}else render0();try{preBtn()}catch(e){}try{motion()}catch(e){}try{if(VIEW&&window.__SEL&&S.view==='land')document.querySelectorAll('.l3c').forEach(b=>{if(window.__SEL.indexOf(b.dataset.v)<0)b.remove()})}catch(e){}try{const a=document.getElementById('app');if(a&&!a.querySelector('.devby')){const d=document.createElement('div');d.className='devby';d.innerHTML='Developed by <b>Hamza Khan</b> | Yunus Quality Intelligence';a.appendChild(d)}}catch(e){}}
 function render0(){spApplyAll();document.body.classList.toggle('onland',S.view==='land');document.body.classList.toggle('oninsp',S.view==='insp'||S.view==='stu');document.body.classList.toggle('oncut',S.view==='cut'||S.view==='int');if(S.view==='land'){landing();return}if(S.view==='insp'){inspView();return}if(S.view==='stu'){S.view='land';landing();return}if(S.view==='cut'||S.view==='int'){S.view='land';landing();return}const sy=window.scrollY;const m={home:home,programs:programs,activity:activity,report:report,orders:orders,plans:plans}[S.tab]();
 $('#app').className='tab-'+S.tab;$('#app').innerHTML=banner()+m+`<div class="nav"><div class="navh"><div class="ylogo"><img src="${LOGO.y}" alt="Yunus Textile for Life"></div></div>${[['home','Home'],['programs','Programs'],['orders','Orders'],['plans','Plans'],['activity','Activity'],['report','Report']].map(t=>`<button class="${S.tab===t[0]?'on':''}" data-a="tab" data-t="${t[0]}">${t[1]}</button>`).join('')}<button class="xl" data-a="gohome"><span class="xf">‹ Yunus Home</span><span class="xs">‹ Home</span></button><div class="navft">${themeHtml(1)}</div></div><div class="ftr">${themeHtml()}</div>`;fixImgs();window.scrollTo(0,sy)}
 function banner(){if(VIEW)return `<div class="banner" style="background:var(--nvb);color:var(--nvc)">View-only copy. Data as of ${SNAPDATE}. Nothing can be edited here.</div>`;if(location.protocol==='file:')return `<div class="banner">You opened a saved copy of this app from your computer. Uploads, saving and spec files do not work here. Open this link instead: https://claude.ai/artifact/EECkRa7NSpJUxEZG6Nakzw</div>`;if(ST==='nodb')return `<div class="banner">View only. Saving is off in this view. Open the link in Chrome while signed in to Claude with access to this app.</div>`;if(ST==='noas')return `<div class="banner">Company version: photo and file uploads are off (free plan). Everything else saves normally.</div>`;return ''}
@@ -6888,10 +6992,11 @@ function edSelOf(el){const c=edCls(el);return el.tagName.toLowerCase()+(c?'.'+c:
 function edOwn(el){for(const n of el.childNodes)if(n.nodeType===3&&n.nodeValue.trim())return n;return null}
 function edKey(o){let h=0;const t=[o.sc,o.k,o.sel,o.old||o.tx||o.ix].join('~');for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))|0;return 'e'+(h>>>0).toString(36)}
 function edApply(){const ed=((S.cfg||{}).ed)||{},sc=edScope(),app=document.getElementById('app');if(!app)return;ED.busy=true;
-try{app.querySelectorAll('[data-edh]').forEach(e=>{e.style.display='';e.removeAttribute('data-edh')});
-Object.keys(ed).forEach(id=>{const o=ed[id];if(!o||o.sc!==sc)return;let els;try{els=[...app.querySelectorAll(o.sel)]}catch(x){return}
+try{if(window.YQE)YQE.unhideAll(app);else app.querySelectorAll('[data-edh]').forEach(e=>{e.style.display='';e.removeAttribute('data-edh')});
+if(window.YQE)YQE.apply(app,ed,o=>o.sc===sc);
+Object.keys(ed).forEach(id=>{const o=ed[id];if(!o||o.sc!==sc||o.id)return;let els;try{els=[...app.querySelectorAll(o.sel)]}catch(x){return}
 if(o.k==='t'){els.forEach(e=>{const n=edOwn(e);if(n&&n.nodeValue.trim()===o.old){n.nodeValue=n.nodeValue.replace(o.old,o.nw)}})}
-else if(o.k==='h'||o.k==='d'){const del=[];els.forEach((e,i)=>{const ok=o.tx?e.textContent.trim().slice(0,40)===o.tx:i===o.ix;if(ok){if(o.k==='d')del.push(e);else{e.style.display='none';e.setAttribute('data-edh','1')}}});del.forEach(e=>e.remove())}})}finally{ED.busy=false}}
+else if(o.k==='h'||o.k==='d'){const del=[];els.forEach((e,i)=>{const ok=o.tx?e.textContent.trim().slice(0,40)===o.tx:i===o.ix;if(ok){e.style.display='none';e.setAttribute('data-edh',o.k)}});del.length=0}})}finally{ED.busy=false}}
 function edSave(id,o){if(!S.cfg)S.cfg={shadeMonths:12,specMonths:3,chk:{},hide:{},ed:{}};if(!S.cfg.ed)S.cfg.ed={};if(o)S.cfg.ed[id]=o;else delete S.cfg.ed[id];edKeep(S.cfg.ed);
 if(DB&&!VIEW){DB.collection('cfg').add({k:'ed:'+id,v:o||null,ts:Date.now()}).catch(()=>toast('Could not save the edit'))}else if(!VIEW){toast('Edit works on this screen only until you reload (open the app link)')}}
 function edClose(){const p=document.getElementById('edp');if(p)p.remove();ED.sel=null;document.querySelectorAll('.edsel').forEach(e=>e.classList.remove('edsel'))}
@@ -6901,10 +7006,10 @@ const p=document.createElement('div');p.id='edp';
 p.innerHTML=`<div class="edh"><b>Edit</b><button data-ed="x">Close</button></div>${own?`<label>Text</label><input id="edi" value="${esc(own.nodeValue.trim()).replace(/"/g,'&quot;')}"><button class="edb pri" data-ed="save">Save text</button>`:'<div class="edn">This item has no text of its own. You can hide or delete it.</div>'}<div class="edr"><button class="edb" data-ed="hit">Hide this item</button>${box?'<button class="edb" data-ed="hbox">Hide whole box</button>':''}</div><div class="edr"><button class="edb del" data-ed="dit">Delete this item</button>${box?'<button class="edb del" data-ed="dbox">Delete whole box</button>':''}</div><div class="edr"><button class="edb" data-ed="undo">Undo my edits on this screen</button></div>`;
 document.body.appendChild(p);p.addEventListener('click',e=>{const b=e.target.closest('[data-ed]');if(!b)return;const a=b.dataset.ed;
 if(a==='x'){edClose();return}
-if(a==='save'){const nv=document.getElementById('edi').value;const old=own.nodeValue.trim();if(nv===old){edClose();return}const o={k:'t',sc:sc,sel:edSelOf(el),old:old,nw:nv};edSave(edKey(o),o);own.nodeValue=own.nodeValue.replace(old,nv);toast('Saved');edClose();return}
-if(a==='hit'||a==='hbox'){const t=a==='hbox'?box:el;const sel=edSelOf(t);const all=[...document.getElementById('app').querySelectorAll(sel)];const tx=t.textContent.trim().slice(0,40);const o={k:'h',sc:sc,sel:sel,tx:tx,ix:all.indexOf(t)};edSave(edKey(o),o);edClose();edApply();toast('Hidden');return}
+if(a==='save'){const nv=document.getElementById('edi').value;const old=own.nodeValue.trim();if(nv===old){edClose();return}const app=document.getElementById('app');const o={k:'t',sc:sc,id:YQE.pid(el,app),s:YQE.sig(el),nw:nv};edSave(YQE.key(sc,o),o);YQE.setText(el,nv);toast('Saved');edClose();return}
+if(a==='hit'||a==='hbox'){const t=a==='hbox'?box:el;const app=document.getElementById('app');const o={k:'h',sc:sc,id:YQE.pid(t,app),s:YQE.sig(t)};edSave(YQE.key(sc,o),o);edClose();edApply();toast('Hidden');return}
 if(a==='dit'||a==='dbox'){if(!b.dataset.ok){p.querySelectorAll('.edb.del').forEach(x=>{delete x.dataset.ok;x.textContent=x.dataset.ed==='dbox'?'Delete whole box':'Delete this item'});b.dataset.ok='1';b.textContent='Tap again to delete';return}
-const t=a==='dbox'?box:el;const sel=edSelOf(t);const all=[...document.getElementById('app').querySelectorAll(sel)];const tx=t.textContent.trim().slice(0,40);const o={k:'d',sc:sc,sel:sel,tx:tx,ix:all.indexOf(t)};edSave(edKey(o),o);edClose();edApply();toast('Deleted. Undo my edits brings it back');return}
+const t=a==='dbox'?box:el;const app=document.getElementById('app');const o={k:'d',sc:sc,id:YQE.pid(t,app),s:YQE.sig(t)};edSave(YQE.key(sc,o),o);edClose();edApply();toast('Deleted. Undo my edits brings it back');return}
 if(a==='undo'){const ids=Object.keys(ed).filter(i=>ed[i]&&ed[i].sc===sc);if(!ids.length){toast('No edits on this screen');return}ids.forEach(i=>edSave(i,null));edClose();render();toast('Edits on this screen undone');return}})}
 function edMount(){if(VIEW||document.getElementById('edf'))return;const css=document.createElement('style');css.textContent=`#edf{position:fixed;left:14px;bottom:84px;z-index:55;height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 13px/1 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;align-items:center;gap:6px}
 body.onland #edf{bottom:22px;left:18px}body.oninsp #edf{display:none}body.edon #edf{background:var(--acc);color:var(--onacc)}
