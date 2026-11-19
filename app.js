@@ -3897,7 +3897,7 @@ function openIS(route){
   if((HCUST || "") !== (ISCUST || "")) setCust(HCUST);
   showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
   try{ if(!YQBACK.has("is")) YQBACK.push(function(){ if(HOMEON){ YQBACK.back(); return; } showHome(true); }, "is"); }catch(e){}
-  if(!started){ showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
+  if(!started){ window.__yqIsOpening = 1; showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
   var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); if(route) goRoute(route); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
 }
 window.yqGoWastage = function(){ goRoute("import"); var n = 0; (function f(){ var c = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ c = fr.contentDocument.getElementById("yqWcard") || c; }catch(e){} }); if(c && c.offsetParent){ c.scrollIntoView({behavior: "smooth", block: "start"}); return; } if(++n < 40) setTimeout(f, 150); })(); };
@@ -3993,7 +3993,7 @@ function goDirect(){
 function startHome(){ try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits();
-  new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON) showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
+  new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening) showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
 
 // ---------- Inspection Summary add-ons (company version): customer picker in the side panel, wastage by YTM ----------
@@ -4249,7 +4249,7 @@ function runApp(){
   if(started) return; started = true;
   if(!ISED){ try{ document.body.classList.add("yqro"); var st = document.createElement("style"); st.textContent = "body.yqro [data-a=del],body.yqro [data-a=save],body.yqro [data-a=rpass],body.yqro [data-a=rundo],body.yqro [data-a=cfgsave],body.yqro [data-a=xssave],body.yqro [data-a=xsdel],body.yqro [data-a=sprs],body.yqro [data-a=sprm],body.yqro [data-a=slrm],body.yqro [data-a=slrestore],body.yqro [data-a=sladd],body.yqro [data-a=shrm],body.yqro [data-a=shrestore],body.yqro [data-a=sfsave],body.yqro [data-a=ptrm],body.yqro [data-a=ordseed],body.yqro [data-a=ordsave],body.yqro [data-a=ordnew],body.yqro [data-a=oesave],body.yqro [data-a=oedit],body.yqro [data-a=obulksave],body.yqro [data-a=lnkadd],body.yqro [data-a=lastundo],body.yqro [data-a=pldel],body.yqro [data-a=plsub],body.yqro input[type=file]{display:none!important}"; document.head.appendChild(st); }catch(e){} }
   var list = [].slice.call(document.querySelectorAll('script[type="text/yqi"]'));
-  var li = 0; (function next(){ if(li >= list.length){ try{ window.dispatchEvent(new Event("resize")); }catch(e){} return; }
+  var li = 0; (function next(){ if(li >= list.length){ try{ window.dispatchEvent(new Event("resize")); }catch(e){} setTimeout(function(){ window.__yqIsOpening = 0; }, 1500); return; }
     var s = list[li++], n = document.createElement("script"), u = s.getAttribute("data-src");
     if(u){ n.src = u; n.async = false; n.onload = next; n.onerror = function(){ showGate('<h1>No internet?</h1><div class="sub">Part of YQI could not load.</div><button onclick="location.reload()">Try again</button>'); }; s.parentNode.replaceChild(n, s); }
     else { n.text = s.text; s.parentNode.replaceChild(n, s); next(); } })();
@@ -4290,7 +4290,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-020000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-221206", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
