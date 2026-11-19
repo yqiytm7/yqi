@@ -1,8 +1,8 @@
 // YQI app shell: always fetch fresh from the network (data stays live); only the icons are kept for offline start.
-self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v9").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
+self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open("yqi-shell-v10").then(c => c.addAll(["icon-192.png", "icon-512.png"])).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
 // The app page: kept on the phone so YQI opens instantly; the newest copy is fetched in the background.
-const PAGE = "yqi-page-v3", PKEY = "/__yqi_page", LIB = "yqi-lib-v1";
+const PAGE = "yqi-page-v3", PKEY = "/__yqi_page", LIB = "yqi-lib-v1", JSC = "yqi-js-v1";
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => /^yqi-page-/.test(k) && k !== PAGE).map(k => caches.delete(k))))); });
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
@@ -15,7 +15,14 @@ self.addEventListener("fetch", e => {
     return;
   }
   const scope = self.registration.scope.replace(location.origin, "");
-  const isPage = e.request.mode === "navigate" || u.pathname === scope || /\/index\.html$/.test(u.pathname);
+  // app code files carry the version in the link (app.js?v=…): keep them on the phone, so YQI starts at once
+  if (/\.js$/.test(u.pathname) && u.searchParams.has("v") && !/\/sw\.js$/.test(u.pathname)) {
+    e.respondWith(caches.open(JSC).then(c => c.match(e.request).then(hit => hit || fetch(e.request, { cache: "no-cache" }).then(r => {
+      if (r && r.ok) { const cp = r.clone(); c.keys().then(ks => Promise.all(ks.filter(k => new URL(k.url).pathname === u.pathname && k.url !== e.request.url).map(k => c.delete(k)))).then(() => c.put(e.request, cp)).catch(() => {}); }
+      return r; }))));
+    return;
+  }
+  const isPage = (e.request.mode === "navigate" && (u.pathname === scope || /\/index\.html$/.test(u.pathname))) || u.pathname === scope || /\/index\.html$/.test(u.pathname);
   if (!isPage || u.searchParams.has("nc")) { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); return; }
   // Always open the newest app: try the network first (up to 4 s), keep that copy; without internet open the kept copy.
   e.respondWith(caches.open(PAGE).then(c => {
