@@ -82,8 +82,8 @@ async function fsGet(at, path) { const r = await fetch(DOCS + path, { headers: {
 async function fsPatch(at, path, obj, mask) { const q = mask ? "?" + mask.map(m => "updateMask.fieldPaths=" + encodeURIComponent(m)).join("&") : ""; return fetch(DOCS + path + q, { method: "PATCH", headers: { authorization: "Bearer " + at, "content-type": "application/json" }, body: JSON.stringify({ fields: fields(obj) }) }); }
 async function fsDel(at, path) { return fetch(DOCS + path, { method: "DELETE", headers: { authorization: "Bearer " + at } }); }
 async function userName(at, uid) { try { const d = await fsGet(at, "people/" + uid); const f = d && d.fields ? fromV({ mapValue: { fields: d.fields } }) : {}; return f.name || f.displayName || ""; } catch (e) { return ""; } }
-async function feedRun(env, test) {
-  const at = await accessToken(env); let done = 0, seen = 0; const G = Object.assign({}, FEEDG); if (test && /^grp_[a-z_]+$/.test(test)) G[test] = "int";
+async function feedRun(env) {
+  const at = await accessToken(env); let done = 0, seen = 0; const G = FEEDG;
   for (const gid of Object.keys(G)) {
     const r = await fetch(DOCS + "chats/" + gid + ":runQuery", { method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "m" }], orderBy: [{ field: { fieldPath: "at" }, direction: "DESCENDING" }], limit: 40 } }) });
@@ -112,8 +112,8 @@ export default {
   async scheduled(ev, env, ctx) { ctx.waitUntil(feedRun(env).catch(e => console.log("feed", e && e.message))); },
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
-    if (req.method === "GET" && new URL(req.url).searchParams.has("feed")) { try { const q = new URL(req.url).searchParams; return json(Object.assign({ ok: true }, await feedRun(env, q.get("test")))); } catch (e) { return json({ ok: false, error: e.message }); } }
-    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok, v: 4 }); }
+    if (req.method === "GET" && new URL(req.url).searchParams.has("feed")) { try { return json(Object.assign({ ok: true }, await feedRun(env))); } catch (e) { return json({ ok: false, error: e.message }); } }
+    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok, v: 5 }); }
     let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
     const at = await accessToken(env);
     // ---- computer asks: has a phone approved this QR yet? ----
