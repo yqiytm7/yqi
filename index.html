@@ -797,16 +797,18 @@ function pingWatch(){ if(window.__pingOn || !FS) return; window.__pingOn = 1; va
     yqNewData((v.name || v.by) + " " + (/removed/.test(v.what) ? "" : "uploaded ") + v.what, function(){ if(v.kind === "ol"){ OL = null; olLoad(true).then(function(){ if(document.querySelector("#yqWst.olv") && window.__wstRedraw) __wstRedraw(); }); } else if(v.kind === "wst"){ WST = null; wstLoad(true).then(function(){ if(document.querySelector("#yqWst:not(.olv)") && window.__wstRedraw) __wstRedraw(); }); } else if(HOMEON) renderHome(); else location.reload(); }, (v.file ? v.file + " · " : "") + "at " + tm + " · your screen stays as it is until you refresh"); }, function(){}); }catch(e){} }); }
 // quality trend lines on the home page: external 1st-go pass %, internal pass %, OQL and wastage by month (or week for short periods)
 function homeTrend(ALLL, INT, WST, rg, today){ var K = HCUST ? canonC(HCUST) : "", isC = function(c){ return !K || canonC(c) === K; };
-  var to = rg.to === "9999" || rg.to > today ? today : rg.to, fr = rg.from === "0000" ? "" : rg.from, span = fr ? (new Date(to) - new Date(fr)) / 864e5 : 999, wk = span < 62;
-  var key = function(d){ if(!wk) return d.slice(0, 7); var t = new Date(d + "T00:00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return ymd(t); };
-  var lo = wk ? (function(){ var t = new Date(to + "T00:00:00"); t.setDate(t.getDate() - 7 * 11); return ymd(t); })() : (fr || "0000");
+  var to = rg.to === "9999" || rg.to > today ? today : rg.to, fr = rg.from === "0000" ? "" : rg.from, span = fr ? Math.round((new Date(to) - new Date(fr)) / 864e5) : 9999, one = span < 1;
+  // the trend follows the calendar: one day → that day and the 6 days before it; up to a month → each day; up to 6 months → each week; longer → each month
+  var U = one || span <= 31 ? "d" : span <= 186 ? "w" : "m", wk = U !== "m";
+  var key = function(d){ if(U === "d") return d; if(U === "m") return d.slice(0, 7); var t = new Date(d + "T00:00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return ymd(t); };
+  var lo = one ? (function(){ var t = new Date(to + "T00:00:00"); t.setDate(t.getDate() - 6); return ymd(t); })() : (fr || "0000");
   var B = {}, g = function(k){ return B[k] = B[k] || {n: 0, p: 0, s: 0, m: 0, in: 0, ip: 0, w: []}; };
   (ALLL || []).forEach(function(q){ if(!q.date || q.date < lo || q.date > to || !isC(q.cust) || q.first === "pend" || q.first === "reins") return; var b = g(key(q.date)), w = q.w || 1; b.n += w; if(q.first === "pass") b.p += w; b.s += q.sample || 0; b.m += q.major || 0; });
   (INT || []).forEach(function(r){ var d = String(r.date || "").slice(0, 10); if(!d || d < lo || d > to || (K && !(r.customer && canonC(r.customer) === K))) return; var b = g(key(d)), c = +r.count || 1, k = rkind(r.result); if(k !== "pass" && k !== "fail") return; b.in += c; if(k === "pass") b.ip += c; });
   var MW = window.YQWST && YQWST.rows && YQWST.rows.length ? YQWST.rows : null;
   if(MW){ var WC = {}, cm1 = {}; MW.forEach(function(r){ var d = r.d; if(!d || d < lo || d > to) return; var okc = cm1[r.cu]; if(okc === undefined) okc = cm1[r.cu] = isC(r.cu); if(!okc) return; var k = key(d), o = WC[k] = WC[k] || {c: 0, w: 0}; if(r.cut) o.c += +r.v || 0; else o.w += +r.v || 0; }); Object.keys(WC).forEach(function(k){ if(WC[k].c) g(k).w.push(WC[k].w / WC[k].c * 100); }); }
   else (WST || []).forEach(function(dd){ var d = String(dd.date || dd._id || "").slice(0, 10); if(!d || d < lo || d > to) return; Object.keys(dd.cust || {}).forEach(function(cn){ if(!isC(cn)) return; var v = (dd.cust[cn] || {}).wpct; if(v != null && !isNaN(+v)) g(key(d)).w.push(+v * 100); }); });
-  var ks = Object.keys(B).sort(); if(ks.length < 2) return '';
+  var ks = Object.keys(B).sort(); if(!ks.length) return '<div class="yqsec">Trend</div><div class="cd"><div class="em">No data from ' + dmy(lo) + ' to ' + dmy(to) + '</div></div>';
   var lab = function(k){ return wk ? dmy(k).slice(0, 5) : mName(k + "-01").replace(" 20", " ’"); };
   var S1 = [{n: "External pass % (1st go)", c: "#5BA32A", v: ks.map(function(k){ return B[k].n ? B[k].p / B[k].n * 100 : null; })}, {n: "Internal pass %", c: "#2d8fe0", v: ks.map(function(k){ return B[k].in ? B[k].ip / B[k].in * 100 : null; })}];
   var S2 = [{n: "OQL %", c: "#e0574b", v: ks.map(function(k){ return B[k].s ? B[k].m / B[k].s * 100 : null; })}, {n: "Wastage %", c: "#d99a0b", v: ks.map(function(k){ var w = B[k].w; return w.length ? w.reduce(function(a, x){ return a + x; }, 0) / w.length : null; })}];
@@ -820,7 +822,7 @@ function homeTrend(ALLL, INT, WST, rg, today){ var K = HCUST ? canonC(HCUST) : "
       o += '<path class="htl" style="animation-delay:' + si * 150 + 'ms" d="' + pts.map(function(p, i){ return (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" fill="none" stroke="' + x.c + '" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>';
       pts.forEach(function(p){ var u = used[p[3]] = used[p[3]] || [], sh = n <= 14 && !u.some(function(y){ return Math.abs(y - p[1]) < 14; }); if(sh) u.push(p[1]); o += '<g><circle cx="' + p[0] + '" cy="' + p[1] + '" r="4.5" fill="' + x.c + '"/><title>' + esc(x.n + " · " + lab(ks[p[3]]) + " · " + p[2].toFixed(2) + "%") + '</title>' + (sh ? '<text x="' + p[0] + '" y="' + (p[1] - 9) + '" text-anchor="middle" class="hpl" fill="' + x.c + '">' + p[2].toFixed(lim === "pct" ? 1 : 2) + '%</text>' : '') + '</g>'; }); });
     return '<svg class="htr" viewBox="0 0 ' + W + ' ' + H + '" width="100%">' + o + '</svg><div class="lg">' + ser.map(function(x){ return '<span><i style="background:' + x.c + '"></i>' + esc(x.n) + '</span>'; }).join('') + '</div>'; };
-  var t = (HCUST ? esc(HCUST) + ' · ' : '') + (wk ? 'by week (last 12 weeks)' : 'by month');
+  var t = (HCUST ? esc(HCUST) + ' · ' : '') + (U === "d" ? 'by day' : U === "w" ? 'by week' : 'by month') + (U !== "m" || fr ? ' (' + dmy(lo < ks[0] ? ks[0] : lo).slice(0, 5) + ' → ' + dmy(to).slice(0, 5) + ')' : '');
   return '<div class="yqsec">Trend</div><div class="g2 htrw"><div class="cd"><h3>Pass % trend · ' + t + '</h3>' + ch(S1, "pct") + '</div><div class="cd"><h3>OQL and wastage trend · ' + t + '</h3>' + ch(S2, "low", 2.5) + '</div></div>'; }
 function buildLots(R, ext, wsHas){
   var lots = [], m = {}, byPo = {};
@@ -4008,7 +4010,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-133000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-140000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
