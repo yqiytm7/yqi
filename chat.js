@@ -8,9 +8,10 @@ var unMsgs = null, firstChats = true, MSGLIM = 60, REPLY = null, SEARCHQ = "";
 var MAXF = 12 * 1024 * 1024, CHUNK = 700000, DARK = false;
 function ask(m, o){ return window.yqAsk ? window.yqAsk(m, o) : Promise.resolve(window.confirm(m)); }
 window.YQCHAT = {setToken: function(t, k){ setToken(t, k); },
-  washPost: function(cid, m, prev){ if(!MY || !FS) return Promise.reject(new Error("Chat is not ready yet")); var getC = CHATS[cid] ? Promise.resolve(CHATS[cid]) : FS.collection("chats").doc(cid).get().then(function(d){ if(!d.exists) throw new Error("Open the Wash QC group first"); return Object.assign({id: cid}, d.data()); });
+  washPost: function(cid, m, prev){ if(!MY || !FS) return Promise.reject(new Error("Chat is not ready yet")); var getC = CHATS[cid] ? Promise.resolve(CHATS[cid]) : navigator.onLine === false ? Promise.resolve({id: cid, members: []}) : FS.collection("chats").doc(cid).get().then(function(d){ if(!d.exists) throw new Error("Open the Wash QC group first"); return Object.assign({id: cid}, d.data()); });
     return getC.then(function(c){ m.by = MY; m.at = now(); var ref = FS.collection("chats").doc(cid).collection("m").doc(), u = {at: m.at, last: {t: String(prev || "").slice(0, 120), by: MY, at: m.at, k: m.k === "wash" ? "text" : m.k}}; u["rd." + MY] = m.at; (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
       if(OPEN === cid){ MSGS.push(Object.assign({id: ref.id, pend: 1}, m)); renderMsgs(); }
+      if(navigator.onLine === false && window.yqSave){ return yqSave(ref, m).then(function(){ return ref.id; }); }
       return ref.set(m).then(function(){ return FS.collection("chats").doc(cid).update(u); }).then(function(){ try{ pushNote(Object.assign({id: cid}, c), String(prev || "").slice(0, 120)); }catch(e){} return ref.id; }); }); },
   washOpen: function(gid, name, desc){ try{ var pp = $("ycP"); if(!pp || !pp.classList.contains("on")) openPanel(); }catch(e){}
     var go1 = function(){ if(CHATS[gid]){ openChat(gid); return true; } return false; };
@@ -20,7 +21,7 @@ window.YQCHAT = {setToken: function(t, k){ setToken(t, k); },
   return ref.set({type: "dm", members: [MY, u].sort(), made: at, by: MY}, {merge: true}).then(function(){ var up = {at: at, last: {t: m.t.slice(0, 120), by: MY, at: at, k: "text"}}; up["rd." + MY] = at; up["n." + u] = FV.increment(1); return ref.collection("m").add(m).then(function(){ return ref.update(up); }); }).then(function(){ try{ pushSend([u], fullName(MY), m.t.slice(0, 160), id, "msg", null); }catch(e){} return true; }).catch(function(){ return false; }); },
   people: function(){ return PEOPLE; }, setDark: function(v){ DARK = !!v; try{ var p = $("ycP"); if(p){ p.classList.toggle("dk", DARK); var w = $("ycW"); if(w) w.removeAttribute("data-v"); if(p.classList.contains("on")) paint(true); } }catch(e){} },
   postTo: function(cid, t){ var c = CHATS[cid]; if(!c || !MY) return Promise.resolve(false); var m = {k: "text", t: String(t).slice(0, 5000), by: MY, at: now()}, ref = FS.collection("chats").doc(cid).collection("m").doc(), u = {at: m.at, last: {t: m.t.slice(0, 120), by: MY, at: m.at, k: "text"}}; u["rd." + MY] = m.at; (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
-  return ref.set(m).then(function(){ return FS.collection("chats").doc(cid).update(u); }).then(function(){ pushNote(c, m.t.slice(0, 120)); return true; }).catch(function(){ return false; }); }, start: start, close: function(){ try{ closePanel(); }catch(e){} }, openProfile: function(){ try{ openPanel(); setTimeout(function(){ go("profile", {}); }, 60); }catch(e){} }, openStaff: function(){ try{ openPanel(); setTimeout(function(){ go("staff", {}); }, 60); }catch(e){} }, fileUrl: function(id){ return fileUrl(id); }, putFile: function(f, n){ return putFile(f, n); }, refresh: function(){ var w = $("ycW"); if(w && VIEW !== "profile" && VIEW !== "tasknew") w.removeAttribute("data-v"); repaint(); }};
+  return ref.set(m).then(function(){ return FS.collection("chats").doc(cid).update(u); }).then(function(){ pushNote(c, m.t.slice(0, 120)); return true; }).catch(function(){ return false; }); }, start: start, close: function(){ try{ closePanel(); }catch(e){} }, openProfile: function(){ try{ openPanel(); setTimeout(function(){ go("profile", {}); }, 60); }catch(e){} }, openStaff: function(){ try{ openPanel(); setTimeout(function(){ go("staff", {}); }, 60); }catch(e){} }, fileUrl: function(id){ return fileUrl(id); }, putFile: function(f, n){ return putFile(f, n); }, fileFlush: function(id, ct){ return fileFlush(id, ct); }, refresh: function(){ var w = $("ycW"); if(w && VIEW !== "profile" && VIEW !== "tasknew") w.removeAttribute("data-v"); repaint(); }};
 
 // ---------- helpers ----------
 function $(id){ return document.getElementById(id); }
@@ -206,12 +207,15 @@ function mcPut(id, blob){ mcache().then(function(c){ if(c) c.put("/yqc-media/" +
 function mcGet(id){ return mcache().then(function(c){ return c ? c.match("/yqc-media/" + id) : null; }).then(function(r){ return r ? r.blob() : null; }).catch(function(){ return null; }); }
 function putFile(f, name, already){ return (already ? Promise.resolve(f) : shrink(f)).then(function(x){ return x.arrayBuffer().then(function(buf){
   if(buf.byteLength > MAXF) throw new Error("File too big (max 12 MB)");
-  var id = hex(32), s = b64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), ps = [];
-  for(var i = 0; i < n; i++) ps.push(FS.collection("cblobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
-  var ct = x.type || f.type || "application/octet-stream", blob = x instanceof Blob ? x : new Blob([buf], {type: ct});
-  return Promise.all(ps).then(function(){ return FS.collection("cblob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: now(), by: MY}); })
-    .then(function(){ BU[id] = URL.createObjectURL(blob); mcPut(id, blob); return {id: id, name: name || f.name || "file", ct: ct, size: buf.byteLength}; });
+  var id = hex(32), ct = x.type || f.type || "application/octet-stream", blob = x instanceof Blob ? x : new Blob([buf], {type: ct}), out = {id: id, name: name || f.name || "file", ct: ct, size: buf.byteLength};
+  // no internet: keep the file on this phone, it uploads by itself when the internet is back
+  if(navigator.onLine === false){ BU[id] = URL.createObjectURL(blob); return mcache().then(function(c){ return c ? c.put("/yqc-media/" + id, new Response(blob)) : null; }).then(function(){ try{ if(window.yqObFile) yqObFile(id, ct); }catch(e){} out.off = 1; return out; }); }
+  return upBlob(id, buf, ct).then(function(){ BU[id] = URL.createObjectURL(blob); mcPut(id, blob); return out; });
 }); }); }
+function upBlob(id, buf, ct){ var s = b64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), ps = [];
+  for(var i = 0; i < n; i++) ps.push(FS.collection("cblobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
+  return Promise.all(ps).then(function(){ return FS.collection("cblob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: now(), by: MY}); }); }
+function fileFlush(id, ct){ return mcGet(id).then(function(b){ if(!b) return null; return b.arrayBuffer().then(function(buf){ return upBlob(id, buf, ct || b.type || "application/octet-stream"); }); }); }
 var BU = {}, BP = {};
 function fileUrl(id){ if(BU[id]) return Promise.resolve(BU[id]); if(BP[id]) return BP[id];
   return (BP[id] = mcGet(id).then(function(b){ if(b) return (BU[id] = URL.createObjectURL(b));
