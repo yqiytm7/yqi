@@ -2223,7 +2223,13 @@ function olParse(rows){ var hi = -1; for(var i = 0; i < Math.min(rows.length, 40
     l.q += qty; l.cut += +g(r, "cut") || 0; l.pk += +g(r, "pack") || 0; l.ex += +g(r, "exp") || 0; });
   return Object.keys(M).map(function(y){ var o = M[y]; o.lines = Object.keys(o.L).map(function(k){ return o.L[k]; }); delete o.L; o.qty = o.lines.reduce(function(s, l){ return s + l.q; }, 0); o.cut = o.lines.reduce(function(s, l){ return s + l.cut; }, 0); o.pk = o.lines.reduce(function(s, l){ return s + l.pk; }, 0); o.ex = o.lines.reduce(function(s, l){ return s + l.ex; }, 0); return o; }); }
 function olCol(){ return FS.collection("ol"); }
-function olLoad(force){ if(OL && !force) return Promise.resolve(OL); if(OLP && !force) return OLP; if(!FS) return Promise.resolve(OL || {}); OLP = olCol().get().then(function(s){ var m = {}; s.docs.forEach(function(d){ if(d.id.charAt(0) === "_" && d.id !== "_info") return; if(d.id === "_info") OLINFO = d.data(); else m[d.id] = d.data(); }); OL = m; OLP = null; window.YQOL = m; window.YQOLI = OLINFO; return OL; }).catch(function(e){ OLP = null; return OL || {}; }); return OLP; }
+// the one-liner (2,000+ YTMs) is kept on this device; it downloads again only when a newer file was uploaded
+var OLCK = "yqi-ol-v1";
+function olCacheGet(at){ try{ if(!window.caches) return Promise.resolve(null); return caches.open(OLCK).then(function(c){ return c.match(location.origin + "/__yqi_ol/" + at); }).then(function(r){ return r ? r.json() : null; }).catch(function(){ return null; }); }catch(e){ return Promise.resolve(null); } }
+function olCachePut(at, m, info){ try{ if(!window.caches || !at) return; caches.open(OLCK).then(function(c){ return c.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return c.delete(k); })); }).then(function(){ return c.put(location.origin + "/__yqi_ol/" + at, new Response(JSON.stringify({m: m, info: info}), {headers: {"content-type": "application/json"}})); }); }).catch(function(){}); }catch(e){} }
+function olLoad(force){ if(OL && !force) return Promise.resolve(OL); if(OLP && !force) return OLP; if(!FS) return Promise.resolve(OL || {});
+  var full = function(){ return olCol().get().then(function(s){ var m = {}; s.docs.forEach(function(d){ if(d.id.charAt(0) === "_" && d.id !== "_info") return; if(d.id === "_info") OLINFO = d.data(); else m[d.id] = d.data(); }); OL = m; OLP = null; window.YQOL = m; window.YQOLI = OLINFO; if(OLINFO && OLINFO.at) olCachePut(OLINFO.at, m, OLINFO); return OL; }); };
+  OLP = olCol().doc("_info").get().then(function(d){ var info = d && d.exists ? d.data() : null; if(!info || !info.at || force) return full(); return olCacheGet(info.at).then(function(c){ if(c && c.m && Object.keys(c.m).length){ OL = c.m; OLINFO = info; OLP = null; window.YQOL = OL; window.YQOLI = info; return OL; } return full(); }); }).catch(function(e){ OLP = null; return OL || {}; }); return OLP; }
 function olCanUp(){ return OWNER || ISED || hasDuty("somos") || hasDuty("lead"); }
 // fill an inspection / booking from the one-liner; only empty fields unless force
 function olFill(v, ytm, force){ ytm = String(ytm || "").trim(); if(!ytm) return Promise.resolve(0); return olLoad().then(function(M){ var o = M[ytm]; if(!o) return 0; var n = 0, put = function(k, val){ if(val == null || val === "") return; if(force || v[k] == null || String(v[k]).trim() === ""){ v[k] = val; n++; } };
@@ -4010,7 +4016,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-150000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-153000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -6633,7 +6639,7 @@ ${(()=>{const x=window.yqWstYtm&&window.yqWstYtm(o.ytm);return x?`<div style="ma
 ${window.YQOLI&&window.YQOLI.at?`<div class="note" style="margin-top:6px">One-liner updated ${new Date(window.YQOLI.at).toLocaleString('en-GB')}${window.YQOLI.file?' · '+esc(window.YQOLI.file):''}</div>`:''}</details>`}
 function olKey(n){n=String(n||'');try{if(window.yqCanonC)n=window.yqCanonC(n)}catch(e){}return n.toLowerCase().replace(/[^a-z0-9]+/g,'')}
 function olSame(a,b){const x=olKey(a),y=olKey(b);return !!x&&!!y&&(x===y||(x.length>3&&y.length>3&&(x.indexOf(y)===0||y.indexOf(x)===0)))}
-function olMissHtml(){if(VIEW||window.__RO)return '';const M=window.YQOL;if(!M){olKick();return ''}const cu=String((window.__YQI_WS||{}).name||'').trim();if(!cu)return '';const have=new Set(S.ord.map(o=>String(o.ytm||'').trim().replace(/^YTM[\s#:-]*/i,'')));
+function olMissHtml(){if(VIEW||window.__RO)return '';const M=window.YQOL;if(!M){olKick();return '<div class="card"><div class="note">Loading this customer\'s orders from the one-liner…</div></div>'}const cu=String((window.__YQI_WS||{}).name||'').trim();if(!cu)return '';const have=new Set(S.ord.map(o=>String(o.ytm||'').trim().replace(/^YTM[\s#:-]*/i,'')));
 const L=Object.keys(M).map(k=>M[k]).filter(y=>y&&(olSame(y.cust,cu)||olSame(y.custRaw,cu))&&!have.has(String(y.ytm))).sort((a,b)=>String(a.insp||'9').localeCompare(String(b.insp||'9')));
 const up='';
 const info=window.YQOLI&&window.YQOLI.at?`One-liner updated ${new Date(window.YQOLI.at).toLocaleString('en-GB')}${window.YQOLI.file?' · '+esc(window.YQOLI.file):''}`:'No one-liner uploaded yet. Upload it in YQI → One-liner.';
