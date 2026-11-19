@@ -1086,7 +1086,7 @@ function frBuild(){ var F = FRONTEL, card = function(id, c, c2, ic, t, d, ur, vi
   on("yfDash", function(){ frShow(false); });
   on("yfW", function(){ if(HCUST) openCustName(HCUST); else { frShow(false); setTimeout(function(){ var b = $("yqCpk"); if(b) b.click(); }, 60); } });
   on("yfDx", function(){ dataExport(); }); on("yfTgd", function(){ if(modOff("tgt")) return modMsg("Target Desk"); tgView(); }); on("yfOl", function(){ if(modOff("ol")) return modMsg("One-liner"); olView(); }); on("yfWs", function(){ if(modOff("wst")) return modMsg("Wastage"); wstView(); }); on("yfScan", function(e){ e.stopPropagation(); scanView(); });
-  on("yfUp", function(){ if(!OWNER) return yqAsk("Ask the owner for edit access to upload.", {title: "View only", alert: 1}); var f = $("yqUpF"); if(f) f.click(); });
+  on("yfUp", function(){ if(!(OWNER || ISED)) return yqAsk("Ask the owner for edit access to upload.", {title: "View only", alert: 1}); var f = $("yqUpF"); if(f) f.click(); });
   on("yfPp", function(){ if(OWNER) peopleAdmin(); else if(window.YQCHAT) YQCHAT.openStaff(); });
   on("yfCu", function(e){ e.stopPropagation(); custPick(this); });
   on("yfAl", function(){ var s = F.querySelector(".yf-side h5"); if(s) s.scrollIntoView({behavior: "smooth", block: "start"}); });
@@ -3590,7 +3590,7 @@ function bindHome(){
   if($("yqLg")) $("yqLg").onclick = function(){ var m = $("yqSm"); if(m && m.__close) m.__close(); else if(m) m.classList.remove("on"); langPick(); };
   if($("yqDk")) $("yqDk").onclick = function(){ var n = {auto: "light", light: "dark", dark: "auto"}[yqTheme()]; lsSet("yqa_theme", n === "auto" ? "" : n); h.classList.add("dkt"); yqThemeApply(); this.lastChild.textContent = "Theme: " + yqThemeName(); setTimeout(function(){ h.classList.remove("dkt"); }, 600); };
   if($("yqSo2")) $("yqSo2").onclick = function(){ lsSet(LSK, ""); ssSet("yqi_cur", ""); lsSet("yqi_lc", ""); var go = function(){ location.reload(); }; if(AUTH) AUTH.signOut().then(go, go); else go(); };
-  if($("yqUpB")) $("yqUpB").onclick = function(){ if(!OWNER){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
+  if($("yqUpB")) $("yqUpB").onclick = function(){ if(!(OWNER || ISED)){ HMSG = '<span class="hbad">View only: ask the owner for edit access to upload.</span>'; renderHome(); return; } $("yqUpF").click(); };
   if($("yqWpE")) $("yqWpE").onclick = function(){ custWipe("ext"); }; if($("yqWpI")) $("yqWpI").onclick = function(){ custWipe("int"); };
   if($("yqUpF")) $("yqUpF").onchange = function(){ var f = this.files[0]; this.value = ""; if(f) uploadInsp(f); };
   if($("yqTpl")) $("yqTpl").onclick = function(){ var c = "Customer,Shipping plan,Date,Program,Article,Colour,Size,Lot,Qty,Result,Reason,Remarks\n" + (HCUST || "Bedsure") + ",202611PKEU009," + ymd(new Date()) + ",Washed Zip,Duvet Cover Set-Washed Cotton-Zip,Simply Taupe,200x200CM,A65094,48,Passed - 1st Go,,\n"; saveBlob("YQI-inspections-template.csv", new Blob([c], {type: "text/csv"})); };
@@ -3680,7 +3680,7 @@ function uploadInsp(f){
     var byName = {}; CLIST.forEach(function(w){ byName[w.name.toLowerCase()] = w; });
     var need = {}; out.forEach(function(r){ if(!byName[r.cust.toLowerCase()]) need[r.cust] = 1; });
     return Promise.all(Object.keys(need).map(function(n){
-      if(!OWNER) return null;
+      if(!(OWNER || ISED)) return null;
       var id = slug(n), ref = FS.collection("ws").doc(id);
       return ref.get().then(function(d){ if(d.exists && String(d.data().name || "").toLowerCase() !== n.toLowerCase()){ id = id + "-" + Date.now().toString(36).slice(-4); ref = FS.collection("ws").doc(id); } return ref.set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}); }).then(function(){ var w = {id: id, name: n, role: "owner", isNew: 1}; CLIST.push(w); byName[n.toLowerCase()] = w; });
     })).then(function(){
@@ -4016,7 +4016,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-154000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-160000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
