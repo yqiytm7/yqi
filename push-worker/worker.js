@@ -1,5 +1,6 @@
 // YQI server (Cloudflare Worker): push notifications + "link a computer" QR login.
 // Secret set in Cloudflare: SA = Firebase service-account JSON.
+// Cron trigger: every minute → inspection feed (#INTERNAL / #EXTERNAL chat messages → Inspection Summary).
 const PROJECT = "yqi-yunus", WEBKEY = "AIzaSyDuYarXV14aENaqjRA-G3nKk_HgrFYgOho";
 const FS = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/databases/(default)/documents/qrl/";
 let TOKEN = null, TOKEN_EXP = 0, KEY = null;
@@ -28,11 +29,90 @@ async function whoIs(idToken) {
   if (!r.ok) return null;
   const j = await r.json(); return (j.users || [])[0] || null;
 }
+
+// ---- inspection feed: #INTERNAL / #EXTERNAL messages in the inspection groups → Inspection Summary (every minute) ----
+const DOCS = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/databases/(default)/documents/";
+const FEEDG = { grp_insp_int: "int", grp_insp_ext: "ext" };
+let OLX = {};
+const pad = n => (n < 10 ? "0" : "") + n;
+const now = () => Date.now();
+function fromV(v) { if (!v) return null; if ("stringValue" in v) return v.stringValue; if ("integerValue" in v) return Number(v.integerValue); if ("doubleValue" in v) return v.doubleValue; if ("booleanValue" in v) return v.booleanValue; if ("nullValue" in v) return null;
+  if ("mapValue" in v) { const o = {}, f = v.mapValue.fields || {}; for (const k in f) o[k] = fromV(f[k]); return o; } if ("arrayValue" in v) return (v.arrayValue.values || []).map(fromV); if ("timestampValue" in v) return v.timestampValue; return null; }
+function toV(x) { if (x === null || x === undefined) return { nullValue: null }; if (typeof x === "string") return { stringValue: x }; if (typeof x === "boolean") return { booleanValue: x };
+  if (typeof x === "number") return Number.isInteger(x) ? { integerValue: String(x) } : { doubleValue: x }; if (Array.isArray(x)) return { arrayValue: { values: x.map(toV) } };
+  const f = {}; for (const k in x) if (x[k] !== undefined) f[k] = toV(x[k]); return { mapValue: { fields: f } }; }
+const fields = o => toV(o).mapValue.fields;
+function fdHash(t){ var h = 0; t = String(t || ""); for(var i = 0; i < t.length; i++){ h = (h * 31 + t.charCodeAt(i)) | 0; } return h; }
+function fdKind(t){ var m = /^\s*#\s*(INTERNAL|EXTERNAL)\b/i.exec(String(t || "")); return m ? (m[1].toUpperCase() === "INTERNAL" ? "int" : "ext") : ""; }
+function fdNum(v){ var n = parseFloat(String(v || "").replace(/,/g, "")); return isFinite(n) ? n : 0; }
+function fdDate(v){ v = String(v || "").trim(); if(/^today$/i.test(v)){ var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  var m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(v); if(m){ var y = +m[3]; if(y < 100) y += 2000; if(+m[2] > 12 || +m[1] > 31) return ""; return y + "-" + pad(+m[2]) + "-" + pad(+m[1]); }
+  m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v); return m ? m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]) : ""; }
+function fdRes(v, kind){ v = String(v || "").trim().toLowerCase().replace(/[^a-z]/g, ""); var M = {pass: "Pass", passed: "Pass", ok: "Pass", fail: "Fail", failed: "Fail", abort: "Abort", aborted: "Abort", inprocess: "In process", inprogress: "In process", pending: "Pending"}; var r = M[v] || ""; if(r === "In process" && kind === "ext") r = "Pending"; if(r === "Pending" && kind === "int") r = "In process"; return r; }
+function fdDefects(v){ var L = []; String(v || "").split(/[,;\n]+/).forEach(function(p){ p = p.trim(); if(!p || /^(nil|none|no|-|0)$/i.test(p)) return; var m = /^(.*?)[\s:x×-]*(\d+)\s*(pcs)?$/i.exec(p), n = m && m[1].trim() ? m[1].trim() : p, q = m && m[1].trim() ? +m[2] : 1; var c = /sew|stitch|seam|pleat|skip|broken/i.test(n) ? "Sewing" : /pack|label|carton|poly|sticker/i.test(n) ? "Packaging" : /fabric|hole|slub|shade|weav/i.test(n) ? "Fabric" : /measure|size/i.test(n) ? "Measurement" : /stain|spot|dirt|oil/i.test(n) ? "Stain" : "Other"; var ex = L.filter(function(x){ return x.n.toLowerCase() === n.toLowerCase(); })[0]; if(ex) ex.q += q; else L.push({n: n, q: q, c: c}); }); return L; }
+var FDORD = {G: "GROUND", GROUND: "GROUND", "1": "FIRST", "1ST": "FIRST", FIRST: "FIRST", "2": "SECOND", "2ND": "SECOND", SECOND: "SECOND", "3": "THIRD", "3RD": "THIRD", THIRD: "THIRD", "4": "FOURTH", "4TH": "FOURTH", FOURTH: "FOURTH", "5": "FIFTH", "5TH": "FIFTH", FIFTH: "FIFTH"};
+function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UNIT/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); var known = [];
+  var cmp = function(x){ return String(x).toUpperCase().replace(/[^A-Z0-9]/g, ""); }, k0 = known.filter(function(x){ return cmp(x) === cmp(v) || cmp(x) === cmp(v + " FLOOR"); })[0]; if(k0) return k0;
+  var m = /^(?:YTM\s*)?(\d+)\s*([A-Z])?\s*(GROUND|G|FIRST|SECOND|THIRD|FOURTH|FIFTH|\d(?:ST|ND|RD|TH)?)$/.exec(u); if(!m) return "";
+  var nm = "YTM-" + m[1] + (m[2] ? " " + m[2] : "") + " " + FDORD[m[3]] + " FLOOR"; var k1 = known.filter(function(x){ return cmp(x) === cmp(nm); })[0]; return k1 || nm; }
+function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).slice(1).forEach(function(l){ var m = /^\s*([A-Za-z .\/]+?)\s*[:=]\s*(.*)$/.exec(l); if(m) F[m[1].toLowerCase().replace(/[^a-z]/g, "")] = m[2].trim(); });
+  var g = function(){ for(var i = 0; i < arguments.length; i++){ var v = F[arguments[i]]; if(v != null && v !== "") return v; } return ""; }, err = [];
+  var date = fdDate(g("date")); if(!date) err.push("Date (write DD-MM-YYYY)");
+  var ytm = g("ytm", "ytmno").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; ol = OLX[ytm] || null;
+  var cust = g("customer", "buyer") || (ol && ol.cust) || "";  if(!cust) err.push("Customer");
+  var res = fdRes(g("result", "status"), kind), dl = fdDefects(g("defects", "defect", "defectlist"));
+  var r = {date: date, customer: cust, result: res, count: 1, src: "chat", at: new Date().toISOString(), dlist: dl, defects: dl.map(function(d){ return d.n + " " + d.q; }).join(", ")};
+  if(ytm) r.ytm = ytm; var insp = g("inspector", "inspectedby", "qc"); if(insp) r.inspector = insp;
+  if(kind === "int"){
+    var fl = fdFloor(g("unit", "floor", "line")); if(!fl) err.push("Unit (write like YTM-3 FIRST FLOOR)"); r.floor = fl;
+    r.product = g("article", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.qty = fdNum(g("offerqty", "offerquantity", "qty", "quantity")); r.sample = fdNum(g("sample", "samplesize")); r.allowed = fdNum(g("allowed", "alloweddefects")); r.found = fdNum(g("found", "founddefects")); r.major = r.found; r.minor = 0; r.critical = 0; r.inspection = g("inspection", "type") || "PARTIAL FRI";
+    var pk = fdRes(g("packaging", "packing"), kind), wk = fdRes(g("workmanship"), kind); if(pk) r.packaging = pk; if(wk) r.workmanship = wk;
+    if(!res && (pk || wk)) r.result = pk === "Fail" || wk === "Fail" ? "Fail" : "Pass";
+    if(r.result === "Pass" && (pk === "Fail" || wk === "Fail")) err.push("Result says Pass but Packaging / Workmanship is Fail");
+  } else {
+    r.po = g("po", "pono"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty")); r.sample = fdNum(g("sample", "samplesize"));
+    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor")), cr = /^\s*([\d.]+)/.exec(g("critical"));
+    r.major = mj ? +mj[1] : 0; r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
+    if(!r.sample) err.push("Sample"); r.oql = r.sample ? r.major / r.sample : 0;
+  }
+  if(!r.result) err.push("Result (Pass / Fail / Abort / " + (kind === "int" ? "In process" : "Pending") + ")");
+  return {kind: kind, rec: r, err: err}; }
+
+async function fsGet(at, path) { const r = await fetch(DOCS + path, { headers: { authorization: "Bearer " + at } }); return r.ok ? r.json() : null; }
+async function fsPatch(at, path, obj, mask) { const q = mask ? "?" + mask.map(m => "updateMask.fieldPaths=" + encodeURIComponent(m)).join("&") : ""; return fetch(DOCS + path + q, { method: "PATCH", headers: { authorization: "Bearer " + at, "content-type": "application/json" }, body: JSON.stringify({ fields: fields(obj) }) }); }
+async function fsDel(at, path) { return fetch(DOCS + path, { method: "DELETE", headers: { authorization: "Bearer " + at } }); }
+async function userName(at, uid) { try { const d = await fsGet(at, "people/" + uid); const f = d && d.fields ? fromV({ mapValue: { fields: d.fields } }) : {}; return f.name || f.displayName || ""; } catch (e) { return ""; } }
+async function feedRun(env) {
+  const at = await accessToken(env); let done = 0;
+  for (const gid of Object.keys(FEEDG)) {
+    const r = await fetch(DOCS + "chats/" + gid + ":runQuery", { method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "m" }], orderBy: [{ field: { fieldPath: "at" }, direction: "DESCENDING" }], limit: 40 } }) });
+    if (!r.ok) continue;
+    const rows = (await r.json()).filter(x => x.document);
+    for (const x of rows) {
+      const name = x.document.name, mid = name.split("/").pop(), m = fromV({ mapValue: { fields: x.document.fields || {} } }), f = m.fed || {};
+      const kind = fdKind(m.t), id = "chat_" + gid.slice(-3) + "_" + mid, mpath = "chats/" + gid + "/m/" + mid;
+      if (m.del) { if (f.ok && !f.gone) { await fsDel(at, "ws/_all/" + ((f.k || FEEDG[gid]) === "int" ? "is_int" : "is_ext") + "/" + (f.id || id)); await fsPatch(at, mpath, { fed: Object.assign({}, f, { gone: 1 }) }, ["fed"]); done++; } continue; }
+      if (!kind) continue; const h = fdHash(m.t); if (f.h === h) continue;
+      const ytm = ((/\bYTM\s*(?:no)?\s*[:=]\s*([A-Za-z0-9-]+)/i.exec(m.t) || [])[1] || "").toUpperCase();
+      if (ytm && !(ytm in OLX)) { const d = await fsGet(at, "ol/" + encodeURIComponent(ytm)); OLX[ytm] = d && d.fields ? fromV({ mapValue: { fields: d.fields } }) : null; }
+      const P = fdParse(m.t); if (P.kind !== FEEDG[gid]) P.err.unshift("Send #" + (FEEDG[gid] === "int" ? "INTERNAL" : "EXTERNAL") + " in this group");
+      if (P.err.length) { await fsPatch(at, mpath, { fed: { ok: 0, h, at: now(), err: P.err.slice(0, 4) } }, ["fed"]); if (f.ok) await fsDel(at, "ws/_all/" + (f.k === "int" ? "is_int" : "is_ext") + "/" + f.id); done++; continue; }
+      const rec = P.rec; rec.chat = { gid, mid, by: m.by || "", name: await userName(at, m.by || "") }; rec.by = "server";
+      const col = P.kind === "int" ? "is_int" : "is_ext", w = await fsPatch(at, "ws/_all/" + col + "/" + id, rec);
+      if (w.ok) { await fsPatch(at, mpath, { fed: { ok: 1, h, at: now(), id, k: P.kind, s: rec.customer + " · " + rec.result + (P.kind === "ext" && rec.sample ? " · OQL " + (rec.oql * 100).toFixed(1) + "%" : "") + (rec.floor ? " · " + rec.floor : "") } }, ["fed"]); done++; }
+    }
+  }
+  return done;
+}
+
 const okSid = s => typeof s === "string" && /^[A-Za-z0-9]{24,64}$/.test(s);
 
 export default {
+  async scheduled(ev, env, ctx) { ctx.waitUntil(feedRun(env).catch(e => console.log("feed", e && e.message))); },
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+    if (req.method === "GET" && new URL(req.url).searchParams.has("feed")) { try { return json({ ok: true, done: await feedRun(env) }); } catch (e) { return json({ ok: false, error: e.message }); } }
     if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok }); }
     let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
     const at = await accessToken(env);
