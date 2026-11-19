@@ -4016,7 +4016,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-153000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-154000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -6638,7 +6638,7 @@ return `<details style="margin:0 0 10px;border:1px solid rgba(91,163,42,.45);bor
 ${(()=>{const x=window.yqWstYtm&&window.yqWstYtm(o.ytm);return x?`<div style="margin:8px 0;font-size:12.5px"><b>Wastage</b> · cut ${Math.round(x.cut).toLocaleString()} m · wastage ${Math.round(x.w).toLocaleString()} m · <b style="color:${x.pct>3.5?'#e5484d':'#5BA32A'}">${x.pct.toFixed(2)}%</b>${x.top.length?'<div class="note">'+x.top.map(t=>esc(t[0])+' '+Math.round(t[1])+' m').join(' · ')+'</div>':''}</div>`:''})()}${(y.lines||[]).length?`<div class="otw" style="margin-top:8px"><table class="otb"><thead><tr><th>Design</th><th>Size</th><th>Set</th><th>Qty</th><th>Cut</th><th>Packed</th><th>Export</th></tr></thead><tbody>${y.lines.map(l=>`<tr><td>${esc(l.d)}</td><td>${esc(l.s)}</td><td>${esc(l.set)}</td><td>${l.q}</td><td>${l.cut}</td><td>${l.pk}</td><td>${l.ex}</td></tr>`).join('')}</tbody></table></div>`:''}
 ${window.YQOLI&&window.YQOLI.at?`<div class="note" style="margin-top:6px">One-liner updated ${new Date(window.YQOLI.at).toLocaleString('en-GB')}${window.YQOLI.file?' · '+esc(window.YQOLI.file):''}</div>`:''}</details>`}
 function olKey(n){n=String(n||'');try{if(window.yqCanonC)n=window.yqCanonC(n)}catch(e){}return n.toLowerCase().replace(/[^a-z0-9]+/g,'')}
-function olSame(a,b){const x=olKey(a),y=olKey(b);return !!x&&!!y&&(x===y||(x.length>3&&y.length>3&&(x.indexOf(y)===0||y.indexOf(x)===0)))}
+function olSame(a,b){const x=olKey(a),y=olKey(b);return !!x&&!!y&&(x===y||(x.length>=3&&y.length>=3&&(x.indexOf(y)===0||y.indexOf(x)===0)))}
 function olMissHtml(){if(VIEW||window.__RO)return '';const M=window.YQOL;if(!M){olKick();return '<div class="card"><div class="note">Loading this customer\'s orders from the one-liner…</div></div>'}const cu=String((window.__YQI_WS||{}).name||'').trim();if(!cu)return '';const have=new Set(S.ord.map(o=>String(o.ytm||'').trim().replace(/^YTM[\s#:-]*/i,'')));
 const L=Object.keys(M).map(k=>M[k]).filter(y=>y&&(olSame(y.cust,cu)||olSame(y.custRaw,cu))&&!have.has(String(y.ytm))).sort((a,b)=>String(a.insp||'9').localeCompare(String(b.insp||'9')));
 const up='';
