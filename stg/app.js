@@ -304,6 +304,7 @@ function bsUrl(){ var s = document.querySelector('script[src*="app.js"]'); retur
 function bsDb(){ var w0 = WS, r0 = ROLE; WS = "bedsure"; var bw = (CLIST || []).filter(function(x){ return x.id === "bedsure"; })[0]; ROLE = OWNER ? "owner" : (bw && bw.role) || ROLE; var db = makeDb(); WS = w0; ROLE = r0; return db; }
 function bsBuyer(){ var E = typeof isRows === "function" ? isRows("is_ext") : null; if(!E) return null; var L = E.filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return /beds/i.test(String(x.customer || "")); } }); var p = 0, mj = 0, sm = 0; L.forEach(function(x){ if(rkind(x.result) === "pass") p++; mj += +x.major || 0; sm += +x.sample || 0; }); return {n: L.length, p: p, oql: sm ? Math.round(1000 * mj / sm) / 10 : null}; }
 function bsBlob(id){ var w0 = WS; WS = "bedsure"; try{ return blobUrl(id); }catch(e){ return Promise.reject(e); } finally{ WS = w0; } }
+function bsPrefetch(){ if(bsPrefetch.d) return; bsPrefetch.d = 1; setTimeout(function(){ try{ if(!FS || !(CLIST || []).some(function(w){ return w.id === "bedsure"; })){ bsPrefetch.d = 0; return; } if(!window.YQBSD && !BSDP) BSDP = loadJs(bsUrl()); (BSDP || Promise.resolve()).then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){ BSDP = null; }); }catch(e){} }, 3500); }
 function bsOpen(o){ o = o || {}; var bw = (CLIST || []).filter(function(x){ return x.id === "bedsure"; })[0], role = o.role || (OWNER ? "owner" : bw && bw.role) || "viewer";
   if(!window.YQBSD){ bsGate(); if(!BSDP) BSDP = loadJs(bsUrl()); BSDP.then(function(){ hideGate(); bsOpen(o); }).catch(function(){ BSDP = null; hideGate(); try{ yqToast && yqToast("Could not open Bedsure. Check internet."); }catch(e){} }); return; }
   try{ if(HOMEON){ var t = $("yqTip"); if(t) t.style.display = "none"; } }catch(e){}
@@ -4166,7 +4167,7 @@ function showHome(on){
     try{ new MutationObserver(function(rs){ var m = HPX || HOV.x; if(!m || !window.YQE || !Object.keys(m).length) return; for(var i = 0; i < rs.length; i++){ var a = rs[i].addedNodes; for(var j = 0; j < a.length; j++) if(a[j].nodeType === 1){ try{ YQE.apply(h, m); }catch(e){} return; } } }).observe(h, {childList: true, subtree: true}); }catch(e){} }
   HOMEON = !!on; h.style.display = on ? "block" : "none"; try{ document.body.classList.toggle("yqfr", !!on && FRONT); }catch(e){} try{ document.body.classList.toggle("yqh", !!on); }catch(e){}
   var c = $("yqCust"); if(c && on) c.style.display = "none";
-  if(on){ renderHome(); if(!HDATA) loadHomeTry(0); }
+  if(on){ renderHome(); if(!HDATA) loadHomeTry(0); try{ bsPrefetch(); }catch(e){} }
 }
 function goDirect(){
   var fresh = ssGet("yqi_direct") === "bed"; ssSet("yqi_direct", "");
@@ -4179,7 +4180,7 @@ function goDirect(){
     if(++n < 80) setTimeout(f, 150); })();
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
-function startHome(){ setTimeout(function(){ try{ if(!window.YQBSD && !BSDP && (CLIST || []).some(function(w){ return w.id === "bedsure"; })) BSDP = loadJs(bsUrl()); if(BSDP) BSDP.then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){}); }catch(e){} }, 5000); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
+function startHome(){ bsPrefetch(); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits();
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening && WS === "_all") showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
@@ -4480,7 +4481,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-015927", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-020044", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
