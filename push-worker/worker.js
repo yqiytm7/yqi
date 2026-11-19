@@ -113,7 +113,7 @@ export default {
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     if (req.method === "GET" && new URL(req.url).searchParams.has("feed")) { try { return json({ ok: true, done: await feedRun(env) }); } catch (e) { return json({ ok: false, error: e.message }); } }
-    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok }); }
+    if (req.method !== "POST") { let ok = false; try { ok = !!(env.SA && await accessToken(env)); } catch (e) {} return json({ ok: true, service: "YQI push", ready: ok, v: 3 }); }
     let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
     const at = await accessToken(env);
     // ---- computer asks: has a phone approved this QR yet? ----
