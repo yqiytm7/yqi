@@ -1062,7 +1062,6 @@ function frUpdate(){ var F = FRONTEL; if(!F) return; var g = function(id){ retur
   if(qMine) E("ok", "rgba(182,243,106,.12)", "var(--lime)", qMine + " inspection" + (qMine > 1 ? "s" : "") + " assigned to you", "Tap to start", function(){ go.qi("mine"); });
   if(qAsg && isLead()) E("asg", "rgba(45,143,224,.16)", "var(--eb)", qAsg + " inspection" + (qAsg > 1 ? "s" : "") + " to assign", "Booked, waiting for an inspector", function(){ go.qi("asg"); });
   if(cOver) E("clock", "rgba(255,100,80,.14)", "var(--red)", cOver + " CAPA overdue", "Past the due date", function(){ go.ca("over"); });
-  if(OWNER && ERRS){ var en = ERRS.filter(function(e){ return e.day === errDay(0); }).reduce(function(t, e){ return t + (e.n || 1); }, 0); if(en) E("warn", "rgba(217,154,11,.16)", "var(--ea)", en + " app error" + (en > 1 ? "s" : "") + " today", "Tap to see – send them to Claude", function(){ errView(); }); }
   if(rs.late) E("clock", "rgba(217,154,11,.16)", "var(--ea)", rs.late + " repacking late", "Report not sent in time", function(){ go.rp(); });
   if(M && M.hiQ.length) E("warn", "rgba(128,128,128,.12)", "var(--en)", "OQL over limit", M.hiQ.slice(0, 3).map(function(o){ return o.c + " " + o.v + "%"; }).join(" · "), function(){ frShow(false); });
   if(!ev.length) E("ok", "rgba(182,243,106,.12)", "var(--lime)", "All clear", "Nothing needs you right now", function(){});
@@ -3704,8 +3703,8 @@ function qiPreview(o, v){ sheetStep(o, function(){ qiForm(o, v); }); var B = o.q
   var U = {}; qiUrls(v).then(function(u){ U = u; $("yqRrP").innerHTML = qiHtml(v, U); });
   $("yqRrE").onclick = function(){ qiForm(o, v); }; $("yqRrPdf").onclick = function(){ qiPdf(v, U); };
   $("yqRrS").onclick = function(){ var bt = this; bt.disabled = true; bt.textContent = "Saving…"; var d = JSON.parse(JSON.stringify(v)); delete d._id; d.upd = Date.now(); d.st = "done"; d.doneAt = Date.now(); d.doneBy = EMAIL;
-    var OFF = false, p = v._id ? yqSave(QICOL().doc(v._id), d, true).then(function(r){ OFF = !!(r && r.off); return v._id; }) : (function(){ var ref = QICOL().doc(); d.email = EMAIL; d.at = Date.now(); d.no = qiNo(ref.id, d.date); return yqSave(ref, d).then(function(r){ OFF = !!(r && r.off); return ref.id; }); })();
-    p.then(function(id){ if(OFF){ var nx0 = Object.assign({}, d, {_id: id}); QIL = (QIL || []).filter(function(y){ return y._id !== id; }); QIL.unshift(nx0); yqAsk("No internet right now. The inspection is saved on this phone and uploads by itself when the internet is back.", {title: "Saved on this phone ✓", alert: 1}); qiShow(o, nx0, 1); return; } if(v.res === "Fail" && window.YQCHAT && YQCHAT.alert) try{ YQCHAT.alert("qi_" + id, "❌ " + qiName(v.type) + " FAIL · " + (v.cust || "") + (v.ytm ? " · YTM " + v.ytm : "") + (v.calc && v.calc.dhu != null ? " · DHU " + v.calc.dhu + "%" : "")); }catch(e){}
+    var p = v._id ? QICOL().doc(v._id).set(d, {merge: true}).then(function(){ return v._id; }) : (function(){ var ref = QICOL().doc(); d.email = EMAIL; d.at = Date.now(); d.no = qiNo(ref.id, d.date); return ref.set(d).then(function(){ return ref.id; }); })();
+    p.then(function(id){ if(v.res === "Fail" && window.YQCHAT && YQCHAT.alert) try{ YQCHAT.alert("qi_" + id, "❌ " + qiName(v.type) + " FAIL · " + (v.cust || "") + (v.ytm ? " · YTM " + v.ytm : "") + (v.calc && v.calc.dhu != null ? " · DHU " + v.calc.dhu + "%" : "")); }catch(e){}
       return qiLoad().then(function(){ var nx = (QIL || []).filter(function(y){ return y._id === id; })[0]; if(nx) qiShow(o, nx, 1); else qiList(o); }); })
     .catch(function(e){ bt.disabled = false; bt.textContent = "Save ✓"; yqAsk(errTxt(e), {title: "Not saved", alert: 1}); }); }; o.querySelector(".ycpBody").scrollTop = 0; }
 function qiShow(o, x, just){ sheetStep(o, function(){ qiList(o); }); var B = o.querySelector("#yqRpB"), canEd = x.email === EMAIL || ISED;
@@ -3892,41 +3891,6 @@ async function custWipe(kind){ var X = HCUST; if(!X) return; if(!(OWNER || ISED)
       else if(p.days){ for(var d of p.days){ var raw = JSON.parse(JSON.stringify(d.raw)); d.ks.forEach(function(k){ delete raw.cust[k]; }); await d.ref.set(raw); done++; } tick(); } }
     window.__yqBusy = 0; HMSG = '<span class="hok">✓ Removed ' + all.toLocaleString() + ' ' + nm + ' records of ' + esc(X) + '. Backup saved. Upload the correct file now.</span>'; HDATA = null; loadHomeTry(0); renderHome(); try{ if(window.yqDataPing) yqDataPing(kind === "ext" ? "is_ext" : "is_int", X + " " + nm + " data removed", ""); }catch(e){} }
   catch(e){ window.__yqBusy = 0; HMSG = ""; renderHome(); yqAsk(errTxt(e) + "\n" + done + " of " + all + " were removed. The backup file has everything.", {title: "Stopped", alert: 1}); } }
-
-// ---------- Offline: what you save without internet stays on this phone and uploads by itself ----------
-var OBK = "yqi_outbox", OBRUN = 0;
-function obGet(){ try{ return JSON.parse(localStorage.getItem(OBK) || "[]") || []; }catch(e){ return []; } }
-function obSet(L){ try{ localStorage.setItem(OBK, JSON.stringify(L)); }catch(e){} obPaint(); }
-window.yqObFile = function(id, ct){ var L = obGet(); L.push({t: "f", id: id, ct: ct || "", at: Date.now()}); obSet(L); };
-function obDoc(path, data, merge){ var L = obGet().filter(function(x){ return !(x.t === "d" && x.p === path && !merge && !x.m); }); L.push({t: "d", p: path, d: data, m: merge ? 1 : 0, at: Date.now()}); obSet(L); }
-// save a document now, or keep it on this phone when there is no internet (plain data only)
-window.yqSave = function(ref, data, merge){ var path = ref.path, w = null;
-  try{ w = merge ? ref.set(data, {merge: true}) : ref.set(data); w.catch(function(){}); }catch(e){ w = null; }
-  if(navigator.onLine === false || !w){ obDoc(path, data, merge); return Promise.resolve({off: 1}); }
-  return Promise.race([w.then(function(){ return {}; }), new Promise(function(r){ setTimeout(function(){ r(null); }, 10000); })]).then(function(r){ if(r) return r; obDoc(path, data, merge); return {off: 1}; }); };
-function obFlush(){ if(OBRUN || navigator.onLine === false || !FS || !AUTH || !AUTH.currentUser) return; var L = obGet(); if(!L.length) return obPaint(); OBRUN = 1; obPaint(); var it = L[0];
-  var p = it.t === "f" ? (window.YQCHAT && YQCHAT.fileFlush ? YQCHAT.fileFlush(it.id, it.ct) : Promise.reject(new Error("chat not ready"))) : (it.m ? FS.doc(it.p).set(it.d, {merge: true}) : FS.doc(it.p).set(it.d));
-  Promise.race([p, new Promise(function(r, j){ setTimeout(function(){ j(new Error("slow")); }, 30000); })]).then(function(){ obSet(obGet().filter(function(x){ return !(x.t === it.t && x.at === it.at && (x.id || x.p) === (it.id || it.p)); })); OBRUN = 0; setTimeout(obFlush, 50); })
-    .catch(function(e){ OBRUN = 0; var L2 = obGet(); if(L2[0] && L2[0].at === it.at){ L2[0].tries = (L2[0].tries || 0) + 1; if(L2[0].tries > 30 || (e && e.code === "permission-denied")){ L2.shift(); } obSet(L2); } obPaint(); }); }
-function obPaint(){ var n = obGet().length, off = navigator.onLine === false, b = document.getElementById("yqOb");
-  if(!n && !off){ if(b) b.remove(); return; }
-  if(!b){ b = document.createElement("div"); b.id = "yqOb"; b.style.cssText = "position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:2147483640;display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:14px;font:700 12.5px Inter,Manrope,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100vw - 24px)"; document.body.appendChild(b); b.onclick = function(){ obFlush(); }; }
-  b.style.background = off ? "#3a2a08" : "#10260F"; b.style.color = off ? "#ffd27a" : "#A6DD5E";
-  b.textContent = off ? "📴 No internet" + (n ? " · " + n + " saved on this phone" : " · you can keep working, it is saved on this phone") : "⏫ Uploading " + n + " saved item" + (n > 1 ? "s" : "") + "…"; }
-addEventListener("online", function(){ obPaint(); setTimeout(obFlush, 1500); }); addEventListener("offline", obPaint);
-setInterval(obFlush, 30000); setTimeout(function(){ obPaint(); obFlush(); }, 6000);
-
-// ---------- App errors: sent to the server, the owner sees them on Home ----------
-var ERRSENT = {}, ERRN = 0, ERRS = null;
-window.yqErrSend = function(){ if(!AUTH || !AUTH.currentUser || navigator.onLine === false) return; var q = window.__yqErrQ || [];
-  while(q.length){ var e = q.shift(), k = e.m + "|" + e.f + "|" + e.l; if(ERRSENT[k] || ERRN >= 8) continue; ERRSENT[k] = 1; ERRN++;
-    (function(e){ AUTH.currentUser.getIdToken().then(function(t){ return fetch(PUSHSRV, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({op: "err", idToken: t, e: e, v: window.YQI_VER || "", ua: String(navigator.userAgent || "").slice(0, 160), p: (location.pathname + location.hash).slice(0, 80)})}); }).catch(function(){}); })(e); } };
-setInterval(function(){ try{ yqErrSend(); }catch(e){} }, 15000);
-setTimeout(function errTick(){ if(OWNER && FS) errLoad().then(function(){ try{ if(typeof frUpdate === "function") frUpdate(); }catch(e){} }); setTimeout(errTick, 5 * 60000); }, 9000);
-function errDay(d){ var x = new Date(Date.now() - (d || 0) * 864e5 + 5 * 3600e3); return x.toISOString().slice(0, 10); }
-function errLoad(){ if(!OWNER || !FS) return Promise.resolve(null); return FS.collection("ws").doc("_all").collection("errs").where("day", ">=", errDay(6)).get().then(function(q){ ERRS = q.docs.map(function(d){ var x = d.data(); x._id = d.id; return x; }).sort(function(a, b){ return (b.last || 0) - (a.last || 0); }); return ERRS; }).catch(function(){ return null; }); }
-function errView(){ var o = yqSheet("App errors · last 7 days", '<div id="yqErB">Loading…</div>', 1); errLoad().then(function(L){ var b = o.querySelector("#yqErB"); if(!L || !L.length){ b.innerHTML = '<div class="ycpSub">No errors. 👍</div>'; return; }
-  b.innerHTML = '<div class="ycpSub" style="margin-bottom:10px">Send me (Claude) a screenshot of this list and I will fix them.</div>' + L.map(function(e){ return '<div class="q2" style="padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px;word-break:break-word">' + esc(e.m || "") + '</b><span style="flex:none;font-weight:800;color:#b3261e">×' + (e.n || 1) + '</span></div><div class="small" style="margin-top:4px">' + esc([e.day, e.f ? e.f + ":" + e.l : "", e.p, e.email, "v " + (e.v || "")].filter(Boolean).join(" · ")) + '</div></div>'; }).join(""); }); }
 // Inspection Summary opens on demand: the app behind it only starts the first time it is needed
 function openIS(route){
   if(!lockOk()) return lockMsg("Inspection Summary");
@@ -4326,7 +4290,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261119-223914", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261119-221401", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
