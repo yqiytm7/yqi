@@ -3007,7 +3007,7 @@ var CDCAT = [["Sewing", /stitch|seam|sew|thread|pleat|puck|hem|tack|zip|button|l
 var CDCC = {Sewing: "#2d8fe0", Fabric: "#d99a0b", Packaging: "#7a5af8", Measurement: "#e0574b", Other: "#8a948a"};
 function cdCat(d){ if(d.c && CDCC[d.c]) return d.c; var n = String(d.n || ""); for(var i = 0; i < CDCAT.length; i++) if(CDCAT[i][1].test(n)) return CDCAT[i][0]; return "Other"; }
 var CDCSS = [
-"#yqCD .ck{width:34px;text-align:center;cursor:pointer}#yqCD .ck input{width:16px;height:16px;cursor:pointer}#yqCD .dl1{border:0;background:none;cursor:pointer;font-size:15px;opacity:.65}#yqCD .dl1:hover{opacity:1}",
+"#yqCD .kt{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}#yqCD .kt button{border:1.5px solid var(--c);background:transparent;color:var(--c);padding:9px 16px;border-radius:22px;font:700 13px inherit;font-family:inherit;cursor:pointer}#yqCD .kt button.on{background:var(--c);color:#fff}#yqCD.dk .kt button{color:#fff}#yqCD .ck{width:34px;text-align:center;cursor:pointer}#yqCD .ck input{width:16px;height:16px;cursor:pointer}#yqCD .dl1{border:0;background:none;cursor:pointer;font-size:15px;opacity:.65}#yqCD .dl1:hover{opacity:1}",
  "#yqCD{position:fixed;inset:0;z-index:2147481500;overflow:auto;background:#F4F6FA;color:#16202E;font:14px Manrope,Inter,system-ui,sans-serif;-webkit-overflow-scrolling:touch}#yqCD *{box-sizing:border-box}#yqCD .cd,#yqCD .k,#yqCD .hk{contain:layout paint}",
  "#yqCD.dk{background:#0D1219;color:#E8EDF5}#yqCD .cw{max-width:1360px;margin:0 auto;padding:0 18px 60px}",
  "#yqCD .ch{background:linear-gradient(120deg,var(--c),var(--c2));color:#fff;padding:16px 0 0;position:relative;overflow:hidden}#yqCD .ch:after{content:'';position:absolute;right:-80px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.14),transparent 70%);pointer-events:none}",
@@ -3218,7 +3218,7 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
       '<div class="cd tn"><h3><span><i class="hi">▦</i>Units and floors</span><small>ring = OQL %</small></h3><div class="ucs">' + U.map(ucard).join("") + '</div></div>' +
       '<div class="g2"><div class="cd tn"><h3><span><i class="hi">☰</i>Latest inspections</span><small><a href="#" data-t2="in">See all ›</a></small></h3><div class="tl">' + tl + '</div></div><div class="cd tn"><h3><span><i class="hi">▤</i>By article</span></h3>' + gtbl(grp(L, function(r){ return String(r.article || "").trim() || "Not given"; }).sort(function(a, b){ return b.n - a.n; }).slice(0, 8), "Article") + '</div></div>'; }
   function ins(L0){ var KD = F.kind === "int" ? "int" : "ext", L = KD === "int" ? cdInt() : L0, CN = KD === "int" ? "is_int" : "is_ext", ED = canDel();
-    var kt = '<div class="cp" style="margin:0 0 12px"><button data-kind="ext" class="' + (KD === "ext" ? "on" : "") + '">External inspections · ' + L0.length + '</button><button data-kind="int" class="' + (KD === "int" ? "on" : "") + '">Internal inspections · ' + cdInt().length + '</button></div>';
+    var kt = '<div class="kt"><button data-kind="ext" class="' + (KD === "ext" ? "on" : "") + '">External inspections · ' + L0.length + '</button><button data-kind="int" class="' + (KD === "int" ? "on" : "") + '">Internal inspections · ' + cdInt().length + '</button></div>';
     var opt = function(k, list, lab){ return '<select data-f="' + k + '"><option value="">' + lab + '</option>' + list.map(function(v){ return '<option' + (F[k] === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join("") + '</select>'; };
     var uniq = function(fn){ var m = {}; L.forEach(function(r){ var v = fn(r); if(v) m[v] = 1; }); return Object.keys(m).sort(); };
     var q = F.q.trim().toLowerCase(), R = L.filter(function(r){ return (!F.mon || String(r.date).slice(0, 7) === F.mon) && (!F.unit || (KD === "int" ? r.floor : r.unit) === F.unit) && (!F.art || (KD === "int" ? r.product || r.productCat : r.article) === F.art) && (!F.res || (F.res === "Pass" ? isP(r) : F.res === "Fail" ? isF(r) : !isP(r) && !isF(r))) && (!q || [r.ytm, r.po, r.article, r.unit, r.bldg, r.defects, r.inspector, r.floor, r.product, r.productCat].join(" ").toLowerCase().indexOf(q) >= 0); });
@@ -4507,7 +4507,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-120512", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-121334", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
