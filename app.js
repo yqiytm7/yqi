@@ -724,7 +724,7 @@ function loadHomeTry(n){
   setTimeout(function(){ if(!done && !HDATA && my === HLOAD && n < 4) loadHomeTry(n + 1); }, 8000 + n * 4000);
 }
 // Inspection Summary data, already loaded by the app (no extra reading)
-var YQ_FLOORS = ["YTM-1-SAMPLE ROOM", "YTM-1 UNIT 2 A", "YTM-1 UNIT 2 B", "YTM 2", "YTM2-2B- SECOND FLOOR", "YTM-2B FIRST FLOOR", "YTM-2 FIRST FLOOR-A", "YTM-2 GROUND MULTI NEEDLE", "YTM-2 GROUND TEXPA-A", "YTM-2 SECOND FLOOR-A", "YTM-3 FIRST FLOOR", "YTM-3 GROUND FLOOR CENTRAL CUTTING", "YTM-3 SECOND FLOOR", "YTM-3 THIRD FLOOR", "YTM-7 FIRST FLOOR-A", "YTM-7 FIRST FLOOR-B", "YTM-7 FIRST FLOOR-G", "YTM-7 GROUND MULTI NEEDLE-E", "YTM-7 GROUND MULTI NEEDLE-F", "YTM-7-SAMPLE ROOM", "YTM-7 SECOND FLOOR-A", "YTM-7 SECOND FLOOR-B", "YTM-7-SECOND FLOOR-C", "YTM-7 SECOND FLOOR-E", "YTM-7 SECOND FLOOR F", "YTM-7 SECOND FLOOR-G", "YTM-7 THIRD FLOOR-A", "YTM-7 THIRD FLOOR-B", "YTM-7 THIRD FLOOR-E", "YTM-7 THIRD FLOOR F"];
+var YQ_FLOORS = ["YTM-1-SAMPLE ROOM", "YTM-1 UNIT 2 A", "YTM-1 UNIT 2 B", "YTM 2", "YTM2-2B- SECOND FLOOR", "YTM-2B FIRST FLOOR", "YTM-2 FIRST FLOOR-A", "YTM-2 GROUND MULTI NEEDLE", "YTM-2 GROUND TEXPA-A", "YTM-2 SECOND FLOOR-A", "YTM-3 FIRST FLOOR", "YTM-3 GROUND FLOOR CENTRAL CUTTING", "YTM-3 SECOND FLOOR", "YTM-3 THIRD FLOOR", "YTM-7 FIRST FLOOR-A", "YTM-7 FIRST FLOOR-B", "YTM-7 FIRST FLOOR-G", "YTM-7 GROUND MULTI NEEDLE-E", "YTM-7-SAMPLE ROOM", "YTM-7 SECOND FLOOR-A", "YTM-7 SECOND FLOOR-B", "YTM-7-SECOND FLOOR-C", "YTM-7 SECOND FLOOR-E", "YTM-7 SECOND FLOOR F", "YTM-7 SECOND FLOOR-G", "YTM-7 THIRD FLOOR-A", "YTM-7 THIRD FLOOR-B", "YTM-7 THIRD FLOOR-E", "YTM-7 THIRD FLOOR F"];
 window.yqFloors = function(){ var I = isRows("is_int") || [], o = {}; YQ_FLOORS.forEach(function(f){ o[f] = 1; }); I.forEach(function(x){ if(x.floor) o[String(x.floor).trim()] = 1; }); return Object.keys(o); };
 function isRows(c){ var L = ISL.filter(function(x){ return x.c === c && x.q; })[0]; return L ? L.q.docs.map(function(d){ var x = d.data() || {}; x._id = d.id; return x; }) : null; }
 // one inspection = one shipping plan (customer workspace) or one YTM / PO (Inspection Summary)
@@ -4486,7 +4486,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-110739", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-111625", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
