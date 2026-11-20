@@ -305,11 +305,15 @@ function bsDb(){ var w0 = WS, r0 = ROLE; WS = "bedsure"; var bw = (CLIST || []).
 function bsBuyer(){ var E = typeof isRows === "function" ? isRows("is_ext") : null; if(!E) return null; var L = E.filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return /beds/i.test(String(x.customer || "")); } }); var p = 0, mj = 0, sm = 0; L.forEach(function(x){ if(rkind(x.result) === "pass") p++; mj += +x.major || 0; sm += +x.sample || 0; }); return {n: L.length, p: p, oql: sm ? Math.round(1000 * mj / sm) / 10 : null}; }
 function bsBlob(id){ var w0 = WS; WS = "bedsure"; try{ return blobUrl(id); }catch(e){ return Promise.reject(e); } finally{ WS = w0; } }
 function bsPrefetch(){ if(bsPrefetch.d) return; bsPrefetch.d = 1; setTimeout(function(){ try{ if(!FS || !(CLIST || []).some(function(w){ return w.id === "bedsure"; })){ bsPrefetch.d = 0; return; } if(!window.YQBSD && !BSDP) BSDP = loadJs(bsUrl()); (BSDP || Promise.resolve()).then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){ BSDP = null; }); }catch(e){} }, 3500); }
+function bsUpload(b){ var r = FS.collection("ws").doc("bedsure"); return shrinkImg(b).then(function(x){ return x.arrayBuffer().then(function(buf){ if(buf.byteLength > MAXRAW) throw new Error("File is too big (max 9 MB): " + (b.name || ""));
+  var id = hex32(), s = bytesToB64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), ps = [], ct = b.type || x.type || "application/octet-stream";
+  for(var i = 0; i < n; i++) ps.push(r.collection("blobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
+  return Promise.all(ps).then(function(){ return r.collection("blob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: Date.now(), by: EMAIL}); }).then(function(){ BLOBP[id] = Promise.resolve(x); return {url: "/_blob/" + id, aid: id, ct: ct, name: b.name || "file"}; }); }); }); }
 function bsOpen(o){ o = o || {}; var bw = (CLIST || []).filter(function(x){ return x.id === "bedsure"; })[0], role = o.role || (OWNER ? "owner" : bw && bw.role) || "viewer";
   if(!window.YQBSD){ bsGate(); if(!BSDP) BSDP = loadJs(bsUrl()); BSDP.then(function(){ hideGate(); bsOpen(o); }).catch(function(){ BSDP = null; hideGate(); try{ yqToast && yqToast("Could not open Bedsure. Check internet."); }catch(e){} }); return; }
   try{ if(HOMEON){ var t = $("yqTip"); if(t) t.style.display = "none"; } }catch(e){}
   try{ if(!o.single && window.YQBACK) YQBACK.push(function(){ if(window.YQBSD) YQBSD.close(); }, "bsd"); }catch(e){}
-  YQBSD.open({FS: FS, dec: dec, LOGO_Q: LOGO_Q, LOGO_BED: LOGO_BED, EMAIL: EMAIL, canEdit: OWNER || role === "owner" || role === "editor", db: bsDb(), xlsx: needXlsx, buyer: bsBuyer, blob: bsBlob, single: !!o.single, onClose: function(){ try{ if(window.YQBACK && YQBACK.has("bsd")) YQBACK.killTag("bsd"); }catch(e){} if(o.single){ setTimeout(function(){ bsOpen(o); }, 50); } }}); }
+  YQBSD.open({FS: FS, dec: dec, LOGO_Q: LOGO_Q, LOGO_BED: LOGO_BED, EMAIL: EMAIL, canEdit: OWNER || role === "owner" || role === "editor", db: bsDb(), xlsx: needXlsx, buyer: bsBuyer, blob: bsBlob, upload: bsUpload, single: !!o.single, onClose: function(){ try{ if(window.YQBACK && YQBACK.has("bsd")) YQBACK.killTag("bsd"); }catch(e){} if(o.single){ setTimeout(function(){ bsOpen(o); }, 50); } }}); }
 // Amazon catalog for the Bedsure desk: sent from an Amazon page (owner only), kept in ws/bedsure/amzcat
 window.addEventListener("message", function(e){ var d = e.data; if(!d || d.type !== "yqBsCat" || !/^https:\/\/www\.amazon\.(com|de)$/.test(e.origin) || !OWNER || !FS) return; var mk = /\.de$/.test(e.origin) ? "de" : "com", js = typeof d.v === "string" ? d.v : JSON.stringify(d.v || {});
   if(js.length > 900000){ try{ e.source.postMessage({type: "yqBsCatAck", ok: 0, err: "too big"}, e.origin); }catch(x){} return; }
@@ -4481,7 +4485,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261120-020144", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261120-100049", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
