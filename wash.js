@@ -213,7 +213,7 @@
   function viewImg(id){ var o = ov('<div class="wqImgV"><button data-x>✕</button><img alt=""></div>', "wqi"); YQCHAT.fileUrl(id).then(function(u){ o.querySelector("img").src = u; }).catch(function(){ toast("Photo not available"); }); }
   function openGroup(){ if(!window.YQCHAT || !YQCHAT.washOpen) return toast("Chat is loading – try again in a moment"); YQCHAT.washOpen(GID, GNAME, GDESC); }
 
-  var TPL = {int: "#INTERNAL\nDate: {d}\nCustomer: \nYTM: \nArticle: \nUnit: \nOffer Qty: \nSample: \nAllowed: \nFound: \nPackaging: Pass\nWorkmanship: Pass\nResult: \nDefects: \nInspector: ", ext: "#EXTERNAL\nDate: {d}\nCustomer: \nYTM: \nPO: \nArticle: \nUnit: \nInspector: \nQty: \nSample: \nMajor: /\nMinor: /\nResult: \nDefects: "};
+  var TPL = {int: "#INTERNAL\nDate: {d}\nCustomer: \nYTM: \nArticle: \nUnit: \nOffer Qty: \nSample: \nAllowed: \nFound: \nOQL: \nPackaging: Pass\nWorkmanship: Pass\nResult: \nDefects: \nInspector: ", ext: "#EXTERNAL\nDate: {d}\nCustomer: \nYTM: \nPO: \nArticle: \nUnit: \nInspector: \nQty: \nSample: \nMajor: /\nMinor: /\nOQL: \nResult: \nDefects: "};
   document.addEventListener("click", function(e){ var b = e.target.closest && e.target.closest("[data-yqf]"); if(!b) return; e.stopPropagation(); e.preventDefault(); var tx = $("ycTx"); if(!tx) return; var d = new Date();
     tx.value = TPL[b.getAttribute("data-yqf")].replace("{d}", pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + d.getFullYear()); tx.dispatchEvent(new Event("input")); tx.focus(); var k = tx.value.indexOf("Customer: ") + 10; try{ tx.setSelectionRange(k, k); }catch(x){} }, true);
   // clicks from chat cards / strip (chat stops bubbling, so listen in capture)
