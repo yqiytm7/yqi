@@ -143,6 +143,18 @@ function langPick(){ var cur = window.YQLANG || "en", o = yqSheet("Language", '<
 var XLSXURL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js", XLSXP = null;
 function needXlsx(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(!XLSXP) XLSXP = loadJs(XLSXURL).then(function(){ return window.XLSX; }, function(e){ XLSXP = null; throw e; }); return XLSXP; }
 window.yqNeedXlsx = needXlsx;
+// Every Excel file YQI generates carries this same branded cover sheet, so any download — on this device or shared onward — is recognizably a YQI report.
+function xlBook(X, sheets, title){
+  var wb = X.utils.book_new(), now = new Date(), when = dmy(ymd(now)) + " " + ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+  var cover = [["YQI — Yunus Quality Intelligence"], ["Quality Assurance Management System"], [], ["Report", title || "Export"], ["Generated", when], ["Developed by", "Hamza Khan"], [], ["Sheet", "Rows"]]
+    .concat(sheets.map(function(sh){ return [sh[0], (sh[1] || []).length]; }));
+  var cw = X.utils.aoa_to_sheet(cover);
+  cw["!cols"] = [{wch: 30}, {wch: 36}];
+  cw["!merges"] = [{s: {r: 0, c: 0}, e: {r: 0, c: 1}}, {s: {r: 1, c: 0}, e: {r: 1, c: 1}}];
+  X.utils.book_append_sheet(wb, cw, "YQI");
+  sheets.forEach(function(sh){ X.utils.book_append_sheet(wb, X.utils.json_to_sheet(sh[1].length ? sh[1] : [{Note: "No rows"}]), sh[0].slice(0, 31)); });
+  return wb;
+}
 window.yqOlGet = function(){ return olLoad(); }; window.yqCanonC = function(n){ try{ return canonC(n); }catch(e){ return String(n || ""); } }; window.yqOlCanUp = function(){ return olCanUp(); }; window.yqOlUp = function(fn){ olUpload(fn); };
 function dxVal(v){ if(v == null) return ""; if(typeof v === "string") return /^data:/.test(v) ? "[image]" : v.length > 30000 ? v.slice(0, 30000) : v; if(typeof v === "number" || typeof v === "boolean") return v; try{ var s = JSON.stringify(v, function(k, x){ return typeof x === "string" && /^data:/.test(x) ? "[image]" : x; }); return s.length > 30000 ? s.slice(0, 30000) : s; }catch(e){ return String(v); } }
 function dxFlat(L, cols){ L = L || []; if(cols) return L.map(function(x){ var o = {}; cols.forEach(function(c){ o[c[0]] = dxVal(typeof c[1] === "function" ? c[1](x) : x[c[1]]); }); return o; });
@@ -167,7 +179,7 @@ function dataExport(){ if(!lockOk()) return lockMsg("Data & export"); var o = yq
     S.map(function(s){ return '<div class="dxR"><div><b>' + esc(s.n) + '</b><small><em data-c="' + s.id + '">…</em>' + esc(s.d) + '</small></div><button data-x="' + s.id + '">Excel</button><button data-v="' + s.id + '">CSV</button></div>'; }).join("");
   var get = function(s){ return cache[s.id] ? Promise.resolve(cache[s.id]) : s.get().then(function(r){ cache[s.id] = r || []; return cache[s.id]; }); };
   S.forEach(function(s){ get(s).then(function(r){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = r.length.toLocaleString("en-US") + " rows · "; }).catch(function(){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = "not loaded · "; }); });
-  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return needXlsx().then(function(X){ var wb = X.utils.book_new(); sheets.forEach(function(sh){ X.utils.book_append_sheet(wb, X.utils.json_to_sheet(sh[1].length ? sh[1] : [{Note: "No rows"}]), sh[0].slice(0, 31)); }); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); };
+  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return needXlsx().then(function(X){ var wb = xlBook(X, sheets, name.replace(/\.xlsx$/i, "")); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); };
   var err = function(e){ yqAsk(errTxt(e), {title: "Could not download", alert: 1}); };
   b.querySelectorAll("[data-x]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.x; })[0]; x.disabled = true; get(s).then(function(r){ return xl([[s.n, r]], "YQI " + s.n + " " + stamp() + ".xlsx"); }).catch(err).then(function(){ x.disabled = false; }); }; });
   b.querySelectorAll("[data-v]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.v; })[0]; get(s).then(function(r){ saveBlob("YQI " + s.n + " " + stamp() + ".csv", new Blob([dxCsv(r)], {type: "text/csv"})); }).catch(err); }; });
@@ -306,7 +318,7 @@ function bsBuyer(){ var E = typeof isRows === "function" ? isRows("is_ext") : nu
 // Internal vs external comparison for the Bedsure desk, built from the shared Inspection Summary data (is_ext / is_int), same source every other customer uses.
 function bsDefTop(L, n){ var D = {}; L.forEach(function(r){ var dl = r.dlist && r.dlist.length ? r.dlist : String(r.defects || "").split(/[,;]+/).map(function(t){ var m = t.trim().match(/^(.*?)[\s:x×-]*(\d+)$/); return m ? {n: m[1].trim(), q: +m[2]} : {n: t.trim(), q: 1}; }).filter(function(d){ return d.n && !/^(nil|none|no defects?|-)$/i.test(d.n); }); dl.forEach(function(d){ var k = String(d.n).trim(); D[k] = (D[k] || 0) + (+d.q || 1); }); });
   return Object.keys(D).map(function(k){ return [k, D[k]]; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, n || 6); }
-function bsSide(L){ var n = L.length, p = 0, mj = 0, sm = 0; L.forEach(function(r){ if(rkind(r.result) === "pass") p++; mj += +r.major || 0; sm += +r.sample || 0; }); return {n: n, pct: n ? Math.round(1000 * p / n) / 10 : null, oql: sm ? Math.round(1000 * mj / sm) / 10 : null, top: bsDefTop(L, 6)}; }
+function bsSide(L){ var n = L.length, p = 0, mj = 0, sm = 0; L.forEach(function(r){ if(rkind(r.result) === "pass") p++; mj += +r.major || 0; sm += +r.sample || 0; }); return {n: n, pct: n ? Math.round(1000 * p / n) / 10 : null, oql: sm ? Math.round(1000 * mj / sm) / 10 : null, top: bsDefTop(L, 6), rows: L}; }
 function bsIntExt(){ if(typeof isRows !== "function") return null; var E = (isRows("is_ext") || []).filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return false; } }), I = (isRows("is_int") || []).filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return false; } }); if(!E.length && !I.length) return null; return {ext: bsSide(E), int: bsSide(I)}; }
 function bsBlob(id){ var w0 = WS; WS = "bedsure"; try{ return blobUrl(id); }catch(e){ return Promise.reject(e); } finally{ WS = w0; } }
 function bsPrefetch(){ if(bsPrefetch.d) return; bsPrefetch.d = 1; setTimeout(function(){ try{ if(!FS || !(CLIST || []).some(function(w){ return w.id === "bedsure"; })){ bsPrefetch.d = 0; return; } if(!window.YQBSD && !BSDP) BSDP = loadJs(bsUrl()); (BSDP || Promise.resolve()).then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){ BSDP = null; }); }catch(e){} }, 3500); }
@@ -3177,7 +3189,7 @@ window.yqWorkload = function(cust){ WLF.c = cust ? canonC(cust) : ""; var t = ne
     var ks = Object.keys(P).sort(), mx = Math.max.apply(null, ks.map(function(k){ return P[k].q; }).concat([1])), CL = Object.keys(C).map(function(k){ return C[k]; }).sort(function(a, b){ return b.q - a.q; });
     var custs = {}; Object.keys(M).forEach(function(k){ var y = M[k] || {}, c = canonC(y.custRaw || y.cust || ""); if(c) custs[c] = 1; }); if(WLF.c) custs[WLF.c] = 1;
     var h = '<div class="c"><div class="sg"><button data-g="w" class="' + (WLF.g === "w" ? "on" : "") + '">Weekly</button><button data-g="m" class="' + (WLF.g === "m" ? "on" : "") + '">Monthly</button>' +
-      [["tm", "This month"], ["nm", "Next month"], ["tw", "This week"], ["n4", "Next 4 weeks"], ["q", "Next 3 months"]].map(function(p){ return '<button data-pr="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '</div><div class="sg"><label class="mu">From <input type="date" data-wf value="' + WLF.f + '"></label><label class="mu">To <input type="date" data-wt value="' + WLF.t + '"></label>' +
+      [["tm", "This month"], ["nm", "Next month"], ["tw", "This week"], ["n4", "Next 4 weeks"], ["q", "Next 3 months"]].map(function(p){ return '<button data-pr="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '<button data-wx style="margin-left:auto">⬇ Export Excel</button></div><div class="sg"><label class="mu">From <input type="date" data-wf value="' + WLF.f + '"></label><label class="mu">To <input type="date" data-wt value="' + WLF.t + '"></label>' +
       '<select data-wc><option value="">All customers</option>' + Object.keys(custs).sort().map(function(c){ return '<option' + (c === WLF.c ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("") + '</select><select data-wm><option value="plan"' + (WLF.m !== "ship" ? " selected" : "") + '>By plan inspection date</option><option value="ship"' + (WLF.m === "ship" ? " selected" : "") + '>By shipping date</option></select></div>' +
       '<div class="k4"><div><small>YTMs</small><b>' + tot.n + '</b></div><div><small>Sets</small><b>' + ycF(tot.q) + '</b></div><div><small>Still to pack</small><b>' + ycF(tot.l) + '</b></div><div><small>Customers</small><b>' + CL.length + '</b></div></div>' +
       (ks.length ? '<div class="bars">' + ks.map(function(k){ return '<div data-pk="' + k + '" title="' + ycF(P[k].q) + ' sets · ' + P[k].n + ' YTMs"><b>' + (P[k].q >= 1000 ? (P[k].q / 1000).toFixed(1) + "k" : P[k].q) + '</b><i style="height:' + Math.max(4, P[k].q / mx * 110) + 'px"></i><small>' + lab(k) + '</small></div>'; }).join("") + '</div>' : '<div class="mu" style="margin-top:12px">Nothing planned in this range.</div>') + '</div>';
@@ -3190,7 +3202,15 @@ window.yqWorkload = function(cust){ WLF.c = cust ? canonC(cust) : ""; var t = ne
     B.querySelector("[data-wc]").onchange = function(){ WLF.c = this.value; WLF.k = ""; draw(); }; B.querySelector("[data-wm]").onchange = function(){ WLF.m = this.value; draw(); };
     B.querySelectorAll("[data-pk]").forEach(function(b){ b.onclick = function(){ WLF.k = WLF.k === b.dataset.pk ? "" : b.dataset.pk; draw(); var c = B.querySelectorAll(".c"); if(c.length) c[c.length - 1].scrollIntoView({behavior: "smooth"}); }; });
     B.querySelectorAll("[data-cu]").forEach(function(r){ r.onclick = function(){ WLF.c = r.dataset.cu; WLF.k = ""; draw(); }; });
-    B.querySelectorAll("[data-y]").forEach(function(r){ r.onclick = function(){ yqYtmCard(r.dataset.y); }; }); };
+    B.querySelectorAll("[data-y]").forEach(function(r){ r.onclick = function(){ yqYtmCard(r.dataset.y); }; });
+    var wx = B.querySelector("[data-wx]"); if(wx) wx.onclick = function(){ wx.disabled = true; wx.textContent = "Preparing…";
+      var byCust = CL.map(function(c){ var o = {Customer: c.c, YTMs: c.n, Sets: c.q, "To pack": c.l}; ks.forEach(function(k){ o[lab(k)] = c.p[k] || 0; }); return o; });
+      var byPeriod = ks.map(function(k){ return {Period: lab(k), YTMs: P[k].n, Sets: P[k].q, "To pack": P[k].l}; });
+      var byYtm = A.slice().sort(function(a, b){ return String(a[dk]).localeCompare(b[dk]); }).map(function(y){ return {YTM: y.ytm || "", Customer: canonC(y.custRaw || y.cust || "") || "—", Program: y.prog || "", Floor: y.unit || "", Sets: +y.qty || 0, Packed: +y.pk || 0, "Still to pack": Math.max(0, (+y.qty || 0) - (+y.pk || 0)), Date: y[dk] || ""}; });
+      needXlsx().then(function(X){ var wb = xlBook(X, [["By customer", byCust], ["By period", byPeriod], ["By YTM", byYtm]], "Workload " + WLF.f + " to " + WLF.t);
+        var a = X.write(wb, {type: "array", bookType: "xlsx"});
+        saveBlob("YQI Workload " + WLF.f + " to " + WLF.t + ".xlsx", new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      }).catch(function(e){ yqAsk("Could not export: " + (e && e.message || e), {title: "Not downloaded", alert: 1}); }).then(function(){ wx.disabled = false; wx.textContent = "⬇ Export Excel"; }); }; };
   if(window.YQOL || OL) draw(); else olLoad().then(draw); };
 // customer desk: tap a number → the inspections behind it (pass and fail)
 function cdList(title, rows, mode, open){ var F2 = {r: ""}, h0 = function(){ var R = rows.filter(function(r){ return !F2.r || (F2.r === "p" ? ycRes(r.result) === "p" : F2.r === "f" ? ycRes(r.result) === "f" : ycRes(r.result) === "n"); });
@@ -4682,7 +4702,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-113506", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-161610", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
