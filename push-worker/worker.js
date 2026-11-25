@@ -49,6 +49,7 @@ function fdDate(v){ v = String(v || "").trim(); if(/^today$/i.test(v)){ var d = 
   var m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(v); if(m){ var y = +m[3]; if(y < 100) y += 2000; if(+m[2] > 12 || +m[1] > 31) return ""; return y + "-" + pad(+m[2]) + "-" + pad(+m[1]); }
   m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v); return m ? m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]) : ""; }
 function fdRes(v, kind){ v = String(v || "").trim().toLowerCase().replace(/[^a-z]/g, ""); var M = {pass: "Pass", passed: "Pass", ok: "Pass", fail: "Fail", failed: "Fail", abort: "Abort", aborted: "Abort", inprocess: "In process", inprogress: "In process", pending: "Pending"}; var r = M[v] || ""; if(r === "In process" && kind === "ext") r = "Pending"; if(r === "Pending" && kind === "int") r = "In process"; return r; }
+function fdOqlPct(v){ var m = /([\d.]+)\s*%?\s*$/.exec(String(v || "").trim()); return m ? +m[1] : null; }
 function fdDefects(v){ var L = []; String(v || "").split(/[,;\n]+/).forEach(function(p){ p = p.trim(); if(!p || /^(nil|none|no|-|0)$/i.test(p)) return; var m = /^(.*?)[\s:x×-]*(\d+)\s*(pcs)?$/i.exec(p), n = m && m[1].trim() ? m[1].trim() : p, q = m && m[1].trim() ? +m[2] : 1; var c = /sew|stitch|seam|pleat|skip|broken/i.test(n) ? "Sewing" : /pack|label|carton|poly|sticker/i.test(n) ? "Packaging" : /fabric|hole|slub|shade|weav/i.test(n) ? "Fabric" : /measure|size/i.test(n) ? "Measurement" : /stain|spot|dirt|oil/i.test(n) ? "Stain" : "Other"; var ex = L.filter(function(x){ return x.n.toLowerCase() === n.toLowerCase(); })[0]; if(ex) ex.q += q; else L.push({n: n, q: q, c: c}); }); return L; }
 var FDORD = {G: "GROUND", GROUND: "GROUND", "1": "FIRST", "1ST": "FIRST", FIRST: "FIRST", "2": "SECOND", "2ND": "SECOND", SECOND: "SECOND", "3": "THIRD", "3RD": "THIRD", THIRD: "THIRD", "4": "FOURTH", "4TH": "FOURTH", FOURTH: "FOURTH", "5": "FIFTH", "5TH": "FIFTH", FIFTH: "FIFTH"};
 function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UNIT/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); var known = [];
@@ -69,11 +70,17 @@ function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).s
     var pk = fdRes(g("packaging", "packing"), kind), wk = fdRes(g("workmanship"), kind); if(pk) r.packaging = pk; if(wk) r.workmanship = wk;
     if(!res && (pk || wk)) r.result = pk === "Fail" || wk === "Fail" ? "Fail" : "Pass";
     if(r.result === "Pass" && (pk === "Fail" || wk === "Fail")) err.push("Result says Pass but Packaging / Workmanship is Fail");
+    var oqlGivenI = fdOqlPct(g("oql"));
+    if(!r.major && oqlGivenI != null && r.sample){ r.oql = oqlGivenI / 100; r.major = Math.round(r.oql * r.sample); }
+    else r.oql = r.sample ? r.major / r.sample : 0;
   } else {
     r.po = g("po", "pono"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty")); r.sample = fdNum(g("sample", "samplesize"));
     var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor")), cr = /^\s*([\d.]+)/.exec(g("critical"));
     r.major = mj ? +mj[1] : 0; r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
-    if(!r.sample) err.push("Sample"); r.oql = r.sample ? r.major / r.sample : 0;
+    if(!r.sample) err.push("Sample");
+    var oqlGivenE = fdOqlPct(g("oql"));
+    if(!r.major && oqlGivenE != null && r.sample){ r.oql = oqlGivenE / 100; r.major = Math.round(r.oql * r.sample); }
+    else r.oql = r.sample ? r.major / r.sample : 0;
   }
   if(!r.result) err.push("Result (Pass / Fail / Abort / " + (kind === "int" ? "In process" : "Pending") + ")");
   return {kind: kind, rec: r, err: err}; }
@@ -100,7 +107,7 @@ async function feedRun(env) {
       if (P.err.length) { await fsPatch(at, mpath, { fed: { ok: 0, h, at: now(), err: P.err.slice(0, 4) } }, ["fed"]); if (f.ok) await fsDel(at, "ws/_all/" + (f.k === "int" ? "is_int" : "is_ext") + "/" + f.id); done++; continue; }
       const rec = P.rec; rec.chat = { gid, mid, by: m.by || "", name: await userName(at, m.by || "") }; rec.by = "server";
       const col = P.kind === "int" ? "is_int" : "is_ext", w = await fsPatch(at, "ws/_all/" + col + "/" + id, rec);
-      if (w.ok) { await fsPatch(at, mpath, { fed: { ok: 1, h, at: now(), id, k: P.kind, s: rec.customer + " · " + rec.result + (P.kind === "ext" && rec.sample ? " · OQL " + (rec.oql * 100).toFixed(1) + "%" : "") + (rec.floor ? " · " + rec.floor : "") } }, ["fed"]); done++; }
+      if (w.ok) { await fsPatch(at, mpath, { fed: { ok: 1, h, at: now(), id, k: P.kind, s: rec.customer + " · " + rec.result + (rec.sample ? " · OQL " + (rec.oql * 100).toFixed(1) + "%" : "") + (rec.floor ? " · " + rec.floor : "") } }, ["fed"]); done++; }
     }
   }
   return { done, seen };
