@@ -355,9 +355,14 @@ function specFolder(g){ XLF = []; SPK = []; var x = specList().filter(function(z
 var XLF = [], SPK = [];
 // Embedded-picture extraction: SheetJS (free build) only renders cell values via sheet_to_html and
 // silently drops any pictures embedded in the .xlsx (stored as a zip, under xl/media + xl/drawings).
-// Reuses the app's own zip reader (wzList/wzStream, already used for the Wastage Excel import) to
-// map each sheet name to the data-URLs of its own pictures.
-async function xlsxPics(buf){ try{ if(typeof wzList !== "function") return {}; var E = wzList(buf); if(!Object.keys(E).some(function(k){ return k.indexOf("xl/media/") === 0; })) return {};
+// wzList/wzStream mirror app.js's own zip reader (used for the Wastage Excel import) — duplicated
+// here, same as esc/f0/dmy above, since bsd.js is loaded as its own standalone script.
+function wzList(buf){ var dv = new DataView(buf), u8 = new Uint8Array(buf), e = u8.length - 22, out = {}; while(e > 0 && dv.getUint32(e, true) !== 0x06054b50) e--; if(e <= 0) throw new Error("This is not an Excel (.xlsx) file.");
+  var n = dv.getUint16(e + 10, true), p = dv.getUint32(e + 16, true), td = new TextDecoder();
+  for(var i = 0; i < n; i++){ var fl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true); out[td.decode(u8.subarray(p + 46, p + 46 + fl))] = {meth: dv.getUint16(p + 10, true), cs: dv.getUint32(p + 20, true), lo: dv.getUint32(p + 42, true)}; p += 46 + fl + xl + cl; } return out; }
+function wzStream(buf, e){ var dv = new DataView(buf), st = e.lo + 30 + dv.getUint16(e.lo + 26, true) + dv.getUint16(e.lo + 28, true), b = new Blob([new Uint8Array(buf, st, e.cs)]); return e.meth === 0 ? b.stream() : b.stream().pipeThrough(new DecompressionStream("deflate-raw")); }
+function wzText(buf, e){ return new Response(wzStream(buf, e)).text(); }
+async function xlsxPics(buf){ try{ var E = wzList(buf); if(!Object.keys(E).some(function(k){ return k.indexOf("xl/media/") === 0; })) return {};
   var P = new DOMParser(), bin = async function(name){ var e = E[name]; if(!e) return null; return new Uint8Array(await new Response(wzStream(buf, e)).arrayBuffer()); };
   var txt = async function(name){ var e = E[name]; if(!e) return null; return wzText(buf, e); };
   var wbt = await txt("xl/workbook.xml"); if(!wbt) return {};
