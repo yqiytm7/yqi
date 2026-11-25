@@ -3497,7 +3497,7 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     var spg = O.querySelector("[data-spg]"); if(spg) spg.onchange = function(){ F.spg = spg.value; draw(); };
     var sq2 = O.querySelector("[data-sq]"); if(sq2){ sq2.oninput = function(){ clearTimeout(sq2.__t); sq2.__t = setTimeout(function(){ F.sq = sq2.value; draw(); var n = O.querySelector("[data-sq]"); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); }; }
     var spnewb = O.querySelector("[data-spnewb]"); if(spnewb) spnewb.onclick = function(){ var inp = O.querySelector("[data-spnm]"), wid = cdWsId(cn); if(inp && wid && inp.value.trim()) cdSpNewFolder(wid, inp.value, function(g){ F.spg = g; draw(); }); };
-    var spu = O.querySelector("[data-spu]"); if(spu) spu.onchange = function(){ var wid = cdWsId(cn), fl = spu.files; spu.value = ""; if(wid && fl && fl.length) cdSpUpload(wid, fl, F.spg || "General", draw); };
+    var spu = O.querySelector("[data-spu]"); if(spu) spu.onchange = function(){ var wid = cdWsId(cn); if(wid && spu.files && spu.files.length) cdSpUpload(wid, spu.files, F.spg || "General", draw); spu.value = ""; };
     O.querySelectorAll("[data-spf]").forEach(function(b){ b.onclick = function(){ F.spg = b.dataset.spf; draw(); O.scrollTop = 0; }; });
     O.querySelectorAll("[data-spopen]").forEach(function(b){ b.onclick = function(){ var z = CDSPK[+b.dataset.spopen]; if(z) cdFileOpen(z.wid, z.f); }; });
     O.querySelectorAll("[data-spdel1]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var z = CDSPK[+b.dataset.spdel1]; if(z) cdSpDel(z.wid, [z.f], draw); }; });
@@ -4682,7 +4682,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-111456", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-112324", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
