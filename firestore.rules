@@ -103,5 +103,35 @@ service cloud.firestore {
       allow update: if canWrite() || (canRead() && resource.data.email == em() && request.resource.data.email == em());
       allow delete: if canWrite();
     }
+
+    // ---------- Jarvis AI assistant ----------
+    // chat history, kept per signed-in user so the assistant has conversational memory
+    match /assistant_sessions/{uid} {
+      allow read, write: if isStaff() && me() == uid;
+      match /messages/{mid} { allow read, write: if isStaff() && me() == uid; }
+    }
+    // per-user voice/assistant preferences (selected voice, speed, pitch, language)
+    match /assistant_settings/{uid} { allow read, write: if isStaff() && me() == uid; }
+    // agentic write-tool proposals: only Cloud Functions (Admin SDK, bypasses these
+    // rules) may create/execute them; clients may only read to show an approve/reject
+    // card, and only the owner/editor can see everyone's queue (staff see their own).
+    match /assistant_pending/{id} {
+      allow read: if canAll() || (isStaff() && resource.data.requestedByEmail == em());
+      allow write: if false;
+    }
+    // proactive + agent-raised alerts: staff can read and mark their own as read;
+    // only Cloud Functions create or delete them.
+    match /assistant_alerts/{id} {
+      allow read: if isStaff();
+      allow update: if isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+    // dedupe keys for the proactive scan - backend only, never read by the client
+    match /assistant_alert_keys/{id} { allow read, write: if false; }
+    // append-only audit trail of everything Jarvis did and who approved/rejected it
+    match /assistant_logs/{id} {
+      allow read: if canAll();
+      allow write: if false;
+    }
   }
 }
