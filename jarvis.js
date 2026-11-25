@@ -6,9 +6,9 @@
 // company data), matching the backend's own role check.
 (function () {
   "use strict";
-  // Set this to your deployed Worker's URL after `wrangler deploy` (see
-  // docs/JARVIS-SETUP.md) - e.g. "https://yqi-jarvis.<your-subdomain>.workers.dev"
-  var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.workers.dev";
+  // Deployed Cloudflare Worker backend URL (see /cf-worker and docs/JARVIS-SETUP.md).
+  // Can still be overridden at runtime via window.JARVIS_WORKER_URL if needed.
+  var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.yqi-ytm7.workers.dev";
 
   var SETTINGS = { voiceURI: "", languageCode: "en-US", speakingRate: 1, pitch: 0, autoSpeak: true };
   var HISTORY = [], OPEN = false, BUSY = false, SETTINGS_LOADED = false;
