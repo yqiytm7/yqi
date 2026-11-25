@@ -1181,7 +1181,7 @@ function renderHome(){
   var ov = base ? Math.round(p1 / base * 1000) / 10 : null, fp = base ? Math.round(fa / base * 1000) / 10 : null;
   var EDEFS = [];
   if(ri) EDEFS.push({id: "x_reinsp", html: '<div class="tl" data-wid="x_reinsp"><div class="ic" style="background:linear-gradient(135deg,#ffcf6b,#c98a1b)">RI</div><div style="flex:1"><b>Re-inspections</b><span>' + ri + ' in ' + esc(rg.lbl) + '</span></div></div>'});
-  if(wavg != null) EDEFS.push({id: "x_wastage", html: '<div class="tl" data-wid="x_wastage"><div class="ic" style="background:linear-gradient(135deg,#8ec7ff,#1b5fa8)">W%</div><div style="flex:1"><b>Wastage</b><span>' + (Math.round(wavg * 100) / 100) + '% average' + (wm ? ' · ' + Math.round(wm) + ' m' : '') + '</span></div></div>'});
+  if(wavg != null) EDEFS.push({id: "x_wastage", html: '<div class="tl" data-wid="x_wastage"><div class="ic" style="background:linear-gradient(135deg,#8ec7ff,#1b5fa8)">W%</div><div style="flex:1"><b>Wastage</b><span>' + (Math.round(wavg * 10000) / 100) + '% average' + (wm ? ' · ' + Math.round(wm) + ' m' : '') + '</span></div></div>'});
   if(it.n) EDEFS.push({id: "x_intfail", html: '<div class="tl" data-wid="x_intfail"><div class="ic" style="background:linear-gradient(135deg,#ff9a8a,#c0392b)">IF</div><div style="flex:1"><b>Internal failed</b><span>' + it.f + ' of ' + it.n + ' floor inspections</span></div></div>'});
   var shownEx = EDEFS.filter(function(d){ return (HDASH.extra || []).indexOf(d.id) >= 0; });
   var tilesFull = dTilesHtml(TDEFS.concat(shownEx)) + (HMSG ? '<div class="cd msgb">' + HMSG + '</div>' : '');
@@ -1352,10 +1352,11 @@ function dHex(h){ h = String(h || "").replace("#", ""); if(h.length === 3) h = h
 function dShade(h, f, a){ var c = dHex(h).map(function(v){ return Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f))); }); return a != null ? "rgba(" + c.join(",") + "," + a + ")" : "#" + c.map(function(v){ return ("0" + v.toString(16)).slice(-2); }).join(""); }
 var HFONTS = {sys: ["System (default)", "Manrope,system-ui,sans-serif"], round: ["Rounded", "'Quicksand',Manrope,system-ui,sans-serif"], serif: ["Classic serif", "Georgia,'Times New Roman',serif"], mono: ["Mono", "'JetBrains Mono',Menlo,monospace"]};
 function applyHomeTheme(){ var th = HDASH.theme || {}, ac = /^#[0-9a-f]{6}$/i.test(th.ac || "") ? th.ac : "", fk = HFONTS[th.font] ? th.font : "sys";
-  var st = document.getElementById("yqHomeThemeCss"); if(!st){ st = document.createElement("style"); st.id = "yqHomeThemeCss"; document.head.appendChild(st); }
+  var st = document.getElementById("yqHomeThemeCss"); if(!st){ st = document.createElement("style"); st.id = "yqHomeThemeCss"; }
+  document.head.appendChild(st); // (re-)append last so it always wins same-specificity ties with the base home stylesheet
   if(!ac && fk === "sys"){ st.textContent = ""; return; }
   var l = ac ? dShade(ac, .35) : "#8ccb3c", d = ac ? dShade(ac, -.3) : "#2F5A1A", la = ac ? dShade(ac, 0, .35) : "rgba(160,214,86,.35)", da = ac ? dShade(ac, -.3, .35) : "rgba(91,163,42,.35)", ff = HFONTS[fk][1];
-  st.textContent = "#yqHome{font-family:" + ff + "}#yqHome .tl .ic{background:linear-gradient(135deg," + l + "," + d + ")}#yqHome button.tl:hover{border-color:" + (ac || "#7DB82E") + "}" + (ac ? "#yqHome .hero{background:radial-gradient(900px 380px at 88% -20%," + la + ",transparent 60%),radial-gradient(600px 300px at -10% 120%," + da + ",transparent 60%),linear-gradient(135deg,#0d2416 0%,#173d20 45%," + d + " 100%)}" : ""); }
+  st.textContent = "#yqHome{font-family:" + ff + "!important}#yqHome .tl .ic{background:linear-gradient(135deg," + l + "," + d + ")!important}#yqHome button.tl:hover{border-color:" + (ac || "#7DB82E") + "!important}" + (ac ? "#yqHome .hero{background:radial-gradient(900px 380px at 88% -20%," + la + ",transparent 60%),radial-gradient(600px 300px at -10% 120%," + da + ",transparent 60%),linear-gradient(135deg,#0d2416 0%,#173d20 45%," + d + " 100%)!important}" : ""); }
 applyHomeTheme();
 function dashCustomize(){
   var sm = $("yqSm"); if(sm){ if(sm.__close) sm.__close(); else sm.classList.remove("on"); }
@@ -4266,7 +4267,7 @@ function uploadInsp(f){
   }).catch(function(e){ HMSG = '<span class="hbad">' + esc(e.message || e) + '</span>'; renderHome(); });
 }
 function showHome(on){
-  homeCss(); var h = $("yqHome");
+  homeCss(); applyHomeTheme(); var h = $("yqHome");
   if(!h){ h = document.createElement("div"); h.id = "yqHome"; document.body.appendChild(h);
     // owner edits (hide / delete / text by fixed ID) stay on when parts of the page redraw (front page, lists)
     try{ new MutationObserver(function(rs){ var m = HPX || HOV.x; if(!m || !window.YQE || !Object.keys(m).length) return; for(var i = 0; i < rs.length; i++){ var a = rs[i].addedNodes; for(var j = 0; j < a.length; j++) if(a[j].nodeType === 1){ try{ YQE.apply(h, m); }catch(e){} return; } } }).observe(h, {childList: true, subtree: true}); }catch(e){} }
@@ -4586,7 +4587,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-103556", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-104510", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
