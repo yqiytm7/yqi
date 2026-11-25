@@ -59,8 +59,8 @@ function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UN
 function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).slice(1).forEach(function(l){ var m = /^\s*([A-Za-z .\/]+?)\s*[:=]\s*(.*)$/.exec(l); if(m) F[m[1].toLowerCase().replace(/[^a-z]/g, "")] = m[2].trim(); });
   var g = function(){ for(var i = 0; i < arguments.length; i++){ var v = F[arguments[i]]; if(v != null && v !== "") return v; } return ""; }, err = [];
   var date = fdDate(g("date")); if(!date) err.push("Date (write DD-MM-YYYY)");
-  var ytm = g("ytm", "ytmno").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; ol = OLX[ytm] || null;
-  var cust = g("customer", "buyer") || (ol && ol.cust) || "";  if(!cust) err.push("Customer");
+  var ytm = g("ytm", "ytmno", "ytmnumber").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; ol = OLX[ytm] || null;
+  var cust = g("customer", "buyer", "client", "buyername") || (ol && ol.cust) || "";  if(!cust) err.push("Customer");
   var res = fdRes(g("result", "status"), kind), dl = fdDefects(g("defects", "defect", "defectlist"));
   var r = {date: date, customer: cust, result: res, count: 1, src: "chat", at: new Date().toISOString(), dlist: dl, defects: dl.map(function(d){ return d.n + " " + d.q; }).join(", ")};
   if(ytm) r.ytm = ytm; var insp = g("inspector", "inspectedby", "qc"); if(insp) r.inspector = insp;
@@ -74,13 +74,19 @@ function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).s
     if(!r.major && oqlGivenI != null && r.sample){ r.oql = oqlGivenI / 100; r.major = Math.round(r.oql * r.sample); }
     else r.oql = r.sample ? r.major / r.sample : 0;
   } else {
-    r.po = g("po", "pono"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty")); r.sample = fdNum(g("sample", "samplesize"));
-    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor")), cr = /^\s*([\d.]+)/.exec(g("critical"));
-    r.major = mj ? +mj[1] : 0; r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
+    r.po = g("po", "pono", "ponumber", "purchaseorder"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty", "totalqty")); r.sample = fdNum(g("sample", "samplesize", "sampleqty"));
+    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major", "majordefects", "majorfound")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor", "minordefects")), cr = /^\s*([\d.]+)/.exec(g("critical"));
+    r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
     if(!r.sample) err.push("Sample");
     var oqlGivenE = fdOqlPct(g("oql"));
-    if(!r.major && oqlGivenE != null && r.sample){ r.oql = oqlGivenE / 100; r.major = Math.round(r.oql * r.sample); }
-    else r.oql = r.sample ? r.major / r.sample : 0;
+    // priority when Major has no usable number: 1) an explicit OQL%, 2) the Defects list total
+    // (most inspectors only ever write Major, not Minor - whatever is listed as a defect counts
+    // as major unless it was already put under Minor).
+    if(mj) r.major = +mj[1];
+    else if(oqlGivenE != null && r.sample) r.major = Math.round((oqlGivenE / 100) * r.sample);
+    else if(dl.length) r.major = dl.reduce(function(s, d){ return s + (+d.q || 0); }, 0);
+    else r.major = 0;
+    r.oql = r.sample ? r.major / r.sample : 0;
   }
   if(!r.result) err.push("Result (Pass / Fail / Abort / " + (kind === "int" ? "In process" : "Pending") + ")");
   return {kind: kind, rec: r, err: err}; }
