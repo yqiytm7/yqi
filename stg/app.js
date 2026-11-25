@@ -3573,10 +3573,11 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     O.querySelectorAll("h1,h2,h3,h4,b,span,small,label,td,th,div").forEach(function(el){
       if(el.children.length || el.closest("button,a,select,input,[contenteditable]")) return;
       var t = (el.textContent || "").trim(); if(!t || t.length > 90) return;
+      var orig0 = t;
       el.setAttribute("contenteditable", "true"); el.setAttribute("data-cded", "1"); el.spellcheck = false;
       el.addEventListener("blur", function(){
-        var id = YQE.pid(el, O), s = YQE.sig(el), nv = (el.textContent || "").trim(), orig = YQE.ownText(el), key = YQE.key("cd" + k, {id: id, k: "t"});
-        if(nv === orig || !nv){ delete CTX[key]; return; }
+        var id = YQE.pid(el, O), s = YQE.sig(el), nv = (el.textContent || "").trim(), key = YQE.key("cd" + k, {id: id, k: "t"});
+        if(nv === orig0 || !nv){ delete CTX[key]; return; }
         YQE.setText(el, nv); CTX[key] = {k: "t", id: id, s: s, nw: nv};
       });
     });
@@ -4779,7 +4780,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-012905", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-013646", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
