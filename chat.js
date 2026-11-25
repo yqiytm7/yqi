@@ -1018,6 +1018,7 @@ function fdDate(v){ v = String(v || "").trim(); if(/^today$/i.test(v)){ var d = 
   var m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(v); if(m){ var y = +m[3]; if(y < 100) y += 2000; if(+m[2] > 12 || +m[1] > 31) return ""; return y + "-" + pad(+m[2]) + "-" + pad(+m[1]); }
   m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v); return m ? m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]) : ""; }
 function fdRes(v, kind){ v = String(v || "").trim().toLowerCase().replace(/[^a-z]/g, ""); var M = {pass: "Pass", passed: "Pass", ok: "Pass", fail: "Fail", failed: "Fail", abort: "Abort", aborted: "Abort", inprocess: "In process", inprogress: "In process", pending: "Pending"}; var r = M[v] || ""; if(r === "In process" && kind === "ext") r = "Pending"; if(r === "Pending" && kind === "int") r = "In process"; return r; }
+function fdOqlPct(v){ var m = /([\d.]+)\s*%?\s*$/.exec(String(v || "").trim()); return m ? +m[1] : null; }
 function fdDefects(v){ var L = []; String(v || "").split(/[,;\n]+/).forEach(function(p){ p = p.trim(); if(!p || /^(nil|none|no|-|0)$/i.test(p)) return; var m = /^(.*?)[\s:x×-]*(\d+)\s*(pcs)?$/i.exec(p), n = m && m[1].trim() ? m[1].trim() : p, q = m && m[1].trim() ? +m[2] : 1; var c = /sew|stitch|seam|pleat|skip|broken/i.test(n) ? "Sewing" : /pack|label|carton|poly|sticker/i.test(n) ? "Packaging" : /fabric|hole|slub|shade|weav/i.test(n) ? "Fabric" : /measure|size/i.test(n) ? "Measurement" : /stain|spot|dirt|oil/i.test(n) ? "Stain" : "Other"; var ex = L.filter(function(x){ return x.n.toLowerCase() === n.toLowerCase(); })[0]; if(ex) ex.q += q; else L.push({n: n, q: q, c: c}); }); return L; }
 var FDORD = {G: "GROUND", GROUND: "GROUND", "1": "FIRST", "1ST": "FIRST", FIRST: "FIRST", "2": "SECOND", "2ND": "SECOND", SECOND: "SECOND", "3": "THIRD", "3RD": "THIRD", THIRD: "THIRD", "4": "FOURTH", "4TH": "FOURTH", FOURTH: "FOURTH", "5": "FIFTH", "5TH": "FIFTH", FIFTH: "FIFTH"};
 function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UNIT/g, " ").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); var known = (window.yqFloors && window.yqFloors()) || [];
@@ -1029,8 +1030,8 @@ function fdFloor(v){ var u = String(v || "").toUpperCase().replace(/FLOOR|FLR|UN
 function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).slice(1).forEach(function(l){ var m = /^\s*([A-Za-z .\/]+?)\s*[:=]\s*(.*)$/.exec(l); if(m) F[m[1].toLowerCase().replace(/[^a-z]/g, "")] = m[2].trim(); });
   var g = function(){ for(var i = 0; i < arguments.length; i++){ var v = F[arguments[i]]; if(v != null && v !== "") return v; } return ""; }, err = [];
   var date = fdDate(g("date")); if(!date) err.push("Date (write DD-MM-YYYY)");
-  var ytm = g("ytm", "ytmno").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; try{ var O = window.YQOL || {}; ol = O[ytm] || null; }catch(e){}
-  var cust = g("customer", "buyer") || (ol && ol.cust) || ""; try{ if(cust && window.yqCanonC) cust = yqCanonC(cust); }catch(e){} if(!cust) err.push("Customer");
+  var ytm = g("ytm", "ytmno", "ytmnumber").toUpperCase().replace(/^YTM\s*[-#:]?\s*/, ""), ol = null; try{ var O = window.YQOL || {}; ol = O[ytm] || null; }catch(e){}
+  var cust = g("customer", "buyer", "client", "buyername") || (ol && ol.cust) || ""; try{ if(cust && window.yqCanonC) cust = yqCanonC(cust); }catch(e){} if(!cust) err.push("Customer");
   var res = fdRes(g("result", "status"), kind), dl = fdDefects(g("defects", "defect", "defectlist"));
   var r = {date: date, customer: cust, result: res, count: 1, src: "chat", at: new Date().toISOString(), dlist: dl, defects: dl.map(function(d){ return d.n + " " + d.q; }).join(", ")};
   if(ytm) r.ytm = ytm; var insp = g("inspector", "inspectedby", "qc"); if(insp) r.inspector = insp;
@@ -1040,11 +1041,23 @@ function fdParse(t){ var kind = fdKind(t), F = {}; String(t || "").split(/\n/).s
     var pk = fdRes(g("packaging", "packing"), kind), wk = fdRes(g("workmanship"), kind); if(pk) r.packaging = pk; if(wk) r.workmanship = wk;
     if(!res && (pk || wk)) r.result = pk === "Fail" || wk === "Fail" ? "Fail" : "Pass";
     if(r.result === "Pass" && (pk === "Fail" || wk === "Fail")) err.push("Result says Pass but Packaging / Workmanship is Fail");
+    var oqlGivenI = fdOqlPct(g("oql"));
+    if(!r.major && oqlGivenI != null && r.sample){ r.oql = oqlGivenI / 100; r.major = Math.round(r.oql * r.sample); }
+    else r.oql = r.sample ? r.major / r.sample : 0;
   } else {
-    r.po = g("po", "pono"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty")); r.sample = fdNum(g("sample", "samplesize"));
-    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor")), cr = /^\s*([\d.]+)/.exec(g("critical"));
-    r.major = mj ? +mj[1] : 0; r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
-    if(!r.sample) err.push("Sample"); r.oql = r.sample ? r.major / r.sample : 0;
+    r.po = g("po", "pono", "ponumber", "purchaseorder"); r.article = g("article", "articles", "product", "item") || (ol && (ol.art || ol.prog)) || ""; r.unit = g("unit", "inspectiongoodsunit"); r.qty = fdNum(g("qty", "totalquantity", "quantity", "orderqty", "totalqty")); r.sample = fdNum(g("sample", "samplesize", "sampleqty"));
+    var mj = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("major", "majordefects", "majorfound")), mn = /^\s*([\d.]+)(?:\s*\/\s*([\d.]+))?/.exec(g("minor", "minordefects")), cr = /^\s*([\d.]+)/.exec(g("critical"));
+    r.minor = mn ? +mn[1] : 0; r.critical = cr ? +cr[1] : 0; if(mj && mj[2]) r.majAllow = +mj[2]; if(mn && mn[2]) r.minAllow = +mn[2];
+    if(!r.sample) err.push("Sample");
+    var oqlGivenE = fdOqlPct(g("oql"));
+    // priority when Major has no usable number: 1) an explicit OQL%, 2) the Defects list total
+    // (most inspectors only ever write Major, not Minor - whatever is listed as a defect counts
+    // as major unless it was already put under Minor).
+    if(mj) r.major = +mj[1];
+    else if(oqlGivenE != null && r.sample) r.major = Math.round((oqlGivenE / 100) * r.sample);
+    else if(dl.length) r.major = dl.reduce(function(s, d){ return s + (+d.q || 0); }, 0);
+    else r.major = 0;
+    r.oql = r.sample ? r.major / r.sample : 0;
   }
   if(!r.result) err.push("Result (Pass / Fail / Abort / " + (kind === "int" ? "In process" : "Pending") + ")");
   return {kind: kind, rec: r, err: err}; }
@@ -1056,7 +1069,7 @@ function fdProc(gid, d){ var m = d.data() || {}, mid = d.id, kind = fdKind(m.t),
   if(P.err.length){ d.ref.update({fed: {ok: 0, h: h, at: now(), err: P.err.slice(0, 4)}}).catch(function(){}); if(f.ok) fdCol(f.k).doc(f.id).delete().catch(function(){}); return; }
   var r = P.rec; r.chat = {gid: gid, mid: mid, by: m.by || "", name: fullName(m.by)}; r.by = EMAIL;
   var ph = MSGS.length ? null : null; if(m.k === "img" && m.f && m.f.id) r.photo = m.f.id;
-  fdCol(P.kind).doc(id).set(r).then(function(){ return d.ref.update({fed: {ok: 1, h: h, at: now(), id: id, k: P.kind, s: r.customer + " · " + r.result + (P.kind === "ext" && r.sample ? " · OQL " + (r.oql * 100).toFixed(1) + "%" : "") + (r.floor ? " · " + r.floor : "")}}); })
+  fdCol(P.kind).doc(id).set(r).then(function(){ return d.ref.update({fed: {ok: 1, h: h, at: now(), id: id, k: P.kind, s: r.customer + " · " + r.result + (r.sample ? " · OQL " + (r.oql * 100).toFixed(1) + "%" : "") + (r.floor ? " · " + r.floor : "")}}); })
     .then(function(){ try{ window.yqDataPing && yqDataPing(P.kind === "int" ? "is_int" : "is_ext", (P.kind === "int" ? "an internal" : "an external") + " inspection from chat", ""); }catch(e){} })
     .catch(function(e){ if(e && e.code === "permission-denied") FEEDNO = true; }); }
 function feedWatch(){ if(!MY || !FS || window.__RO !== false) return; Object.keys(FEEDG).forEach(function(gid){ if(FEEDU[gid] || !CHATS[gid]) return;
