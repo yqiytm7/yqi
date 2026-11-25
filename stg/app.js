@@ -143,6 +143,18 @@ function langPick(){ var cur = window.YQLANG || "en", o = yqSheet("Language", '<
 var XLSXURL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js", XLSXP = null;
 function needXlsx(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(!XLSXP) XLSXP = loadJs(XLSXURL).then(function(){ return window.XLSX; }, function(e){ XLSXP = null; throw e; }); return XLSXP; }
 window.yqNeedXlsx = needXlsx;
+// Every Excel file YQI generates carries this same branded cover sheet, so any download — on this device or shared onward — is recognizably a YQI report.
+function xlBook(X, sheets, title){
+  var wb = X.utils.book_new(), now = new Date(), when = dmy(ymd(now)) + " " + ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+  var cover = [["YQI — Yunus Quality Intelligence"], ["Quality Assurance Management System"], [], ["Report", title || "Export"], ["Generated", when], ["Developed by", "Hamza Khan"], [], ["Sheet", "Rows"]]
+    .concat(sheets.map(function(sh){ return [sh[0], (sh[1] || []).length]; }));
+  var cw = X.utils.aoa_to_sheet(cover);
+  cw["!cols"] = [{wch: 30}, {wch: 36}];
+  cw["!merges"] = [{s: {r: 0, c: 0}, e: {r: 0, c: 1}}, {s: {r: 1, c: 0}, e: {r: 1, c: 1}}];
+  X.utils.book_append_sheet(wb, cw, "YQI");
+  sheets.forEach(function(sh){ X.utils.book_append_sheet(wb, X.utils.json_to_sheet(sh[1].length ? sh[1] : [{Note: "No rows"}]), sh[0].slice(0, 31)); });
+  return wb;
+}
 window.yqOlGet = function(){ return olLoad(); }; window.yqCanonC = function(n){ try{ return canonC(n); }catch(e){ return String(n || ""); } }; window.yqOlCanUp = function(){ return olCanUp(); }; window.yqOlUp = function(fn){ olUpload(fn); };
 function dxVal(v){ if(v == null) return ""; if(typeof v === "string") return /^data:/.test(v) ? "[image]" : v.length > 30000 ? v.slice(0, 30000) : v; if(typeof v === "number" || typeof v === "boolean") return v; try{ var s = JSON.stringify(v, function(k, x){ return typeof x === "string" && /^data:/.test(x) ? "[image]" : x; }); return s.length > 30000 ? s.slice(0, 30000) : s; }catch(e){ return String(v); } }
 function dxFlat(L, cols){ L = L || []; if(cols) return L.map(function(x){ var o = {}; cols.forEach(function(c){ o[c[0]] = dxVal(typeof c[1] === "function" ? c[1](x) : x[c[1]]); }); return o; });
@@ -167,7 +179,7 @@ function dataExport(){ if(!lockOk()) return lockMsg("Data & export"); var o = yq
     S.map(function(s){ return '<div class="dxR"><div><b>' + esc(s.n) + '</b><small><em data-c="' + s.id + '">…</em>' + esc(s.d) + '</small></div><button data-x="' + s.id + '">Excel</button><button data-v="' + s.id + '">CSV</button></div>'; }).join("");
   var get = function(s){ return cache[s.id] ? Promise.resolve(cache[s.id]) : s.get().then(function(r){ cache[s.id] = r || []; return cache[s.id]; }); };
   S.forEach(function(s){ get(s).then(function(r){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = r.length.toLocaleString("en-US") + " rows · "; }).catch(function(){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = "not loaded · "; }); });
-  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return needXlsx().then(function(X){ var wb = X.utils.book_new(); sheets.forEach(function(sh){ X.utils.book_append_sheet(wb, X.utils.json_to_sheet(sh[1].length ? sh[1] : [{Note: "No rows"}]), sh[0].slice(0, 31)); }); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); };
+  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return needXlsx().then(function(X){ var wb = xlBook(X, sheets, name.replace(/\.xlsx$/i, "")); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); };
   var err = function(e){ yqAsk(errTxt(e), {title: "Could not download", alert: 1}); };
   b.querySelectorAll("[data-x]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.x; })[0]; x.disabled = true; get(s).then(function(r){ return xl([[s.n, r]], "YQI " + s.n + " " + stamp() + ".xlsx"); }).catch(err).then(function(){ x.disabled = false; }); }; });
   b.querySelectorAll("[data-v]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.v; })[0]; get(s).then(function(r){ saveBlob("YQI " + s.n + " " + stamp() + ".csv", new Blob([dxCsv(r)], {type: "text/csv"})); }).catch(err); }; });
@@ -3195,10 +3207,7 @@ window.yqWorkload = function(cust){ WLF.c = cust ? canonC(cust) : ""; var t = ne
       var byCust = CL.map(function(c){ var o = {Customer: c.c, YTMs: c.n, Sets: c.q, "To pack": c.l}; ks.forEach(function(k){ o[lab(k)] = c.p[k] || 0; }); return o; });
       var byPeriod = ks.map(function(k){ return {Period: lab(k), YTMs: P[k].n, Sets: P[k].q, "To pack": P[k].l}; });
       var byYtm = A.slice().sort(function(a, b){ return String(a[dk]).localeCompare(b[dk]); }).map(function(y){ return {YTM: y.ytm || "", Customer: canonC(y.custRaw || y.cust || "") || "—", Program: y.prog || "", Floor: y.unit || "", Sets: +y.qty || 0, Packed: +y.pk || 0, "Still to pack": Math.max(0, (+y.qty || 0) - (+y.pk || 0)), Date: y[dk] || ""}; });
-      needXlsx().then(function(X){ var wb = X.utils.book_new();
-        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byCust.length ? byCust : [{Note: "No rows"}]), "By customer");
-        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byPeriod.length ? byPeriod : [{Note: "No rows"}]), "By period");
-        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byYtm.length ? byYtm : [{Note: "No rows"}]), "By YTM");
+      needXlsx().then(function(X){ var wb = xlBook(X, [["By customer", byCust], ["By period", byPeriod], ["By YTM", byYtm]], "Workload " + WLF.f + " to " + WLF.t);
         var a = X.write(wb, {type: "array", bookType: "xlsx"});
         saveBlob("YQI Workload " + WLF.f + " to " + WLF.t + ".xlsx", new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
       }).catch(function(e){ yqAsk("Could not export: " + (e && e.message || e), {title: "Not downloaded", alert: 1}); }).then(function(){ wx.disabled = false; wx.textContent = "⬇ Export Excel"; }); }; };
@@ -4693,7 +4702,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-151233", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-152032", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
