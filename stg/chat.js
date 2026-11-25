@@ -50,7 +50,6 @@ function setBlock(u, on){ var x = {}; if(on){ x["bl." + u] = now(); } else x["bl
   return FS.collection("people").doc(MY).update(x).then(function(){ ME = ME || {}; ME.bl = ME.bl || {}; if(on) ME.bl[u] = now(); else delete ME.bl[u]; MKEY = ""; var w = $("ycW"); if(w) w.removeAttribute("data-v"); paint(true); toast(on ? fullName(u) + " blocked" : fullName(u) + " unblocked"); }).catch(function(e){ toast(e.code || e.message); }); }
 function askBlock(u){ if(iBlocked(u)) return setBlock(u, false); ask("Blocked contacts cannot call you or send you messages.", {title: "Block " + fullName(u) + "?", ok: "Block", danger: 1}).then(function(y){ if(y) setBlock(u, true); }); }
 function person(uid){ return PEOPLE[uid] || (uid === MY && ME) || null; }
-function pname(uid){ var p = person(uid); return uid === MY ? "You" : p ? p.name : "Someone"; }
 function fullName(uid){ var p = person(uid); return p ? p.name : "Someone"; }
 function first(uid){ return uid === MY ? "You" : fullName(uid).split(" ")[0]; }
 function chatOther(c){ return (c.members || []).filter(function(u){ return u !== MY; })[0] || MY; }
