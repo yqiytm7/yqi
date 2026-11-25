@@ -378,8 +378,7 @@ async function xlsxPics(buf){ try{ var E = wzList(buf); if(!Object.keys(E).some(
     var urls = [];
     for(var ii = 0; ii < imgs.length; ii++){ var d = await bin(imgs[ii]); if(!d) continue; var ext = (imgs[ii].split(".").pop() || "").toLowerCase(), mime = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "bmp" ? "image/bmp" : /jpe?g/.test(ext) ? "image/jpeg" : ""; if(!mime) continue; var CH = 0x8000, s = ""; for(var ci = 0; ci < d.length; ci += CH) s += String.fromCharCode.apply(null, d.subarray(ci, ci + CH)); urls.push("data:" + mime + ";base64," + btoa(s)); }
     if(urls.length) out[sh.name] = urls; }
-  window.__xlDebug = {ok: true, out: out};
-  return out; }catch(e){ window.__xlDebug = {ok: false, err: String(e && e.stack || e)}; return {}; } }
+  return out; }catch(e){ return {}; } }
 function xlView(f){ var v = document.createElement("div"); v.className = "xv"; v.innerHTML = '<div class="xh"><div style="min-width:0;flex:1"><b>' + esc(f.name || "Excel") + '</b><div class="xt"></div></div><a class="bt xd">⬇ Download</a><button class="bt" data-xvx>✕</button></div><div class="xb"><div class="emp">Opening…</div></div>'; O.appendChild(v);
   var bid = (/\/_blob\/([0-9a-f]{32})/.exec(String(f.url || "")) || [])[1], uP = bid ? C.blob(bid) : Promise.resolve(f.url);
   v.querySelector("[data-xvx]").onclick = function(){ v.remove(); };
