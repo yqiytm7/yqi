@@ -3590,9 +3590,9 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
       b.addEventListener("mouseleave", function(){ x.style.display = "none"; });
       x.onclick = function(e){ e.preventDefault(); e.stopPropagation(); var id = YQE.pid(b, O), s = YQE.sig(b), key = YQE.key("cd" + k, {id: id, k: "h"}); CTX[key] = {k: "h", id: id, s: s}; b.style.display = "none"; };
     });
-    var bar = document.createElement("div"); bar.id = "cdEdBar"; bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#14241a;color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center;z-index:99999;font:600 13px Manrope,sans-serif;flex-wrap:wrap";
+    var bar = document.createElement("div"); bar.id = "cdEdBar"; bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#14241a;color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center;z-index:2147483000;font:600 13px Manrope,sans-serif;flex-wrap:wrap";
     bar.innerHTML = '<span style="flex:1;min-width:200px">Editing ' + esc(cn) + ': tap any heading or label to retype it. Hover a card for ✕ to hide it.</span><button data-ceds style="background:var(--c);border:0;color:#fff;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer">Save</button><button data-cedc style="background:none;border:1px solid #556;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer">Cancel</button><button data-cedr style="background:none;border:1px solid #a33;color:#f88;border-radius:8px;padding:8px 14px;cursor:pointer">Reset all</button>';
-    document.body.appendChild(bar);
+    O.appendChild(bar);
     bar.querySelector("[data-cedc]").onclick = cdEditOff;
     bar.querySelector("[data-ceds]").onclick = function(){ var btn = this; btn.disabled = true; btn.textContent = "Saving…";
       FS.collection("ws").doc("_all").collection("custTheme").doc(k).set({tx: CTX, at: Date.now(), by: EMAIL || ""}, {merge: true}).then(function(){ CDTH[k] = Object.assign({}, CDTH[k] || {}, {tx: CTX}); cdEditOff(); try{ yqToast && yqToast("Changes saved for everyone ✓"); }catch(x){} draw(); }).catch(function(err){ btn.disabled = false; btn.textContent = "Save"; alert("Could not save: " + (err && err.message || err)); }); };
@@ -4779,7 +4779,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-012004", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-012721", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
