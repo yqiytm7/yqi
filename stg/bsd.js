@@ -431,8 +431,9 @@ function readUp(file){ UP = {name: file.name}; draw(1);
     if(!out.length){ UP.err = "No inspection rows found in “" + best.sn + "”."; draw(1); return; }
     var old = {}; allRows().forEach(function(r){ old[r.k] = 1; }); UP.rows = out; UP.sheet = best.sn; UP.old = old; draw(1); }); }).catch(function(e){ UP.err = "Could not read the file: " + (e && e.message || e); draw(1); }); }
 function saveUp(){ if(!UP || !UP.rows || UP.busy) return; UP.busy = 1; draw(1); var rows = UP.rows, i = 0, ts = Date.now();
-  (function next(){ if(i >= rows.length){ D.insp.push({rows: rows, ts: ts}); MM = null; toast("Saved " + rows.length + " rows"); UP = null; F.tab = "pl"; draw(); return; }
-    C.db.collection("insp").add({rows: rows.slice(i, i + 250), ts: ts + i}).then(function(){ i += 250; next(); }).catch(function(e){ UP.busy = 0; UP.err = "Could not save: " + (e && e.message || e); draw(1); }); })(); }
+  (function next(){ if(i >= rows.length){ MM = null; toast("Saved " + rows.length + " rows"); UP = null; F.tab = "pl"; draw(); return; }
+    var chunk = rows.slice(i, i + 250), chunkTs = ts + i;
+    C.db.collection("insp").add({rows: chunk, ts: chunkTs}).then(function(ref){ D.insp.push({rows: chunk, ts: chunkTs, _id: ref.id}); i += 250; next(); }).catch(function(e){ UP.busy = 0; UP.err = "Could not save: " + (e && e.message || e); draw(1); }); })(); }
 function readPl(file){ UP2 = {name: file.name}; draw(1);
   C.xlsx().then(function(XLSX){ return file.arrayBuffer().then(function(buf){ var wb = XLSX.read(buf, {type: "array", cellDates: true});
     var L = function(v){ return String(v == null ? "" : v).replace(/\s+/g, " ").trim().toLowerCase(); };
@@ -448,8 +449,9 @@ function readPl(file){ UP2 = {name: file.name}; draw(1);
 function savePl(){ if(!UP2 || !UP2.rows || UP2.busy) return; if(UP2.rows.some(function(r){ return (r.res === "f" || r.res === "r") && !r.reason.trim(); })){ toast("Add a reason for every Fail / Re-pass row"); return; }
   UP2.busy = 1; draw(1);
   var rows = UP2.rows.map(function(r){ return {p: r.p, n: r.n, c: r.c, z: r.z, l: r.l, q: r.q, s: r.res === "p" ? "Passed - 1st Inspection" : r.res === "f" ? "Failed" : r.res === "r" ? "Passed - Re-inspection" : "", d: r.d, r: r.reason, m: r.m, ms: r.ms, k: r.k}; }), i = 0, ts = Date.now();
-  (function next(){ if(i >= rows.length){ D.insp.push({rows: rows, ts: ts}); MM = null; toast("Saved " + rows.length + " rows"); UP2 = null; F.tab = "pl"; draw(); return; }
-    C.db.collection("insp").add({rows: rows.slice(i, i + 250), ts: ts + i}).then(function(){ i += 250; next(); }).catch(function(e){ UP2.busy = 0; UP2.err = "Could not save: " + (e && e.message || e); draw(1); }); })(); }
+  (function next(){ if(i >= rows.length){ MM = null; toast("Saved " + rows.length + " rows"); UP2 = null; F.tab = "pl"; draw(); return; }
+    var chunk = rows.slice(i, i + 250), chunkTs = ts + i;
+    C.db.collection("insp").add({rows: chunk, ts: chunkTs}).then(function(ref){ D.insp.push({rows: chunk, ts: chunkTs, _id: ref.id}); i += 250; next(); }).catch(function(e){ UP2.busy = 0; UP2.err = "Could not save: " + (e && e.message || e); draw(1); }); })(); }
 
 // ---------- events ----------
 function onClick(e){ var t = e.target.closest("[data-x],[data-dx],[data-t],[data-per],[data-mk],[data-prod],[data-pc],[data-fam],[data-plan],[data-def],[data-more],[data-acsave],[data-upsave],[data-upx],[data-vc],[data-spf],[data-xlv],[data-spdel],[data-spdels],[data-ord],[data-oedit],[data-osave],[data-odel],[data-ocancel],[data-th],[data-thsave],[data-threset],[data-thp],[data-acdel],[data-acedit],[data-accx],[data-ocnt],[data-oall],[data-pf],[data-spnewb],[data-pexp],[data-plupsave],[data-plupx],[data-rdel],[data-plandelall]"); if(!t) return; if(t.hasAttribute("data-pf")){ markRow(t.getAttribute("data-pf"), t.getAttribute("data-v")); return; } if(t.hasAttribute("data-rdel")){ delRow(t.getAttribute("data-rdel")); return; } if(t.hasAttribute("data-plandelall")){ delAllPlan(t.getAttribute("data-plandelall")); return; } if(t.dataset.spf){ specFolder(t.dataset.spf); return; } if(t.hasAttribute('data-spnewb')){ var box = t.closest('.c') || B, inp = box && box.querySelector('[data-spnm]'); if(inp && inp.value.trim()) specNewFolder(inp.value, function(g){ F.spg = g; draw(1); }); return; } if(t.hasAttribute('data-pexp')){ F.pexp = F.pexp || {}; var g = t.getAttribute('data-pexp'); F.pexp[g] = !F.pexp[g]; draw(1); return; }
