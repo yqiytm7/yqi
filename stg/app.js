@@ -3264,6 +3264,14 @@ function cdSpUpload(wid, files, g, after){ files = [].slice.call(files || []); i
       return ref.collection("specs").add(rec).then(function(r){ rec._id = r.id; var c = CDSP[wid]; if(c) (c.items = c.items || []).push(rec); done++; }); }).catch(function(e){ bad.push(f.name + " (" + (e && e.message || e) + ")"); }).then(function(){ fin++; toastQ("Uploading " + fin + " / " + N + "…"); }); };
   var at = 0, worker = function(){ if(at >= N) return Promise.resolve(); var f = files[at++]; return one(f).then(worker); }, W = []; for(var w = 0; w < Math.min(4, N); w++) W.push(worker());
   Promise.all(W).then(function(){ toastQ(done + " uploaded in " + Math.max(1, Math.round((Date.now() - t0) / 1000)) + "s" + (bad.length ? " · failed: " + bad.join(", ") : "")); if(after) after(); }); }
+var CDSPPROV = {};
+function cdWsEnsure(cn, cb){ var id = cdWsId(cn); if(id) return cb(id); if(!(OWNER || ISED)) return cb(null);
+  var base = slug(cn), tryId = base, n = 1, taken = function(x){ return (CLIST || []).some(function(w){ return w.id === x; }); };
+  while(taken(tryId)) tryId = base + "-" + (++n);
+  FS.collection("ws").doc(tryId).set({name: cn, members: {}, created: Date.now(), by: EMAIL}).then(function(){
+    return FS.collection("ws").doc(tryId).collection("seed").doc("PROGS").set({v: ["General"]}); }).then(function(){
+    CLIST = (CLIST || []).concat([{id: tryId, name: cn, role: OWNER ? "owner" : "editor"}]); cb(tryId);
+  }).catch(function(e){ yqAsk("Could not set up specs for " + cn + ": " + (e && e.message || e), {title: "Not created", alert: 1}); cb(null); }); }
 function cdSpNewFolder(wid, name, after){ name = String(name || "").trim(); if(!name) return;
   var ref = FS.collection("ws").doc(wid);
   ref.collection("seed").doc("PROGS").get().then(function(d){ var v = d.exists ? (dec(d.data().v) || []) : [];
@@ -3422,7 +3430,11 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     return '<div class="fl" style="justify-content:space-between;border-bottom:1px solid rgba(127,140,160,.15);padding:6px 0;margin:0"><div data-spopen="' + k + '" style="cursor:pointer;flex:1;min-width:0;display:flex;gap:8px;align-items:center"><b style="font-size:10.5px;padding:3px 7px;border-radius:7px;background:rgba(127,140,160,.18);flex:none">' + t[0] + '</b><div style="min-width:0"><b style="word-break:break-word">' + esc(f.name || "Spec file") + '</b><br><small class="mu">' + esc([showG ? g : "", f.date ? dmy(f.date) : ""].filter(Boolean).join(" · ")) + '</small></div></div>' + (OWNER || ISED ? '<button class="cb np" data-spdel1="' + k + '" title="Delete" style="color:#C0392B">🗑</button>' : '') + '</div>'; }
   function spRows(x, wid, g){ return (OWNER || ISED ? '<div class="fl" style="margin:0 0 6px"><button class="cb np" data-spdels="' + esc(g) + '" style="background:#C0392B;border:0;color:#fff">🗑 Delete all in this folder</button></div>' : '') + x.files.map(function(f){ return spRow(f, wid, g); }).join(""); }
   function sp(){ var wid = cdWsId(cn); CDSPK = [];
-    if(!wid) return '<div class="cd em" style="margin-top:18px">No separate workspace for ' + esc(cn) + ' yet — ask the owner to add one from Admin.</div>';
+    if(!wid){
+      if(!(OWNER || ISED)) return '<div class="cd em" style="margin-top:18px">No specs for ' + esc(cn) + ' yet.</div>';
+      if(!CDSPPROV[cn]){ CDSPPROV[cn] = 1; cdWsEnsure(cn, function(){ draw(); }); }
+      return '<div class="cd em" style="margin-top:18px">Setting up specs for ' + esc(cn) + '…</div>';
+    }
     var c = CDSP[wid]; if(!c || !c.items){ cdSpLoad(wid).then(function(){ draw(); }); return '<div class="cd em" style="margin-top:18px">Loading specs…</div>'; }
     var sg = F.spg || "", q = (F.sq || "").trim().toLowerCase(), G = cdSpGroups(wid), L = sg ? G.filter(function(x){ return x.g === sg; }) : G, tot = G.reduce(function(s, x){ return s + x.files.length; }, 0), canUp = OWNER || ISED;
     var h = '<div class="cd" style="margin-top:18px"><h3 style="margin:0 0 10px">📂 Specs · ' + esc(cn) + '</h3><div class="fl">' +
@@ -4670,7 +4682,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-105734", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-111456", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
