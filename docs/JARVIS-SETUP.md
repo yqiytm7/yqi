@@ -1,97 +1,96 @@
-# Jarvis - YQI AI assistant: setup
+# Jarvis AI Assistant — Setup (Free, No Card Required)
 
-This adds a Firebase Functions backend (`functions/`) and a frontend module
-(`jarvis.js`) implementing a RAG + agentic assistant over YQI's data, with
-voice in/out. Nothing in here changes existing modules (app.js logic is
-untouched apart from its auto-generated version stamp).
+Jarvis is built into YQI as `jarvis.js`, loaded on every screen. The backend
+runs on **Cloudflare Workers** (free tier, no credit card needed) instead of
+Firebase Cloud Functions, because Cloud Functions require the Blaze plan,
+which Google will not enable without a card on file — even for usage that
+stays inside the free quota. This setup avoids that entirely.
 
-## What you need to do before it works (things only you can authorize)
-
-1. **Upgrade the `yqi-yunus` Firebase project to the Blaze (pay-as-you-go)
-   plan.** Cloud Functions that call an external API (Gemini, Text-to-Speech)
-   require Blaze - the free Spark plan cannot run them. Blaze still has a
-   generous free monthly quota; you only pay for usage beyond that.
-   Firebase console -> yqi-yunus -> Upgrade plan.
-
-2. **Get a Gemini API key** from https://aistudio.google.com/apikey (free
-   tier available) and set it as a Functions secret:
-   ```
-   firebase functions:secrets:set GEMINI_API_KEY
-   ```
-   (paste the key when prompted).
-
-3. **Enable the Cloud Text-to-Speech API** on the same GCP project (used for
-   multi-voice spoken replies): console.cloud.google.com -> APIs & Services
-   -> enable "Cloud Text-to-Speech API" for project `yqi-yunus`. No separate
-   key needed - it uses the Functions service account.
-
-4. **Deploy:**
-   ```
-   firebase deploy --only functions,firestore:rules
-   ```
-
-That's it for the backend. The frontend (`jarvis.js`) is already wired into
-`index.html` and will quietly do nothing until the functions above exist and
-you're signed in with a staff-level YQI account (qc/qa/auth - guests and
-customers don't see it, same as the rest of the company data).
+Firestore itself (your existing database) is untouched — Jarvis reads/writes
+it over the Firestore REST API using a Google service account, no SDK needed.
 
 ## What's built
+- Chat with RAG grounding over external/internal inspections, CAPA, Amazon
+  complaints, customer desks, and specs.
+- Agentic tools: read tools run immediately; write tools (create CAPA, flag
+  inspection, raise alert) are queued to `assistant_pending` and only applied
+  after a staff member with owner/editor access approves them in the Jarvis
+  panel.
+- Proactive daily scan (Cloudflare Cron, 02:00 Asia/Karachi) for OQL
+  breaches, missing YTM numbers, overdue open CAPA, and days with no internal
+  inspections — raised as deduplicated alerts.
+- Voice input via the browser's built-in `SpeechRecognition`.
+- Voice output via the browser's built-in `speechSynthesis` — completely
+  free, uses whatever voices are already installed on the device/browser.
 
-- **RAG**: `functions/lib/rag.js` pulls grounded context from `is_ext`,
-  `is_int`, `capa`, `amzcat`, `cust/{customer}` and `ws/{wid}/specs` based on
-  the question asked, before Gemini answers - it isn't guessing from memory.
-- **Agentic tools**: `functions/lib/tools.js`. Read tools (search inspections,
-  CAPA, Amazon themes, customer summaries) run immediately. Write tools
-  (create CAPA, flag an inspection, raise an alert) are never executed
-  directly - they're queued in `assistant_pending` and only applied once an
-  owner/editor approves them from the Approvals tab (or rejects them).
-- **Proactive intelligence**: `functions/lib/proactive.js` runs daily
-  (02:00 Asia/Karachi) and raises alerts for OQL breaches, inspections
-  missing a YTM number, overdue CAPA records, and days with no internal
-  inspection data at all.
-- **Voice in**: browser SpeechRecognition (Web Speech API) - free, no backend
-  call, works in Chrome/Edge and most Android WebViews.
-- **Voice out / multi-voice**: Google Cloud Text-to-Speech via
-  `assistantTTS`, with a live voice picker (`assistantListVoices`) so you
-  always see Google's actual current catalog rather than a hardcoded list -
-  preview any voice before selecting it, plus speed/pitch sliders and a
-  per-user saved preference (`assistant_settings/{uid}`). Falls back to the
-  browser's own built-in speech synthesis if the backend isn't reachable.
-- **Security**: every assistant collection has its own Firestore rule
-  (`assistant_sessions`, `assistant_settings`, `assistant_pending`,
-  `assistant_alerts`, `assistant_logs`) scoped by the same role system
-  (`OWNER_EMAIL`/editors/levels) the rest of the app already uses. Every
-  chat turn, tool call, approval and rejection is written to
-  `assistant_logs` (append-only, readable by owner/editors only) as an audit
-  trail.
+## One-time setup (you do this; it only takes a few minutes)
 
-## Known limitations, stated plainly
+### 1. Create a free Gemini API key
+Go to https://aistudio.google.com/apikey → "Create API key". This is the
+no-card free tier (separate from Vertex AI / Cloud Billing). Copy the key.
 
-- **Roman Urdu speech**: there is no dedicated "Roman Urdu" voice in Google's
-  TTS catalog as far as this build can check. Spoken replies use the closest
-  available English or Hindi voice reading the Roman-Urdu text phonetically -
-  it will sound approximate, not native. The chat UI's *text* replies are
-  still in Roman Urdu when you write in Roman Urdu, per your usual
-  preference.
-- **This has not been deployed or tested against a live Firebase project**
-  from here - this environment has no Firebase credentials, no billing
-  access, and no way to call Gemini/Cloud TTS to verify end to end. The code
-  follows the existing app's own data model and role system closely, but
-  please run it on `/staging` first and watch the browser console before
-  trusting it with real CAPA writes.
-- **Scope of "deep integration"**: the RAG/tool layer currently covers
-  external/internal inspections, CAPA, Amazon complaint themes, customer
-  desks and specs - the modules with the clearest existing data shape. Other
-  modules (shipping plans, one-liner/orders, wastage, shade cards) aren't
-  wired into tools yet; `rag.js` and `tools.js` are written to make adding a
-  new source a short, self-contained addition (one retriever function,
-  pattern already established).
-- **Cost**: Blaze + Gemini's free tier + Cloud TTS's free monthly quota
-  should cover light daily use at no cost; heavier use (long chats, lots of
-  spoken replies) will incur small per-request charges. There is no budget
-  cap wired in yet - consider setting a GCP budget alert.
+### 2. Create a Google service account for Firestore access
+In the Google Cloud Console for project **yqi-yunus**:
+1. IAM & Admin → Service Accounts → Create Service Account.
+2. Grant it the role **Cloud Datastore User** (lets it read/write Firestore).
+3. Create a JSON key for it and download the file.
 
-## Branch
+Creating a service account and granting it a role does **not** require a
+Cloud Billing account — only turning on certain paid APIs does, and this
+does not touch any of those.
 
-This was built on `feature/jarvis-ai-assistant` and not merged to `main` -
-nothing here is live until you review and merge it.
+### 3. Sign up for Cloudflare (free, no card)
+https://dash.cloudflare.com/sign-up — email + password only.
+
+### 4. Deploy the Worker
+From the `cf-worker/` folder in this repo:
+```bash
+npm install
+npx wrangler login
+npx wrangler secret put GEMINI_API_KEY
+# paste the key from step 1
+
+npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON
+# paste the *entire contents* of the JSON key file from step 2
+
+npx wrangler deploy
+```
+`wrangler deploy` prints your Worker's URL, e.g.
+`https://yqi-jarvis.<your-subdomain>.workers.dev`.
+
+### 5. Point jarvis.js at your Worker
+In `index.html`, add this line right **before** the `<script src="jarvis.js">`
+tag:
+```html
+<script>window.JARVIS_WORKER_URL = "https://yqi-jarvis.<your-subdomain>.workers.dev";</script>
+```
+(Or edit the `WORKER_URL` constant directly in `stg/jarvis.js` and re-run
+`python3 tools/bump.py --release`.)
+
+### 6. Deploy the updated Firestore rules
+```bash
+firebase deploy --only firestore:rules
+```
+
+That's it — no credit card touched anywhere in this process.
+
+## Known limitations
+- Voice quality depends entirely on the voices already installed on the
+  user's device/browser — there is no cloud multi-voice catalog. Some
+  devices have very few voices, and Roman Urdu text is read phonetically by
+  the closest available English/Hindi/Urdu voice rather than natively.
+- This has not been deployed or tested against a live Cloudflare account
+  from this environment — the code has been validated for syntax and the
+  cryptographic/REST pieces (JWT signing, Firestore REST encoding) have been
+  verified with passing runtime tests, but an end-to-end deploy should be
+  checked after setup.
+- Jarvis currently integrates with: external/internal inspections, CAPA,
+  Amazon complaints, customer desks, and specs. Other YQI modules (daily
+  activities, user records, etc.) can be added to the RAG/tool layer later.
+- The old Firebase Functions backend (`functions/`) is kept in the repo for
+  reference only — see `functions/README-DEPRECATED.md` — and is not wired
+  into `firebase.json`, so it will not be deployed.
+
+## Work location
+This work lives on branch `feature/jarvis-ai-assistant` (PR open), not yet
+merged to `main`.

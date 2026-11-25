@@ -1,0 +1,13 @@
+{
+  "name": "yqi-jarvis-worker",
+  "private": true,
+  "description": "YQI Jarvis assistant backend on Cloudflare Workers (free plan, no card required)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "secrets": "echo 'Run: wrangler secret put GEMINI_API_KEY   and   wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON'"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

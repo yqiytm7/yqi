@@ -1,11 +1,16 @@
 // ===== Jarvis: YQI's built-in AI assistant (RAG + agentic tools + voice) =====
-// Loaded on every screen (see index.html). Talks to the Cloud Functions in /functions
-// (assistantChat, assistantApprove, assistantReject, assistantTTS, assistantListVoices).
+// Loaded on every screen (see index.html). Talks to a free Cloudflare Worker backend
+// (see /cf-worker) - no Firebase Blaze plan or card required. Voice output uses the
+// browser's own free speech synthesis (no Cloud Text-to-Speech, which needs billing).
 // Visible only to staff accounts (qc/qa/auth - same gate as the rest of the app's
-// company data), matching assistant backend's own role check.
+// company data), matching the backend's own role check.
 (function () {
   "use strict";
-  var FNS = null, SETTINGS = { voiceName: "", languageCode: "en-US", speakingRate: 1, pitch: 0, autoSpeak: true };
+  // Set this to your deployed Worker's URL after `wrangler deploy` (see
+  // docs/JARVIS-SETUP.md) - e.g. "https://yqi-jarvis.<your-subdomain>.workers.dev"
+  var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.workers.dev";
+
+  var SETTINGS = { voiceURI: "", languageCode: "en-US", speakingRate: 1, pitch: 0, autoSpeak: true };
   var HISTORY = [], OPEN = false, BUSY = false, SETTINGS_LOADED = false;
   var RECOG = null, LISTENING = false, SPEAKING = false;
   var ALERTS = [], PENDING = [];
@@ -22,13 +27,22 @@
     return lv === "auth" || lv === "qa" || lv === "qc";
   }
 
-  function ensureFunctions() {
-    if (FNS) return Promise.resolve(FNS);
-    var go = function () { FNS = firebase.functions(); return FNS; };
-    if (firebase.functions) return Promise.resolve(go());
-    var ver = firebase.SDK_VERSION || "10.12.2";
-    return (window.loadJs ? window.loadJs("https://www.gstatic.com/firebasejs/" + ver + "/firebase-functions-compat.js") : Promise.reject(new Error("no loader")))
-      .then(go);
+  // Calls the free Cloudflare Worker backend, authenticated with the user's own
+  // Firebase ID token (the Worker verifies it itself - no Admin SDK/service account
+  // needed on this side).
+  function call(route, body) {
+    return firebase.auth().currentUser.getIdToken().then(function (idToken) {
+      return fetch(WORKER_URL.replace(/\/$/, "") + route, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + idToken },
+        body: JSON.stringify(body || {}),
+      });
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data && data.error || ("HTTP " + res.status));
+        return data;
+      });
+    });
   }
 
   // ---------------------------------------------------------------- styles
@@ -159,14 +173,10 @@
 
   function ask(text) {
     BUSY = true; render();
-    ensureFunctions().then(function () {
-      var call = FNS.httpsCallable("assistantChat");
-      var geminiHistory = HISTORY.filter(function (m) { return m.role === "user" || m.role === "model"; }).slice(-10).map(function (m) {
-        return { role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] };
-      });
-      return call({ text: text, history: geminiHistory.slice(0, -1), scope: { sessionId: SID } });
-    }).then(function (res) {
-      var d = res.data || {};
+    var geminiHistory = HISTORY.filter(function (m) { return m.role === "user" || m.role === "model"; }).slice(-10).map(function (m) {
+      return { role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] };
+    });
+    call("/assistantChat", { text: text, history: geminiHistory.slice(0, -1), scope: { sessionId: SID } }).then(function (d) {
       HISTORY.push({ role: "model", text: d.text || "(no answer)" });
       BUSY = false; render();
       if (d.pendingActions && d.pendingActions.length) {
@@ -200,28 +210,26 @@
   }
 
   // ---------------------------------------------------------------- voice out (TTS)
+  // Free, browser-only speech synthesis - no Cloud Text-to-Speech (which needs a
+  // billing account). Quality/voice choice depends entirely on the device's own
+  // installed voices (Chrome/Android/iOS all ship a decent default set).
+  function pickVoice() {
+    var voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+    if (SETTINGS.voiceURI) {
+      var v = voices.filter(function (x) { return x.voiceURI === SETTINGS.voiceURI; })[0];
+      if (v) return v;
+    }
+    return voices.filter(function (x) { return x.lang && x.lang.indexOf(SETTINGS.languageCode.split("-")[0]) === 0; })[0] || voices[0];
+  }
   function speak(text) {
-    if (!text) return;
+    if (!text || !window.speechSynthesis) return;
     SPEAKING = true; renderOrb();
     var done = function () { SPEAKING = false; renderOrb(); };
-    if (SETTINGS.voiceName) {
-      ensureFunctions().then(function () {
-        return FNS.httpsCallable("assistantTTS")({ text: text, voiceName: SETTINGS.voiceName, languageCode: SETTINGS.languageCode, speakingRate: SETTINGS.speakingRate, pitch: SETTINGS.pitch });
-      }).then(function (res) {
-        var a = new Audio("data:audio/mp3;base64," + res.data.audioB64);
-        a.onended = done; a.onerror = done;
-        a.play().catch(done);
-      }).catch(function () { speakBrowser(text, done); });
-    } else {
-      speakBrowser(text, done);
-    }
-  }
-  function speakBrowser(text, done) {
-    if (!window.speechSynthesis) { done(); return; }
     var u = new SpeechSynthesisUtterance(text);
+    var v = pickVoice(); if (v) u.voice = v;
     u.lang = SETTINGS.languageCode || "en-US";
     u.rate = SETTINGS.speakingRate || 1;
-    u.pitch = ((SETTINGS.pitch || 0) + 20) / 20; // map -20..20 -> 0..2 roughly
+    u.pitch = Math.max(0, Math.min(2, ((SETTINGS.pitch || 0) + 10) / 10));
     u.onend = done; u.onerror = done;
     speechSynthesis.speak(u);
   }
@@ -261,13 +269,11 @@
     body.querySelectorAll("[data-rj]").forEach(function (b) { b.onclick = function () { reject(b.getAttribute("data-rj")); }; });
   }
   function approve(id) {
-    ensureFunctions().then(function () { return FNS.httpsCallable("assistantApprove")({ pendingId: id }); })
-      .then(function () { refreshPending(); })
+    call("/assistantApprove", { pendingId: id }).then(function () { refreshPending(); })
       .catch(function (e) { alert("Could not approve: " + (e && e.message || e)); });
   }
   function reject(id) {
-    ensureFunctions().then(function () { return FNS.httpsCallable("assistantReject")({ pendingId: id }); })
-      .then(function () { refreshPending(); })
+    call("/assistantReject", { pendingId: id }).then(function () { refreshPending(); })
       .catch(function (e) { alert("Could not reject: " + (e && e.message || e)); });
   }
 
@@ -287,12 +293,11 @@
     FS.collection("assistant_settings").doc(uid).set(SETTINGS, { merge: true }).catch(function () { });
   }
 
-  var VOICES_CACHE = null;
   function renderSettings(body) {
     body.innerHTML =
       '<div class="lbl">Language / accent</div>' +
       '<select id="jvLang">' +
-      ["en-US:English (US)", "en-GB:English (UK)", "en-IN:English (India)", "hi-IN:Hindi"].map(function (x) {
+      ["en-US:English (US)", "en-GB:English (UK)", "en-IN:English (India)", "hi-IN:Hindi", "ur-PK:Urdu"].map(function (x) {
         var kv = x.split(":"); return '<option value="' + kv[0] + '"' + (SETTINGS.languageCode === kv[0] ? " selected" : "") + ">" + kv[1] + "</option>";
       }).join("") +
       "</select>" +
@@ -303,38 +308,44 @@
       '<input id="jvPitch" type="range" min="-10" max="10" step="1" value="' + (SETTINGS.pitch || 0) + '">' +
       '<div class="lbl">Speak answers out loud</div>' +
       '<label style="display:flex;align-items:center;gap:8px"><input id="jvAuto" type="checkbox"' + (SETTINGS.autoSpeak ? " checked" : "") + "> Auto-speak Jarvis replies</label>" +
-      '<div class="jvMsg sys" style="margin-top:14px;text-align:left">Note: natural multi-voice speech needs the YQI Blaze/Gemini backend connected. Roman Urdu text is read using the closest available English or Hindi voice - a dedicated Urdu voice depends on what Google Cloud Text-to-Speech currently offers.</div>';
+      '<div class="jvMsg sys" style="margin-top:14px;text-align:left">Voices listed here are your device\'s own free built-in voices (no card, no cloud cost) - the set varies by phone/browser. Urdu/Hindi voices, where installed, read Roman Urdu text phonetically rather than natively.</div>';
 
-    body.querySelector("#jvLang").onchange = function (e) { SETTINGS.languageCode = e.target.value; SETTINGS.voiceName = ""; saveSettings(); loadVoices(true); };
+    body.querySelector("#jvLang").onchange = function (e) { SETTINGS.languageCode = e.target.value; SETTINGS.voiceURI = ""; saveSettings(); loadVoices(); };
     body.querySelector("#jvRate").oninput = function (e) { SETTINGS.speakingRate = +e.target.value; saveSettings(); };
     body.querySelector("#jvPitch").oninput = function (e) { SETTINGS.pitch = +e.target.value; saveSettings(); };
     body.querySelector("#jvAuto").onchange = function (e) { SETTINGS.autoSpeak = !!e.target.checked; saveSettings(); };
-    loadVoices(false);
+    loadVoices();
   }
 
-  function loadVoices(force) {
-    var el = $("jvVoices"); if (!el) return;
-    if (VOICES_CACHE && !force) return paintVoices(VOICES_CACHE);
-    ensureFunctions().then(function () { return FNS.httpsCallable("assistantListVoices")({ languageCode: SETTINGS.languageCode }); })
-      .then(function (res) { VOICES_CACHE = res.data.voices || []; paintVoices(VOICES_CACHE); })
-      .catch(function (e) { el.innerHTML = '<div class="jvMsg sys">Could not load voices: ' + esc(e && e.message || e) + "</div>"; });
+  function loadVoices() {
+    var el = $("jvVoices"); if (!el || !window.speechSynthesis) { if (el) el.innerHTML = '<div class="jvMsg sys">Voice output isn\'t supported in this browser.</div>'; return; }
+    var voices = speechSynthesis.getVoices();
+    if (!voices.length) {
+      // Chrome loads voices asynchronously the first time.
+      speechSynthesis.onvoiceschanged = function () { loadVoices(); };
+      el.innerHTML = '<div class="jvMsg sys">Loading voices…</div>';
+      return;
+    }
+    paintVoices(voices.filter(function (v) { return v.lang && v.lang.indexOf(SETTINGS.languageCode.split("-")[0]) === 0; }).concat(voices).slice(0, 20));
   }
   function paintVoices(voices) {
     var el = $("jvVoices"); if (!el) return;
-    if (!voices.length) { el.innerHTML = '<div class="jvMsg sys">No voices found for this language.</div>'; return; }
-    el.innerHTML = voices.slice(0, 20).map(function (v) {
-      return '<div class="jvVoiceRow"><span style="flex:1">' + esc(v.name) + " · " + esc(v.ssmlGender || "") + '</span><button data-v="' + esc(v.name) + '">▶ Preview</button><button data-pick="' + esc(v.name) + '" style="background:var(--acc,#3D6B22);color:#fff">' + (SETTINGS.voiceName === v.name ? "Selected" : "Use") + "</button></div>";
+    if (!voices.length) { el.innerHTML = '<div class="jvMsg sys">No voices found on this device.</div>'; return; }
+    var seen = {};
+    voices = voices.filter(function (v) { if (seen[v.voiceURI]) return false; seen[v.voiceURI] = 1; return true; });
+    el.innerHTML = voices.map(function (v) {
+      return '<div class="jvVoiceRow"><span style="flex:1">' + esc(v.name) + " · " + esc(v.lang) + '</span><button data-v="' + esc(v.voiceURI) + '">▶ Preview</button><button data-pick="' + esc(v.voiceURI) + '" style="background:var(--acc,#3D6B22);color:#fff">' + (SETTINGS.voiceURI === v.voiceURI ? "Selected" : "Use") + "</button></div>";
     }).join("");
     el.querySelectorAll("[data-v]").forEach(function (b) {
       b.onclick = function () {
-        var name = b.getAttribute("data-v");
-        ensureFunctions().then(function () { return FNS.httpsCallable("assistantTTS")({ text: "This is a preview of the Jarvis voice for YQI.", voiceName: name, languageCode: SETTINGS.languageCode, speakingRate: SETTINGS.speakingRate, pitch: SETTINGS.pitch }); })
-          .then(function (res) { new Audio("data:audio/mp3;base64," + res.data.audioB64).play(); })
-          .catch(function (e) { alert("Preview failed: " + (e && e.message || e)); });
+        var uri = b.getAttribute("data-v"), v = voices.filter(function (x) { return x.voiceURI === uri; })[0];
+        var u = new SpeechSynthesisUtterance("This is a preview of the Jarvis voice for YQI.");
+        if (v) u.voice = v;
+        speechSynthesis.speak(u);
       };
     });
     el.querySelectorAll("[data-pick]").forEach(function (b) {
-      b.onclick = function () { SETTINGS.voiceName = b.getAttribute("data-pick"); saveSettings(); renderSettings($("jvBody")); };
+      b.onclick = function () { SETTINGS.voiceURI = b.getAttribute("data-pick"); saveSettings(); renderSettings($("jvBody")); };
     });
   }
 
