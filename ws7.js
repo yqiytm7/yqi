@@ -120,11 +120,6 @@ function panelPair(o){
 }
 function mkParts(pp){ return [pp.front, pp.back]; }
 
-function endLine(L, W, hm, from, to, id, name, col, dash){
-  var n = 12, pts = [], k; for(k = 0; k <= n; k++){ var z = from + (to - from) * k / n; pts.push([L / 2, hm, z]); pts[pts.length - 1][2] = z; }
-  return {id: id, name: name, pts: pts, w: 3, col: col || [232, 137, 43], dash: dash};
-}
-
 // ---------- ARTICLES ----------
 var STEP_DEFAULT = {sa: "1 cm (3/8\")", spi: "10–12 SPI", hem: "2.5 cm double fold"};
 function F(sp, k, d){ var v = sp[k]; return v === "" || v == null || isNaN(+v) ? d : +v; }

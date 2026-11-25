@@ -2593,7 +2593,6 @@ function wstCheck(rows, ck){ ck = ck || {}; var cut = {}, w = {}, per = {}, info
   return {fix: fix, chk: chk}; }
 function wstEnc(rows){ var D = [], Dm = {}, flat = []; rows.forEach(function(r){ for(var j = 0; j < WSTK; j++){ var s = r[j]; if(!(s in Dm)){ Dm[s] = D.length; D.push(s); } flat.push(Dm[s]); } flat.push(r[WSTK]); }); return {D: D, flat: flat}; }
 function wstDec(D, flat, K){ K = K || WSTK; var out = [], N = K + 1; for(var i = 0; i + K < flat.length; i += N){ var r = []; for(var j = 0; j < K; j++) r.push(D[flat[i + j]]); while(r.length < WSTK) r.push(""); r.push(flat[i + K]); out.push(r); } return out; }
-function wstDec1(D, flat){ return wstDec(D, flat, 11); }
 async function wstReadMonth(M, mon){ var info = (M.mon || {})[mon]; if(!info) return []; var ds = await Promise.all(Array.from({length: info.c}, function(_, i){ return FS.collection("wst").doc("m" + mon + "_" + i).get(); })), out = [];
   ds.forEach(function(d){ if(d.exists){ var x = d.data(), D = typeof x.D === "string" ? JSON.parse(x.D) : (x.D || []), r = typeof x.r === "string" ? JSON.parse(x.r) : (x.r || []); out = out.concat(wstDec(D, r, M.v === 3 ? 13 : M.v === 2 ? 12 : 11)); } }); return out; }
 // merge: days in the new file replace those days; all other days stay as they were
@@ -4522,7 +4521,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-095220", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-100954", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
