@@ -318,7 +318,7 @@ function bsBuyer(){ var E = typeof isRows === "function" ? isRows("is_ext") : nu
 // Internal vs external comparison for the Bedsure desk, built from the shared Inspection Summary data (is_ext / is_int), same source every other customer uses.
 function bsDefTop(L, n){ var D = {}; L.forEach(function(r){ var dl = r.dlist && r.dlist.length ? r.dlist : String(r.defects || "").split(/[,;]+/).map(function(t){ var m = t.trim().match(/^(.*?)[\s:x×-]*(\d+)$/); return m ? {n: m[1].trim(), q: +m[2]} : {n: t.trim(), q: 1}; }).filter(function(d){ return d.n && !/^(nil|none|no defects?|-)$/i.test(d.n); }); dl.forEach(function(d){ var k = String(d.n).trim(); D[k] = (D[k] || 0) + (+d.q || 1); }); });
   return Object.keys(D).map(function(k){ return [k, D[k]]; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, n || 6); }
-function bsSide(L){ var n = L.length, p = 0, mj = 0, sm = 0; L.forEach(function(r){ if(rkind(r.result) === "pass") p++; mj += +r.major || 0; sm += +r.sample || 0; }); return {n: n, pct: n ? Math.round(1000 * p / n) / 10 : null, oql: sm ? Math.round(1000 * mj / sm) / 10 : null, top: bsDefTop(L, 6)}; }
+function bsSide(L){ var n = L.length, p = 0, mj = 0, sm = 0; L.forEach(function(r){ if(rkind(r.result) === "pass") p++; mj += +r.major || 0; sm += +r.sample || 0; }); return {n: n, pct: n ? Math.round(1000 * p / n) / 10 : null, oql: sm ? Math.round(1000 * mj / sm) / 10 : null, top: bsDefTop(L, 6), rows: L}; }
 function bsIntExt(){ if(typeof isRows !== "function") return null; var E = (isRows("is_ext") || []).filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return false; } }), I = (isRows("is_int") || []).filter(function(x){ try{ return canonC(x.customer) === "Bedsure"; }catch(e){ return false; } }); if(!E.length && !I.length) return null; return {ext: bsSide(E), int: bsSide(I)}; }
 function bsBlob(id){ var w0 = WS; WS = "bedsure"; try{ return blobUrl(id); }catch(e){ return Promise.reject(e); } finally{ WS = w0; } }
 function bsPrefetch(){ if(bsPrefetch.d) return; bsPrefetch.d = 1; setTimeout(function(){ try{ if(!FS || !(CLIST || []).some(function(w){ return w.id === "bedsure"; })){ bsPrefetch.d = 0; return; } if(!window.YQBSD && !BSDP) BSDP = loadJs(bsUrl()); (BSDP || Promise.resolve()).then(function(){ try{ if(window.YQBSD && YQBSD.warm) YQBSD.warm({FS: FS, dec: dec, buyer: bsBuyer, blob: bsBlob}); }catch(e){} }).catch(function(){ BSDP = null; }); }catch(e){} }, 3500); }
@@ -4702,7 +4702,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-152032", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-152527", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
