@@ -3177,7 +3177,7 @@ window.yqWorkload = function(cust){ WLF.c = cust ? canonC(cust) : ""; var t = ne
     var ks = Object.keys(P).sort(), mx = Math.max.apply(null, ks.map(function(k){ return P[k].q; }).concat([1])), CL = Object.keys(C).map(function(k){ return C[k]; }).sort(function(a, b){ return b.q - a.q; });
     var custs = {}; Object.keys(M).forEach(function(k){ var y = M[k] || {}, c = canonC(y.custRaw || y.cust || ""); if(c) custs[c] = 1; }); if(WLF.c) custs[WLF.c] = 1;
     var h = '<div class="c"><div class="sg"><button data-g="w" class="' + (WLF.g === "w" ? "on" : "") + '">Weekly</button><button data-g="m" class="' + (WLF.g === "m" ? "on" : "") + '">Monthly</button>' +
-      [["tm", "This month"], ["nm", "Next month"], ["tw", "This week"], ["n4", "Next 4 weeks"], ["q", "Next 3 months"]].map(function(p){ return '<button data-pr="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '</div><div class="sg"><label class="mu">From <input type="date" data-wf value="' + WLF.f + '"></label><label class="mu">To <input type="date" data-wt value="' + WLF.t + '"></label>' +
+      [["tm", "This month"], ["nm", "Next month"], ["tw", "This week"], ["n4", "Next 4 weeks"], ["q", "Next 3 months"]].map(function(p){ return '<button data-pr="' + p[0] + '">' + p[1] + '</button>'; }).join("") + '<button data-wx style="margin-left:auto">⬇ Export Excel</button></div><div class="sg"><label class="mu">From <input type="date" data-wf value="' + WLF.f + '"></label><label class="mu">To <input type="date" data-wt value="' + WLF.t + '"></label>' +
       '<select data-wc><option value="">All customers</option>' + Object.keys(custs).sort().map(function(c){ return '<option' + (c === WLF.c ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("") + '</select><select data-wm><option value="plan"' + (WLF.m !== "ship" ? " selected" : "") + '>By plan inspection date</option><option value="ship"' + (WLF.m === "ship" ? " selected" : "") + '>By shipping date</option></select></div>' +
       '<div class="k4"><div><small>YTMs</small><b>' + tot.n + '</b></div><div><small>Sets</small><b>' + ycF(tot.q) + '</b></div><div><small>Still to pack</small><b>' + ycF(tot.l) + '</b></div><div><small>Customers</small><b>' + CL.length + '</b></div></div>' +
       (ks.length ? '<div class="bars">' + ks.map(function(k){ return '<div data-pk="' + k + '" title="' + ycF(P[k].q) + ' sets · ' + P[k].n + ' YTMs"><b>' + (P[k].q >= 1000 ? (P[k].q / 1000).toFixed(1) + "k" : P[k].q) + '</b><i style="height:' + Math.max(4, P[k].q / mx * 110) + 'px"></i><small>' + lab(k) + '</small></div>'; }).join("") + '</div>' : '<div class="mu" style="margin-top:12px">Nothing planned in this range.</div>') + '</div>';
@@ -3190,7 +3190,18 @@ window.yqWorkload = function(cust){ WLF.c = cust ? canonC(cust) : ""; var t = ne
     B.querySelector("[data-wc]").onchange = function(){ WLF.c = this.value; WLF.k = ""; draw(); }; B.querySelector("[data-wm]").onchange = function(){ WLF.m = this.value; draw(); };
     B.querySelectorAll("[data-pk]").forEach(function(b){ b.onclick = function(){ WLF.k = WLF.k === b.dataset.pk ? "" : b.dataset.pk; draw(); var c = B.querySelectorAll(".c"); if(c.length) c[c.length - 1].scrollIntoView({behavior: "smooth"}); }; });
     B.querySelectorAll("[data-cu]").forEach(function(r){ r.onclick = function(){ WLF.c = r.dataset.cu; WLF.k = ""; draw(); }; });
-    B.querySelectorAll("[data-y]").forEach(function(r){ r.onclick = function(){ yqYtmCard(r.dataset.y); }; }); };
+    B.querySelectorAll("[data-y]").forEach(function(r){ r.onclick = function(){ yqYtmCard(r.dataset.y); }; });
+    var wx = B.querySelector("[data-wx]"); if(wx) wx.onclick = function(){ wx.disabled = true; wx.textContent = "Preparing…";
+      var byCust = CL.map(function(c){ var o = {Customer: c.c, YTMs: c.n, Sets: c.q, "To pack": c.l}; ks.forEach(function(k){ o[lab(k)] = c.p[k] || 0; }); return o; });
+      var byPeriod = ks.map(function(k){ return {Period: lab(k), YTMs: P[k].n, Sets: P[k].q, "To pack": P[k].l}; });
+      var byYtm = A.slice().sort(function(a, b){ return String(a[dk]).localeCompare(b[dk]); }).map(function(y){ return {YTM: y.ytm || "", Customer: canonC(y.custRaw || y.cust || "") || "—", Program: y.prog || "", Floor: y.unit || "", Sets: +y.qty || 0, Packed: +y.pk || 0, "Still to pack": Math.max(0, (+y.qty || 0) - (+y.pk || 0)), Date: y[dk] || ""}; });
+      needXlsx().then(function(X){ var wb = X.utils.book_new();
+        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byCust.length ? byCust : [{Note: "No rows"}]), "By customer");
+        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byPeriod.length ? byPeriod : [{Note: "No rows"}]), "By period");
+        X.utils.book_append_sheet(wb, X.utils.json_to_sheet(byYtm.length ? byYtm : [{Note: "No rows"}]), "By YTM");
+        var a = X.write(wb, {type: "array", bookType: "xlsx"});
+        saveBlob("YQI Workload " + WLF.f + " to " + WLF.t + ".xlsx", new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      }).catch(function(e){ yqAsk("Could not export: " + (e && e.message || e), {title: "Not downloaded", alert: 1}); }).then(function(){ wx.disabled = false; wx.textContent = "⬇ Export Excel"; }); }; };
   if(window.YQOL || OL) draw(); else olLoad().then(draw); };
 // customer desk: tap a number → the inspections behind it (pass and fail)
 function cdList(title, rows, mode, open){ var F2 = {r: ""}, h0 = function(){ var R = rows.filter(function(r){ return !F2.r || (F2.r === "p" ? ycRes(r.result) === "p" : F2.r === "f" ? ycRes(r.result) === "f" : ycRes(r.result) === "n"); });
@@ -4682,7 +4693,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-113506", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-140117", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
