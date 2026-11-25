@@ -1362,7 +1362,7 @@ function dOrdApply(ids){ var ord = (HDASH.ord || []).filter(function(id){ return
 function dTilesHtml(defs){ var map = {}; defs.forEach(function(t){ map[t.id] = (map[t.id] || "") + t.html; }); var ids = []; defs.forEach(function(t){ if(ids.indexOf(t.id) < 0) ids.push(t.id); }); var ord = dOrdApply(ids); return '<div class="tiles" id="yqTiles">' + ord.map(function(id){ return map[id] || ""; }).join("") + '</div>'; }
 function dHex(h){ h = String(h || "").replace("#", ""); if(h.length === 3) h = h.split("").map(function(c){ return c + c; }).join(""); var n = parseInt(h, 16) || 0; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function dShade(h, f, a){ var c = dHex(h).map(function(v){ return Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f))); }); return a != null ? "rgba(" + c.join(",") + "," + a + ")" : "#" + c.map(function(v){ return ("0" + v.toString(16)).slice(-2); }).join(""); }
-var HFONTS = {sys: ["System (default)", "Manrope,system-ui,sans-serif"], round: ["Rounded", "'Quicksand',Manrope,system-ui,sans-serif"], serif: ["Classic serif", "Georgia,'Times New Roman',serif"], mono: ["Mono", "'JetBrains Mono',Menlo,monospace"]};
+var HFONTS = {sys: ["System (default)", "Manrope,system-ui,sans-serif"], round: ["Rounded", "'Quicksand',Manrope,system-ui,sans-serif"], serif: ["Classic serif", "Georgia,'Times New Roman',serif"], mono: ["Mono", "'IBM Plex Mono',Menlo,monospace"]};
 function applyHomeTheme(){ var th = HDASH.theme || {}, ac = /^#[0-9a-f]{6}$/i.test(th.ac || "") ? th.ac : "", fk = HFONTS[th.font] ? th.font : "sys";
   var st = document.getElementById("yqHomeThemeCss"); if(!st){ st = document.createElement("style"); st.id = "yqHomeThemeCss"; }
   document.head.appendChild(st); // (re-)append last so it always wins same-specificity ties with the base home stylesheet
@@ -4780,7 +4780,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-014131", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-014324", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
