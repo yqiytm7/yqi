@@ -3214,6 +3214,71 @@ function cdEdit(c, r, after){ var old = document.getElementById("yqCdEd"); if(ol
     nr.edited = Date.now(); nr.editedBy = EMAIL || ""; btn.disabled = true; btn.textContent = "Saving…";
     (ISROOT || FS.collection("ws").doc("_all")).collection(c).doc(r._id).set(enc(nr)).then(function(){ Object.keys(nr).forEach(function(k){ r[k] = nr[k]; }); v.remove(); try{ yqToast && yqToast("Inspection saved ✓"); }catch(x){} setTimeout(function(){ if(after) after(); }, 600); }).catch(function(e){ btn.disabled = false; btn.textContent = "✓ Save to server"; v.querySelector("[data-m]").textContent = "Could not save: " + (e && e.message || e); }); };
 }
+// ---------- Specs (every customer): one folder per program, stored under that customer's own ws doc so it never crosses customers ----------
+var CDSP = {}, CDSPU = {}, CDSPK = [];
+function cdWsId(cn){ var w = (CLIST || []).filter(function(x){ return x.name === cn; })[0]; return w ? w.id : null; }
+function cdSpLoad(wid){ var c = CDSP[wid] = CDSP[wid] || {}; if(c.p) return c.p; var ref = FS.collection("ws").doc(wid);
+  c.p = Promise.all([ref.collection("seed").doc("PROGS").get().catch(function(){ return null; }), ref.collection("specs").get().catch(function(){ return null; })]).then(function(a){
+    c.progs = a[0] && a[0].exists ? (dec(a[0].data().v) || []) : [];
+    c.items = a[1] ? a[1].docs.map(function(d){ var x = d.data(); x._id = d.id; return x; }) : [];
+    return c; });
+  return c.p; }
+function cdFtype(f){ var n = String(f.name || "").toLowerCase(), c = String(f.ct || ""); return /pdf/.test(c) || /\.pdf$/.test(n) ? ["PDF", "r"] : /image\//.test(c) || /\.(jpe?g|png|webp|gif)$/.test(n) ? ["IMG", "b"] : /sheet|excel/.test(c) || /\.(xlsx?|csv)$/.test(n) ? ["XLS", "g"] : /word/.test(c) || /\.docx?$/.test(n) ? ["DOC", "b"] : /zip/.test(c) || /\.zip$/.test(n) ? ["ZIP", "a"] : ["FILE", "a"]; }
+function cdSpGroups(wid){ var c = CDSP[wid] || {}, by = {}; (c.items || []).forEach(function(f){ var g = f.prog || "General"; (by[g] = by[g] || []).push(f); });
+  var gs = (c.progs || []).slice(); Object.keys(by).forEach(function(g){ if(gs.indexOf(g) < 0) gs.push(g); });
+  return gs.map(function(g){ var L = (by[g] || []).slice().sort(function(a, b){ return String(b.date).localeCompare(String(a.date)); }); return {g: g, files: L, last: L.reduce(function(m, f){ return f.date > m ? f.date : m; }, "")}; }); }
+function cdBlobUp(wid, b){ if(!(OWNER || ISED)) return Promise.reject(Object.assign(new Error("View only — ask the owner for edit access."), {code: "not_granted"}));
+  var ref = FS.collection("ws").doc(wid);
+  return shrinkImg(b).then(function(x){ return x.arrayBuffer().then(function(buf){
+    if(buf.byteLength > MAXRAW) throw Object.assign(new Error("File is too big (max 9 MB)."), {code: "too_large"});
+    var id = hex32(), s = bytesToB64(new Uint8Array(buf)), n = Math.max(1, Math.ceil(s.length / CHUNK)), ps = [];
+    for(var i = 0; i < n; i++) ps.push(ref.collection("blobc").doc(id + "_" + i).set({d: s.slice(i * CHUNK, (i + 1) * CHUNK)}));
+    var ct = x.type || b.type || "application/octet-stream";
+    return Promise.all(ps).then(function(){ return ref.collection("blob").doc(id).set({ct: ct, size: buf.byteLength, n: n, at: Date.now(), by: EMAIL}); }).then(function(){ return {aid: id, ct: ct}; });
+  }); }); }
+function cdBlobFetch(wid, id){ var ref = FS.collection("ws").doc(wid); return ref.collection("blob").doc(id).get().then(function(d){ if(!d.exists) throw new Error("This file is not in storage any more.");
+  var m = d.data(), ps = []; for(var i = 0; i < (m.n || 1); i++) ps.push(ref.collection("blobc").doc(id + "_" + i).get());
+  return Promise.all(ps).then(function(a){ return new Blob([b64ToBytes(a.map(function(x){ return x.exists ? x.data().d : ""; }).join(""))], {type: m.ct || "application/octet-stream"}); }); }); }
+function cdBlobUrl(wid, id){ var k = wid + "/" + id; return CDSPU[k] ? Promise.resolve(CDSPU[k]) : cdBlobFetch(wid, id).then(function(b){ return CDSPU[k] || (CDSPU[k] = URL.createObjectURL(b)); }); }
+function cdBlobDel(wid, id){ var ref = FS.collection("ws").doc(wid); return ref.collection("blob").doc(id).get().then(function(d){ var n = d.exists ? (d.data().n || 1) : 0, ps = []; for(var i = 0; i < n; i++) ps.push(ref.collection("blobc").doc(id + "_" + i).delete()); return Promise.all(ps).then(function(){ return ref.collection("blob").doc(id).delete(); }); }).catch(function(){}); }
+function cdFileOpen(wid, f){ var t = cdFtype(f), urlP = f.aid ? cdBlobUrl(wid, f.aid) : Promise.resolve(f.url);
+  if(t[0] === "XLS"){ var o = yqSheet("Excel — " + (f.name || "spec"), '<div id="yqSpXl">Opening…</div>', 1);
+    Promise.all([urlP, needXlsx()]).then(function(a){ return fetch(a[0]).then(function(r){ return r.arrayBuffer(); }).then(function(buf){ var X = a[1], wb = X.read(buf, {type: "array", cellDates: true}), names = wb.SheetNames;
+      var show = function(n){ var ws = wb.Sheets[n], html = X.utils.sheet_to_html(ws, {editable: false}), m = /<table[\s\S]*<\/table>/i.exec(html);
+        o.querySelector("#yqSpXl").innerHTML = (names.length > 1 ? '<div class="fl" style="margin-bottom:8px">' + names.map(function(nm){ return '<button class="cb np' + (nm === n ? " on" : "") + '" data-xlsheet="' + esc(nm) + '">' + esc(nm) + '</button>'; }).join("") + '</div>' : '') + '<div style="overflow:auto;max-height:65vh">' + (m ? m[0] : '<div class="em">Empty sheet</div>') + '</div>';
+        o.querySelectorAll("[data-xlsheet]").forEach(function(b){ b.onclick = function(){ show(b.dataset.xlsheet); }; }); };
+      show(names[0]); }); }).catch(function(e){ var el = o.querySelector("#yqSpXl"); if(el) el.textContent = "Could not open: " + (e && e.message || e); });
+    return; }
+  urlP.then(function(u){ window.open(u, "_blank", "noopener"); }).catch(function(e){ yqAsk("Could not open this file: " + (e && e.message || e), {title: "Not available", alert: 1}); }); }
+function cdSpDel(wid, list, after){ list = (list || []).filter(Boolean); if(!list.length) return;
+  var go = function(){ var ref = FS.collection("ws").doc(wid);
+    Promise.all(list.map(function(f){ return ref.collection("specs").doc(f._id).delete().then(function(){ return f.aid ? cdBlobDel(wid, f.aid) : null; }); })).then(function(){
+      var c = CDSP[wid]; if(c && c.items) c.items = c.items.filter(function(it){ return list.indexOf(it) < 0; });
+      toastQ(list.length + " deleted"); if(after) after();
+    }).catch(function(e){ yqAsk("Could not delete: " + (e && e.message || e), {title: "Not deleted", alert: 1}); }); };
+  var msg = "Delete " + (list.length === 1 ? '"' + (list[0].name || "this file") + '"' : list.length + " files") + " permanently? This cannot be undone.";
+  if(window.yqAsk) yqAsk(msg, {title: "Delete?", ok: "Delete permanently", danger: 1}).then(function(ok){ if(ok) go(); }); else if(confirm(msg)) go(); }
+function cdSpUpload(wid, files, g, after){ files = [].slice.call(files || []); if(!files.length || !(OWNER || ISED)) return;
+  var ref = FS.collection("ws").doc(wid), N = files.length, done = 0, fin = 0, bad = [], t0 = Date.now(); toastQ("Uploading 0 / " + N + "…");
+  var one = function(f){ return cdBlobUp(wid, f).then(function(u){ var rec = {prog: g || "General", name: f.name, ct: u.ct || f.type || "", aid: u.aid, date: ymd(new Date(Date.now() + 5 * 3600e3)), ts: t0 + fin, by: EMAIL || ""};
+      return ref.collection("specs").add(rec).then(function(r){ rec._id = r.id; var c = CDSP[wid]; if(c) (c.items = c.items || []).push(rec); done++; }); }).catch(function(e){ bad.push(f.name + " (" + (e && e.message || e) + ")"); }).then(function(){ fin++; toastQ("Uploading " + fin + " / " + N + "…"); }); };
+  var at = 0, worker = function(){ if(at >= N) return Promise.resolve(); var f = files[at++]; return one(f).then(worker); }, W = []; for(var w = 0; w < Math.min(4, N); w++) W.push(worker());
+  Promise.all(W).then(function(){ toastQ(done + " uploaded in " + Math.max(1, Math.round((Date.now() - t0) / 1000)) + "s" + (bad.length ? " · failed: " + bad.join(", ") : "")); if(after) after(); }); }
+var CDSPPROV = {};
+function cdWsEnsure(cn, cb){ var id = cdWsId(cn); if(id) return cb(id); if(!(OWNER || ISED)) return cb(null);
+  var base = slug(cn), tryId = base, n = 1, taken = function(x){ return (CLIST || []).some(function(w){ return w.id === x; }); };
+  while(taken(tryId)) tryId = base + "-" + (++n);
+  FS.collection("ws").doc(tryId).set({name: cn, members: {}, created: Date.now(), by: EMAIL}).then(function(){
+    return FS.collection("ws").doc(tryId).collection("seed").doc("PROGS").set({v: ["General"]}); }).then(function(){
+    CLIST = (CLIST || []).concat([{id: tryId, name: cn, role: OWNER ? "owner" : "editor"}]); cb(tryId);
+  }).catch(function(e){ yqAsk("Could not set up specs for " + cn + ": " + (e && e.message || e), {title: "Not created", alert: 1}); cb(null); }); }
+function cdSpNewFolder(wid, name, after){ name = String(name || "").trim(); if(!name) return;
+  var ref = FS.collection("ws").doc(wid);
+  ref.collection("seed").doc("PROGS").get().then(function(d){ var v = d.exists ? (dec(d.data().v) || []) : [];
+    var hit = v.filter(function(p){ return p.toLowerCase() === name.toLowerCase(); })[0];
+    if(hit){ toastQ('"' + hit + '" already exists'); if(after) after(hit); return; }
+    v.push(name);
+    return ref.collection("seed").doc("PROGS").set({v: v}).then(function(){ var c = CDSP[wid]; if(c) c.progs = v; toastQ('Folder "' + name + '" created'); if(after) after(name); }); }).catch(function(e){ yqAsk("Could not create folder: " + (e && e.message || e), {title: "Not saved", alert: 1}); }); }
 function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); if(old) old.remove();
   if(!$("yqCDcss")){ var st = document.createElement("style"); st.id = "yqCDcss"; st.textContent = CDCSS; document.head.appendChild(st); }
   var O = document.createElement("div"); O.id = "yqCD"; O.style.setProperty("--c", B.c); O.style.setProperty("--c2", B.c2); O.style.setProperty("--a", B.a); if(window.yqDarkNow && yqDarkNow()) O.classList.add("dk");
@@ -3258,7 +3323,7 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     return '<div class="ch"><div class="chp"></div><div class="cw"><div class="ct"><button class="cb" data-x>‹ Back</button><div class="clw"><span class="yq">' + (typeof LOGO_Q !== "undefined" ? LOGO_Q : "YQI") + '</span>' + (lg ? '<i></i><img src="' + esc(lg) + '" alt="">' : '') + '</div><div class="cn"><small>Customer quality desk</small><h1>' + esc(cn) + '</h1><div>' + esc(lab) + ' · ' + (all ? all.length : 0) + ' inspections on record</div></div>' + (ISED ? '<label class="cu">⬆ Upload inspection sheet<input type="file" accept=".xlsx,.xls" data-up></label>' : '') + '<button class="cb np" data-pr>⎙ Print</button></div>' +
       '<div class="cp">' + per.map(function(p){ return '<button data-pf="' + p[2] + '" data-pt="' + p[3] + '" class="' + (on && on[0] === p[0] ? "on" : "") + '">' + p[1] + '</button>'; }).join("") + '<label>From <input type="date" data-rf value="' + esc(r.f) + '"></label><label>To <input type="date" data-rt value="' + esc(r.t) + '"></label></div>' +
       (hero ? '<div class="hb">' + hero + '</div>' : '') +
-      '<div class="tb">' + [["ov", "◉ Overview"], ["in", "☰ Inspections"], ["df", "✱ Defects"], ["or", "▤ Orders"], ["rp", "⎙ Monthly report"]].map(function(t){ return '<button data-t="' + t[0] + '" class="' + (F.tab === t[0] ? "on" : "") + '">' + t[1] + '</button>'; }).join("") + '</div></div></div>'; }
+      '<div class="tb">' + [["ov", "◉ Overview"], ["in", "☰ Inspections"], ["df", "✱ Defects"], ["or", "▤ Orders"], ["sp", "📂 Specs"], ["rp", "⎙ Monthly report"]].map(function(t){ return '<button data-t="' + t[0] + '" class="' + (F.tab === t[0] ? "on" : "") + '">' + t[1] + '</button>'; }).join("") + '</div></div></div>'; }
   function grp(L, key){ var m = {}; L.forEach(function(r){ var k = key(r) || "—", g = m[k] = m[k] || {k: k, n: 0, p: 0, f: 0, s: 0, mj: 0, q: 0}; g.n++; if(isP(r)) g.p++; if(isF(r)) g.f++; g.s += +r.sample || 0; g.mj += +r.major || 0; g.q += +r.qty || 0; }); return Object.keys(m).map(function(k){ return m[k]; }); }
   function gtbl(rows, h){ return '<div class="tw"><table><tr><th>' + h + '</th><th>Insp.</th><th>Pass %</th><th>Qty</th><th>Sample</th><th>Major</th><th>OQL</th></tr>' + rows.map(function(g){ var o = g.s ? Math.round(g.mj / g.s * 10000) / 100 : null; return '<tr><td><b>' + esc(g.k) + '</b></td><td>' + g.n + '</td><td>' + pc(g.p, (g.p + g.f) || g.n) + '%</td><td>' + f0(g.q) + '</td><td>' + f0(g.s) + '</td><td>' + g.mj + '</td><td><b style="color:' + ocol(o) + '">' + (o == null ? "—" : o + "%") + '</b></td></tr>'; }).join("") + '</table></div>'; }
   function defs(L){ var D = {}, C = {}; L.forEach(function(r){ var dl = r.dlist && r.dlist.length ? r.dlist : String(r.defects || "").split(/[,;]+/).map(function(t){ var m = t.trim().match(/^(.*?)[\s:x×-]*(\d+)$/); return m ? {n: m[1].trim(), q: +m[2]} : {n: t.trim(), q: 1}; }).filter(function(d){ return d.n && !/^(nil|none|no defects?|-)$/i.test(d.n); }); dl.forEach(function(d){ if(!d || !d.n) return; var q = +d.q || 1, c = cdCat(d), k = String(d.n).trim(); D[k] = D[k] || {n: k, q: 0, c: c, m: {}}; D[k].q += q; var mo = String(r.date).slice(0, 7); D[k].m[mo] = (D[k].m[mo] || 0) + q; C[c] = (C[c] || 0) + q; }); }); return {D: Object.keys(D).map(function(k){ return D[k]; }).sort(function(a, b){ return b.q - a.q; }), C: C}; }
@@ -3361,6 +3426,28 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
       '<div class="k4"><div class="k"><span>Inspections</span><b>' + a.n + '</b><i>' + (M[pi + 1] ? b.n + ' last month' : '') + '</i></div><div class="k" style="--kc:#1E7B34"><span>Pass %</span><b>' + a.p + '%' + ch(a.p, b.n ? b.p : null) + '</b><i>' + a.nf + ' failed</i></div><div class="k" style="--kc:' + ocol(a.o) + '"><span>OQL</span><b style="color:' + ocol(a.o) + '">' + (a.o == null ? "—" : a.o.toFixed(2) + "%") + ch(a.o, b.n ? b.o : null, 1) + '</b><i>limit 2.5%</i></div><div class="k" style="--kc:var(--a)"><span>Top defect</span><b style="font-size:18px">' + esc(dd.D[0] ? dd.D[0].n : "—") + '</b><i>' + (dd.D[0] ? dd.D[0].q + ' found' : '') + '</i></div></div>' +
       '<div class="g2"><div class="cd" style="margin:0"><h3>Defects by type</h3>' + donut(dd.C) + '</div><div class="cd" style="margin:0"><h3>Top defects</h3>' + dd.D.slice(0, 8).map(function(d){ return '<div class="dr"><span>' + esc(d.n) + '</span><div class="bar"><i style="width:' + (d.q / dd.D[0].q * 100) + '%;background:' + CDCC[d.c] + '"></i></div><b style="text-align:right">' + d.q + '</b></div>'; }).join("") + '</div></div>' +
       '<h3 style="margin:16px 0 8px">Inspections in ' + mN(F.rm) + '</h3><div class="tw"><table>' + TH + L.sort(function(x, y){ return x.date < y.date ? -1 : 1; }).map(row).join("") + '</table></div></div>'; }
+  function spRow(f, wid, g, showG){ var t = cdFtype(f), k = CDSPK.push({f: f, g: g, wid: wid}) - 1;
+    return '<div class="fl" style="justify-content:space-between;border-bottom:1px solid rgba(127,140,160,.15);padding:6px 0;margin:0"><div data-spopen="' + k + '" style="cursor:pointer;flex:1;min-width:0;display:flex;gap:8px;align-items:center"><b style="font-size:10.5px;padding:3px 7px;border-radius:7px;background:rgba(127,140,160,.18);flex:none">' + t[0] + '</b><div style="min-width:0"><b style="word-break:break-word">' + esc(f.name || "Spec file") + '</b><br><small class="mu">' + esc([showG ? g : "", f.date ? dmy(f.date) : ""].filter(Boolean).join(" · ")) + '</small></div></div>' + (OWNER || ISED ? '<button class="cb np" data-spdel1="' + k + '" title="Delete" style="color:#C0392B">🗑</button>' : '') + '</div>'; }
+  function spRows(x, wid, g){ return (OWNER || ISED ? '<div class="fl" style="margin:0 0 6px"><button class="cb np" data-spdels="' + esc(g) + '" style="background:#C0392B;border:0;color:#fff">🗑 Delete all in this folder</button></div>' : '') + x.files.map(function(f){ return spRow(f, wid, g); }).join(""); }
+  function sp(){ var wid = cdWsId(cn); CDSPK = [];
+    if(!wid){
+      if(!(OWNER || ISED)) return '<div class="cd em" style="margin-top:18px">No specs for ' + esc(cn) + ' yet.</div>';
+      if(!CDSPPROV[cn]){ CDSPPROV[cn] = 1; cdWsEnsure(cn, function(){ draw(); }); }
+      return '<div class="cd em" style="margin-top:18px">Setting up specs for ' + esc(cn) + '…</div>';
+    }
+    var c = CDSP[wid]; if(!c || !c.items){ cdSpLoad(wid).then(function(){ draw(); }); return '<div class="cd em" style="margin-top:18px">Loading specs…</div>'; }
+    var sg = F.spg || "", q = (F.sq || "").trim().toLowerCase(), G = cdSpGroups(wid), L = sg ? G.filter(function(x){ return x.g === sg; }) : G, tot = G.reduce(function(s, x){ return s + x.files.length; }, 0), canUp = OWNER || ISED;
+    var h = '<div class="cd" style="margin-top:18px"><h3 style="margin:0 0 10px">📂 Specs · ' + esc(cn) + '</h3><div class="fl">' +
+      '<select data-spg><option value="">All folders (' + G.length + ')</option>' + G.map(function(x){ return '<option value="' + esc(x.g) + '"' + (x.g === sg ? " selected" : "") + '>' + esc(x.g) + ' · ' + x.files.length + '</option>'; }).join("") + '</select>' +
+      '<input class="q" data-sq placeholder="Search a spec file or folder…" value="' + esc(F.sq || "") + '">' +
+      '<span class="mu">' + tot + ' files · ' + G.length + ' folders</span></div>' +
+      (canUp ? '<div class="fl" style="margin-top:8px"><input data-spnm placeholder="New folder name, e.g. Waffle" style="flex:1;min-width:160px"><button class="cb np" data-spnewb>＋ Create folder</button>' + (sg ? '<label class="cb np" style="cursor:pointer">⬆ Add files to ' + esc(sg) + '<input type="file" multiple hidden data-spu></label>' : '') + '</div>' : '') +
+      '</div>';
+    if(q){ var hits = []; G.forEach(function(x){ x.files.forEach(function(f){ if((x.g + " " + (f.name || "")).toLowerCase().indexOf(q) >= 0) hits.push([x.g, f]); }); });
+      return h + '<div class="cd" style="margin-top:12px">' + (hits.length ? hits.map(function(z){ return spRow(z[1], wid, z[0], 1); }).join("") : '<div class="em">Nothing found</div>') + '</div>'; }
+    if(sg){ var x = L[0]; return h + '<div class="cd" style="margin-top:12px">' + (x && x.files.length ? spRows(x, wid, sg) : '<div class="em"><div style="font-size:40px">📁</div><h3>No files in ' + esc(sg) + ' yet</h3>' + (canUp ? '<div class="mu">Upload above — files stay in this folder, apart from every other customer.</div>' : '') + '</div>') + '</div>'; }
+    if(!G.length) return h + '<div class="cd em" style="margin-top:14px"><div style="font-size:40px">📁</div><h3>No spec folders yet</h3><div class="mu">' + (canUp ? 'Create a folder above for each program — files stay apart, by customer and by folder.' : 'Nothing uploaded yet.') + '</div></div>';
+    return h + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:12px">' + G.map(function(x){ return '<div class="cd" data-spf="' + esc(x.g) + '" style="margin:0;cursor:pointer"><div style="font-size:28px;line-height:1">📁</div><div style="margin-top:8px"><b>' + esc(x.g) + '</b><br><span class="mu">' + x.files.length + ' file' + (x.files.length === 1 ? "" : "s") + (x.last ? ' · ' + dmy(x.last) : '') + '</span></div></div>'; }).join("") + '</div>'; }
   function drawer(id){ var r = (recs() || []).filter(function(x){ return x._id === id; })[0]; if(!r) return; var ol = olOf(r), o = r.sample ? Math.round((+r.major || 0) / r.sample * 10000) / 100 : null;
     var d = document.createElement("div"); d.innerHTML = '<div class="dwb"></div><div class="dw"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font:800 18px Manrope">YTM ' + esc(r.ytm || "—") + ' · ' + dmy(r.date) + '</b><button class="cb" data-dx style="background:var(--c);border:0">✕</button></div><div class="mu">' + esc(r.article || "") + ' · PO ' + esc(r.po || "—") + '</div>' +
       '<div class="kv"><div><small>Result</small><b><span class="pl ' + (isF(r) ? "f" : isP(r) ? "p" : "n") + '">' + esc(r.result || "—") + '</span></b></div><div><small>OQL</small><b style="color:' + ocol(o) + '">' + (o == null ? "—" : o + "%") + '</b></div><div><small>Qty</small><b>' + f0(r.qty) + '</b></div><div><small>Sample · major · minor</small><b>' + (r.sample || "—") + ' · ' + (r.major == null ? "—" : r.major) + ' · ' + (r.minor == null ? "—" : r.minor) + '</b></div><div><small>Unit</small><b>' + esc([r.unit, r.bldg].filter(Boolean).join(" · ") || "—") + '</b></div><div><small>Inspector</small><b>' + esc(r.inspector || "—") + '</b></div></div>' +
@@ -3372,7 +3459,7 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     if(!all){ O.innerHTML = head(null, null) + '<div class="cw"><div class="cd em" style="margin-top:18px">Loading ' + esc(cn) + ' inspections…</div></div>'; wire(); setTimeout(function(){ if(document.body.contains(O)) draw(); }, 1200); return; }
     if(!window.YQWST && window.yqWstGet && !O.__w){ O.__w = 1; yqWstGet().then(function(ok){ if(ok && document.body.contains(O)) draw(); }); }
     var L = all.filter(function(r){ return inR(r.date); }).sort(function(a, b){ return (b.date + (b.at || "")).localeCompare(a.date + (a.at || "")); });
-    var sc = O.scrollTop, body = F.tab === "ov" ? ov(L, all) : F.tab === "in" ? ins(L) : F.tab === "df" ? dft(L) : F.tab === "or" ? ord() : rep(all);
+    var sc = O.scrollTop, body = F.tab === "ov" ? ov(L, all) : F.tab === "in" ? ins(L) : F.tab === "df" ? dft(L) : F.tab === "or" ? ord() : F.tab === "sp" ? sp() : rep(all);
     O.innerHTML = head(L, all) + '<div class="cw">' + body + '<div class="ft">Data from the Inspection Summary (WhatsApp import and uploads), the one-liner and the wastage report · Developed by Hamza Khan · YQI</div></div>'; O.scrollTop = sc; wire(); cdAnim(O); }
   function wire(){
     O.querySelectorAll("[data-x]").forEach(function(b){ b.onclick = close; });
@@ -3407,6 +3494,14 @@ function cdView(name){ var cn = canonC(name), B = cdBrand(cn), old = $("yqCD"); 
     var pr = O.querySelector("[data-pr]"); if(pr) pr.onclick = function(){ window.print(); };
     var cv = O.querySelector("[data-csv]"); if(cv) cv.onclick = function(){ var R = (recs() || []).filter(function(r){ return inR(r.date); }), H = ["Date","YTM","PO","Article","Unit","Building","Qty","Sample","Major","Minor","OQL %","Result","Defects"]; var c = [H.join(",")].concat(R.map(function(r){ return [r.date, r.ytm, r.po, r.article, r.unit, r.bldg, r.qty, r.sample, r.major, r.minor, r.sample ? (r.major / r.sample * 100).toFixed(2) : "", r.result, (r.dlist || []).map(function(d){ return d.n + " " + (d.q || 1); }).join("; ") || r.defects].map(function(v){ v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); })).join("\n"); var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + c], {type: "text/csv"})); a.download = cn.replace(/[^A-Za-z0-9]+/g, "_") + "_inspections.csv"; a.click(); };
     var up = O.querySelector("[data-up]"); if(up) up.onchange = function(){ var f = up.files[0]; up.value = ""; if(f) cdUpload(f, cn).then(function(m){ yqAsk(m, {title: "Inspection sheet", alert: 1}); draw(); }); };
+    var spg = O.querySelector("[data-spg]"); if(spg) spg.onchange = function(){ F.spg = spg.value; draw(); };
+    var sq2 = O.querySelector("[data-sq]"); if(sq2){ sq2.oninput = function(){ clearTimeout(sq2.__t); sq2.__t = setTimeout(function(){ F.sq = sq2.value; draw(); var n = O.querySelector("[data-sq]"); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); }; }
+    var spnewb = O.querySelector("[data-spnewb]"); if(spnewb) spnewb.onclick = function(){ var inp = O.querySelector("[data-spnm]"), wid = cdWsId(cn); if(inp && wid && inp.value.trim()) cdSpNewFolder(wid, inp.value, function(g){ F.spg = g; draw(); }); };
+    var spu = O.querySelector("[data-spu]"); if(spu) spu.onchange = function(){ var wid = cdWsId(cn); if(wid && spu.files && spu.files.length) cdSpUpload(wid, spu.files, F.spg || "General", draw); spu.value = ""; };
+    O.querySelectorAll("[data-spf]").forEach(function(b){ b.onclick = function(){ F.spg = b.dataset.spf; draw(); O.scrollTop = 0; }; });
+    O.querySelectorAll("[data-spopen]").forEach(function(b){ b.onclick = function(){ var z = CDSPK[+b.dataset.spopen]; if(z) cdFileOpen(z.wid, z.f); }; });
+    O.querySelectorAll("[data-spdel1]").forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var z = CDSPK[+b.dataset.spdel1]; if(z) cdSpDel(z.wid, [z.f], draw); }; });
+    O.querySelectorAll("[data-spdels]").forEach(function(b){ b.onclick = function(){ var wid = cdWsId(cn), G = cdSpGroups(wid), x = G.filter(function(z){ return z.g === b.dataset.spdels; })[0]; if(x && x.files.length) cdSpDel(wid, x.files, draw); }; });
   }
   draw(); }
 function cdAnim(O){ if(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return; O.querySelectorAll(".hb [data-cnt]").forEach(function(el){ var to = parseFloat(el.dataset.cnt); if(isNaN(to)) return; var dec = +el.dataset.dec || 0, suf = el.dataset.suf || "", t0 = performance.now(); (function f(t){ var k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3), v = to * e; el.textContent = (dec ? v.toFixed(dec) : Math.round(v).toLocaleString("en-US")) + suf; if(k < 1) requestAnimationFrame(f); })(t0); }); }
@@ -4587,7 +4682,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261125-104656", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261125-113506", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
