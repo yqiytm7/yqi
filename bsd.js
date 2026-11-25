@@ -138,9 +138,9 @@ function open(ctx){
   try{ document.body.style.overflow = "hidden"; }catch(e){}
 }
 function close(){ if(O) O.remove(); O = null; try{ document.body.style.overflow = ""; }catch(e){} if(C && C.onClose) C.onClose(); }
-function side(){ var sec = "", h = '<div class="lg">' + (C.LOGO_Q || "<b>YQI</b>") + '<small>QUALITY INTELLIGENCE</small></div><div class="cu"><span class="cl"><img src="' + esc(C.LOGO_BED || "") + '" alt="Bedsure"></span><div><b>Bedsure</b><small>Customer</small></div></div>';
+function side(){ var sec = "", h = '<div class="lg">' + (C.LOGO_Q || "<b>YQI</b>") + '<small>QUALITY INTELLIGENCE</small></div><div class="cu"><span class="cl"><img src="' + esc(C.LOGO_BED || "") + '" alt="Bedsure"></span><div><b>Bedsure</b><small>Customer</small></div></div><button class="tn bk" data-x>‹ YQI Home</button>';
   TABS.forEach(function(t){ if(t[0] === "up" && !C.canEdit) return; if(t[2] !== sec){ sec = t[2]; h += '<div class="sec">' + sec.toUpperCase() + '</div>'; } h += '<button class="tn' + (F.tab === t[0] ? " on" : "") + '" data-t="' + t[0] + '">' + t[1] + '</button>'; });
-  if(C.canEdit) h += '<div class="sec">SETTINGS</div><button class="tn" data-th>🎨 Colours & theme</button>'; h += '<button class="tn bk" data-x>‹ YQI Home</button><div class="ft">Developed by <b>Hamza Khan</b><br>YQI · Yunus Quality Intelligence</div>'; SD.innerHTML = h; }
+  if(C.canEdit) h += '<div class="sec">SETTINGS</div><button class="tn" data-th>🎨 Colours & theme</button>'; h += '<div class="ft">Developed by <b>Hamza Khan</b><br>YQI · Yunus Quality Intelligence</div>'; SD.innerHTML = h; }
 function tbar(){ O.querySelector(".tb").innerHTML = '<button data-x>‹</button>' + MTABS.map(function(t){ return '<button class="' + (F.tab === t[0] ? "on" : "") + '" data-t="' + t[0] + '">' + t[1] + '</button>'; }).join(""); }
 function skel(){ B.innerHTML = head("Overview") + '<div class="k">' + '<div class="sk"></div>'.repeat(5) + '</div><div class="g2"><div class="sk" style="height:300px"></div><div class="sk" style="height:300px"></div></div>'; }
 function head(t, extra){ var M = D.ready ? model() : null, sub = D.ready ? (D.live ? '<b><i></i>Live</b>' : '<b class="c"><i></i>Saved copy</b>') + ' · Bedsure · ' + f0(M.all.length) + ' articles · ' + Object.keys(model().pl).length + ' shipping plans' : '<b><i></i>Live</b> · Bedsure · loading…';
