@@ -3937,7 +3937,7 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
     var tabs = '', body = "";
     try{ body = F.tab === "or" ? tOr(window.yqOlGet ? await window.yqOlGet() : {}) : F.tab === "pr" ? tPr(M) : F.tab === "fa" ? tFa(M) : F.tab === "cm" ? tCm(M) : F.tab === "rv" ? tRv(M, await tgReviews(M.last)) : F.tab === "in" ? tIn(M) : F.tab === "hp" ? tHelp() : F.tab === "lk" ? tLk() : tOv3(M); }catch(e){ console.error(e); body = '<div class="wcard"><h3>Could not draw this tab</h3><div class="ws">' + esa(e.message || e) + '</div></div>'; }
     B.innerHTML = (F.tab === "ov" ? head.replace('<h1>Target Desk</h1>', '<h1 class="tgsm">Overview</h1>') : head.replace('<h1>Target Desk</h1>', '<h1>' + esa((TABS.filter(function(x){ return x[0] === F.tab; })[0] || [0, "Target"])[1]) + '</h1>')) + tabs + '<div class="wtb2">' + body + '</div><div class="wnote">Ratings are out of 5 and come from Target.com. A missing rating is shown as missing, never as 0. Health = 40% Target rating + 40% internal pass % + 20% buyer pass %. Dates use Pakistan time.</div>'; side(); wire(); if(LASTTAB !== F.tab){ LASTTAB = F.tab; tgAnim(B); } else tgAnim(B, 1);
-    try{ if(window.YQE && !TGCEDIT){ var k0 = ckey(canonC("Target")), tx0 = (CDTH[k0] || {}).tx || {}; YQE.apply(B, tx0); } }catch(e){} }
+    try{ if(window.YQE){ if(TGCEDIT) tgApplyEdit(); else { var k0 = ckey(canonC("Target")), tx0 = (CDTH[k0] || {}).tx || {}; YQE.apply(B, tx0); } } }catch(e){} }
   function csv(){ var M = model(), L = pick(M), q = function(v){ v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     var rows = [["Dept", "Program", "DPCI", "TCIN", "Title", "Design", "Article", "Size", "Status", "Channel", "Rating " + (M.last || ""), "Rating " + (M.prev || ""), "Change", "Ratings", "Reviews", "Recommend %", "Price", "Link"]].concat(L.map(function(p){ return [p.c.dept, p.c.prog, p.c.dpci, p.t, p.c.title, p.c.design, p.c.art, p.c.size, p.c.st, p.c.ch, p.a != null ? p.a : (p.e || "No ratings yet"), p.b, p.a != null && p.b != null ? (p.a - p.b).toFixed(2) : "", p.n, p.rc, p.rec, p.price, p.c.link]; }));
     saveBlob("Target-ratings-" + (M.last || tgToday()) + ".csv", new Blob(["﻿" + rows.map(function(r){ return r.map(q).join(","); }).join("\n")], {type: "text/csv"})); }
@@ -3947,10 +3947,8 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
       '<div class="dr"><div><b>Font</b><small class="ws">text style across this desk</small></div><div><select data-tgf' + (canEdit ? '' : ' disabled') + '>' + fontOpts + '</select></div></div>' +
       '<div class="dr"><div><b>Rating trend graph</b><small class="ws">how "Average rating by day" is drawn</small></div><div><select data-tggt' + (canEdit ? '' : ' disabled') + '><option value="line"' + (e.tt === "line" ? ' selected' : '') + '>Line</option><option value="bar"' + (e.tt === "bar" ? ' selected' : '') + '>Bar</option></select></div></div>' +
       (canEdit ? '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="wbt g" data-tgsave' + (hasOv ? '' : ' disabled') + '>✓ Save for everyone</button><button class="wbt" data-tgreset' + (hasOv ? '' : ' disabled') + ' style="color:#C0392B">Reset to default</button><button class="wbt" data-tgedbtn2>✏️ Edit text &amp; layout on this page</button></div>' : '') + '</div>'; }
-  function tgEditOn(){ if(!(OWNER || ISED) || TGCEDIT || !window.YQE) return; TGCEDIT = true;
-    var hb = O.querySelector("[data-tgedbtn]"); if(hb) hb.textContent = "✓ Done editing";
-    var k = ckey(canonC("Target")); TGCTX = Object.assign({}, (CDTH[k] || {}).tx || {});
-    O.classList.add("tgedit");
+  function tgApplyEdit(){ if(!TGCEDIT || !window.YQE) return; var k = ckey(canonC("Target"));
+    try{ YQE.apply(B, TGCTX); }catch(e){}
     B.querySelectorAll("h1,h2,h3,h4,b,span,small,label,td,th,div").forEach(function(el){
       if(el.children.length || el.closest("button,a,select,input,[contenteditable]")) return;
       var t = (el.textContent || "").trim(); if(!t || t.length > 90) return;
@@ -3972,6 +3970,12 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
       bx.addEventListener("mouseleave", function(){ x.style.display = "none"; });
       x.onclick = function(e){ e.preventDefault(); e.stopPropagation(); var id = YQE.pid(bx, B), s = YQE.sig(bx), key = YQE.key("tg" + k, {id: id, k: "h"}); TGCTX[key] = {k: "h", id: id, s: s}; bx.style.display = "none"; };
     });
+  }
+  function tgEditOn(){ if(!(OWNER || ISED) || TGCEDIT || !window.YQE) return; TGCEDIT = true;
+    var hb = O.querySelector("[data-tgedbtn]"); if(hb) hb.textContent = "✓ Done editing";
+    var k = ckey(canonC("Target")); TGCTX = Object.assign({}, (CDTH[k] || {}).tx || {});
+    O.classList.add("tgedit");
+    tgApplyEdit();
     var bar = document.createElement("div"); bar.id = "tgEdBar"; bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#14241a;color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center;z-index:2147483000;font:600 13px Manrope,sans-serif;flex-wrap:wrap";
     bar.innerHTML = '<span style="flex:1;min-width:200px">Editing Target: tap any heading or label to retype it. Hover a card for ✕ to hide it.</span><button data-tgeds style="background:var(--c,#CC0000);border:0;color:#fff;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer">Save</button><button data-tgedc style="background:none;border:1px solid #556;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer">Cancel</button><button data-tgedr style="background:none;border:1px solid #a33;color:#f88;border-radius:8px;padding:8px 14px;cursor:pointer">Reset all</button>';
     document.body.appendChild(bar);
@@ -4844,7 +4848,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-090000", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-090505", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
