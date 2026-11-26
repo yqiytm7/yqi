@@ -3944,7 +3944,7 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
     saveBlob("Target-ratings-" + (M.last || tgToday()) + ".csv", new Blob(["﻿" + rows.map(function(r){ return r.map(q).join(","); }).join("\n")], {type: "text/csv"})); }
   function tLk(){ var k = ckey(canonC("Target")), saved = CDTH[k] || {}, e = tgEffTheme(), hasOv = !!(saved.font || saved.tt || (saved.tx && Object.keys(saved.tx).length)), canEdit = OWNER || ISED;
     var fontOpts = Object.keys(HFONTS).map(function(fk){ return '<option value="' + fk + '"' + (e.font === fk ? ' selected' : '') + '>' + HFONTS[fk][0] + '</option>'; }).join('');
-    return '<div class="wcard wan"><h3>Look & edit of Target<small>Font and graph style for everyone who opens Target\'s desk. Target\'s own red/dark design and the inspection data underneath never change.</small></h3>' +
+    return '<div class="wcard wan wlk"><h3>Look & edit of Target<small>Font and graph style for everyone who opens Target\'s desk. Target\'s own red/dark design and the inspection data underneath never change.</small></h3>' +
       '<div class="dr"><div><b>Font</b><small class="ws">text style across this desk</small></div><div><select data-tgf' + (canEdit ? '' : ' disabled') + '>' + fontOpts + '</select></div></div>' +
       '<div class="dr"><div><b>Rating trend graph</b><small class="ws">how "Average rating by day" is drawn</small></div><div><select data-tggt' + (canEdit ? '' : ' disabled') + '><option value="line"' + (e.tt === "line" ? ' selected' : '') + '>Line</option><option value="bar"' + (e.tt === "bar" ? ' selected' : '') + '>Bar</option></select></div></div>' +
       (canEdit ? '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="wbt g" data-tgsave' + (hasOv ? '' : ' disabled') + '>✓ Save for everyone</button><button class="wbt" data-tgreset' + (hasOv ? '' : ' disabled') + ' style="color:#C0392B">Reset to default</button><button class="wbt" data-tgedbtn2>✏️ Edit text &amp; layout on this page</button></div>' : '') + '</div>'; }
@@ -4849,7 +4849,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-091455", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-091515", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
