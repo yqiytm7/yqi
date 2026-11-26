@@ -48,12 +48,12 @@
 
   // ---------------------------------------------------------------- styles
   var CSS = "" +
-    "#jvOrb{position:fixed;z-index:9000;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#9BE58A,#3D6B22 70%);box-shadow:0 6px 20px rgba(17,30,24,.35);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}" +
+    "#jvOrb{position:fixed;z-index:2147483000;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#9BE58A,#3D6B22 70%);box-shadow:0 6px 20px rgba(17,30,24,.35);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}" +
     "@media(min-width:900px){#jvOrb{bottom:24px;right:28px}}" +
     "#jvOrb .jvBadge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:9px;background:#D64545;color:#fff;font:700 10.5px/18px Manrope,sans-serif;text-align:center;padding:0 4px}" +
     "#jvOrb.listening{animation:jvPulse 1.2s infinite}#jvOrb.speaking{animation:jvPulse .6s infinite}" +
     "@keyframes jvPulse{0%{box-shadow:0 0 0 0 rgba(155,229,138,.6)}100%{box-shadow:0 0 0 18px rgba(155,229,138,0)}}" +
-    "#jvPanel{position:fixed;z-index:9001;right:0;bottom:0;left:0;top:0;background:rgba(10,20,14,.35);display:flex;align-items:flex-end;justify-content:flex-end}" +
+    "#jvPanel{position:fixed;z-index:2147483001;right:0;bottom:0;left:0;top:0;background:rgba(10,20,14,.35);display:flex;align-items:flex-end;justify-content:flex-end}" +
     "#jvPanel .jvBox{background:var(--bg,#F4F2EB);width:100%;max-width:420px;height:100%;max-height:100%;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.2);font-family:Manrope,sans-serif}" +
     "@media(min-width:900px){#jvPanel{align-items:stretch}#jvPanel .jvBox{margin:16px;height:calc(100% - 32px);border-radius:18px;overflow:hidden}}" +
     "#jvPanel .jvHead{background:var(--hero,#0C1A14);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}" +
