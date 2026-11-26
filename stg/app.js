@@ -3911,7 +3911,6 @@ function tgView(){ var old = $("yqWst"); if(old) old.remove(); if(!$("yqWsCss2")
   // ---------- frame ----------
   var TABS = [["ov", "Overview", "Dashboard"], ["pr", "Products", "Dashboard"], ["or", "Orders", "Dashboard"], ["fa", "Families", "Ratings"], ["cm", "Compare", "Ratings"], ["rv", "Reviews", "Ratings"], ["in", "Inspections", "Quality"], ["hp", "How to use", "Quality"], ["lk", "🎨 Look", "Settings"]], LASTTAB = "";
   var TGTD = null, TGCEDIT = false, TGCTX = null;
-  window.__tgDebug = function(){ return JSON.stringify(TGCTX); };
   function tgEffTheme(){ var k = ckey(canonC("Target")), saved = CDTH[k] || {}, eff = TGTD ? Object.assign({}, saved, TGTD) : saved, def = cdBrandDefault("Target"); return {c: eff.c || def.c, c2: eff.c2 || def.c2, a: eff.a || def.a, logo: eff.logo, font: eff.font || "sys", tt: eff.tt || "line"}; }
   function tgApplyVars(){ var e = tgEffTheme(); O.style.setProperty("--c", e.c); O.style.setProperty("--c2", e.c2); O.style.setProperty("--a", e.a); O.style.fontFamily = (HFONTS[e.font] ? HFONTS[e.font][1] : ""); }
   function tgBar(labels, ser, o){ o = o || {}; var full = Math.max(320, Math.min(1240, O.clientWidth || 800) - 36), W = Math.round(o.half ? (full > 1000 ? full / 2 - 50 : full - 40) : full - 40), H = o.h || 230, pl = 40, pr = 14, pt = 20, pb = 30, s = ser[0], vs = (s.v || []).filter(function(v){ return v != null && isFinite(v); });
@@ -4849,7 +4848,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-091515", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-092118", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
