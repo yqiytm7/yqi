@@ -722,8 +722,9 @@ function boot(){
     firebase.initializeApp(FIREBASE_CONFIG);
     AUTH = firebase.auth(); FS = firebase.firestore(); auditHook();
     try{ FS.settings({ignoreUndefinedProperties: true, merge: true}); }catch(e){}
-    // no offline copy of the database: it grew big with photos and made every start slow. Photos are cached separately.
-    if(/[?&]offline=1/.test(location.search) || window.YQNATIVE || lsGet("yqi_off") === "1"){ try{ FS.settings({ignoreUndefinedProperties: true, merge: true, cacheSizeBytes: 60 * 1048576}); }catch(e){} try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
+    // device copy of the database is ON by default (Firebase free plan: re-opening YQI reads only what changed, not every record again).
+    // capped at 60 MB so it cannot grow big with photos; a user can still turn it off in the menu (yqi_off = "0").
+    if(/[?&]offline=1/.test(location.search) || window.YQNATIVE || lsGet("yqi_off") !== "0"){ try{ FS.settings({ignoreUndefinedProperties: true, merge: true, cacheSizeBytes: 60 * 1048576}); }catch(e){} try{ FS.enablePersistence({synchronizeTabs: true}).catch(function(){}); }catch(e){} }
     AUTH.onAuthStateChanged(function(u){
       if(started){ if(!u) location.reload(); return; }
       if(!u){ lsSet("yqi_lc", ""); try{ localStorage.removeItem("yqi_frc"); }catch(e){} return loginScreen(); }
@@ -736,7 +737,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-020451", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-020741", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
