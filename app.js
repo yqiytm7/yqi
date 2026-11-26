@@ -559,7 +559,7 @@ function afterLogin(u){
     var allW = list.filter(function(w){ return w.id === "_all"; })[0];
     if(!allW) allW = {id: "_all", name: "All customers", role: OWNER ? "owner" : "viewer"};
     HASALL = !!allW;
-    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; if(cp && cp.id === "bedsure"){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); setTimeout(function(){ bsOpen(); }, 400); } return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
+    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; if(cp && cp.id === "bedsure"){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); setTimeout(function(){ bsOpen(); }, 400); } if(cp && isTgtWs(cp) && !CUSTMODE){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); ssSet("yqi_tgdesk", "1"); } return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
     if(pick) return openWs(pick);
     if(list.length === 1 && !OWNER) return openWs(list[0]);
     chooseWs(list);
@@ -716,6 +716,10 @@ function hubSub(c, ref, fn, er){
 var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA", atc: "ATC", gli: "GLI", glidreamtex: "Dreamtex", dreamtex: "Dreamtex", jla: "JLA Home", jlahome: "JLA Home", revman: "Revman", revmanindustries: "Revman", revmaninternationalinc: "Revman", holtex: "Holtex", holtexdelafronterasderldecv: "Holtex", tradelinks: "Tradelinks", tradelinksinternational: "Tradelinks", stc: "STC", turnerbianca: "Turner Bianca", jlyhome: "JLA Home", sainsbury: "Sainsbury's", sainsburys: "Sainsbury's", thewarehousegroup: "The Warehouse Group"};
 var CREG = {};
 function ckey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+// Target has no customer workspace page any more: every way in opens the Target Desk (data stays in Firebase as it is)
+function isTgtWs(w){ if(!w) return false; var n = String(w.name || ""); if(w.id === "target" || ckey(n) === "target") return true; try{ return !!n && canonC(n) === "Target"; }catch(e){ return false; } }
+function isTgtId(id){ return !!id && isTgtWs((CLIST || []).filter(function(x){ return x.id === id; })[0] || {id: id}); }
+function tgOpen(){ if(modOff("tgt")) return modMsg("Target Desk"); tgView(); }
 var CCM = {}, CCL = null, CCA = null, CCN = 0;
 function canonC(n){ if(CCL !== CLIST || CCA !== CALIAS || CCN > 20000){ CCM = {}; CCL = CLIST; CCA = CALIAS; CCN = 0; } var key = typeof n === "string" ? n : String(n == null ? "" : n); var hit = CCM[key]; if(hit !== undefined) return hit; var r = canonC0(n); CCM[key] = r; CCN++; return r; }
 function canonC0(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; if(w) return w.name; var t = String(n || "").trim(); if(!k) return t; if(!CREG[k] || (CREG[k] === CREG[k].toLowerCase() && t !== t.toLowerCase())) CREG[k] = t; return CREG[k]; }
@@ -1109,7 +1113,7 @@ function frBuild(){ var F = FRONTEL, card = function(id, c, c2, ic, t, d, ur, vi
   on("yfN6", function(e){ e.stopPropagation(); var old = F.querySelector(".smenu"); if(old){ old.__close(); return; } var m = $("yqSm"); if(!m) return; var par = m.parentNode, r = this.getBoundingClientRect(), mob = innerWidth <= 760; var wr = document.createElement("div"); wr.className = "umenu"; wr.style.display = "contents"; F.appendChild(wr); wr.appendChild(m); m.classList.add("on"); m.style.top = "auto"; m.style.bottom = (mob ? innerHeight - r.top + 8 : 12) + "px"; m.style.right = mob ? "8px" : "auto"; m.style.left = mob ? "auto" : (r.right + 8) + "px";
     var off = function(ev){ if(!m.contains(ev.target)) m.__close(); }; m.__close = function(){ document.removeEventListener("click", off, true); m.classList.remove("on"); m.style.top = m.style.bottom = m.style.left = m.style.right = ""; if(par && document.body.contains(par) && !par.querySelector(".smenu")) par.appendChild(m); else m.remove(); wr.remove(); }; setTimeout(function(){ document.addEventListener("click", off, true); }, 0); });
   on("yfDash", function(){ frShow(false); });
-  on("yfW", function(){ if(HCUST) openCustName(HCUST); else { frShow(false); setTimeout(function(){ var b = $("yqCpk"); if(b) b.click(); }, 60); } });
+  on("yfW", function(){ frShow(false); setTimeout(function(){ var b = $("yqCpk"); if(b) b.click(); }, 60); });
   on("yfDx", function(){ dataExport(); }); on("yfTgd", function(){ if(modOff("tgt")) return modMsg("Target Desk"); tgView(); }); on("yfOl", function(){ if(modOff("ol")) return modMsg("One-liner"); olView(); }); on("yfWs", function(){ if(modOff("wst")) return modMsg("Wastage"); wstView(); }); on("yfWl", function(){ yqWorkload(""); });   on("yfWq", function(){ if(modOff("wq")) return modMsg("Wash QC"); if(window.YQWASH) YQWASH.open(); });   on("yfScan", function(e){ e.stopPropagation(); scanView(); });
   on("yfUp", function(){ if(!(OWNER || ISED)) return yqAsk("Ask the owner for edit access to upload.", {title: "View only", alert: 1}); var f = $("yqUpF"); if(f) f.click(); });
   on("yfPp", function(){ if(OWNER) peopleAdmin(); else if(window.YQCHAT) YQCHAT.openStaff(); });
@@ -1564,8 +1568,9 @@ function monthReport(d, dl){
   (function f(){ var w = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentWindow && fr.contentWindow.__yqDeck && fr.contentDocument.getElementById("nav")) w = fr.contentWindow; }catch(e){} });
     if(w && w.__yqReady && w.__yqReady()){ try{ w.__yqDeck("month", d, dl); }catch(e){} return; } if(++n < 120) setTimeout(f, 250); })();
 }
-function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } if(isTgtId(id)){ tgOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
+  if(isTgtWs({name: n})) return tgOpen();
   var w = CLIST.filter(function(x){ return ckey(x.name) === ckey(n) || x.id === slug(n); })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
   var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ lsSet("yqi_lc", ""); openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });
@@ -4711,7 +4716,7 @@ function goDirect(){
     if(++n < 80) setTimeout(f, 150); })();
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
-function startHome(){ bsPrefetch(); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
+function startHome(){ bsPrefetch(); if(ssGet("yqi_tgdesk")){ ssSet("yqi_tgdesk", ""); setTimeout(function(){ try{ tgOpen(); }catch(e){} }, 400); } try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits(); loadDash();
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening && WS === "_all") showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
@@ -4942,6 +4947,8 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  // Target opens only in the Target Desk (the old Target workspace page is not used any more)
+  if(isTgtWs(w) && !CUSTMODE){ ssSet("yqi_cur", ""); if(WS === "_all" || !HASALL){ if(lsGet(LSK) === w.id) lsSet(LSK, HASALL ? "_all" : ""); WS = WS || "_all"; hideGate(); tgOpen(); return; } lsSet(LSK, "_all"); ssSet("yqi_tgdesk", "1"); showGate('<h1>Opening Target Desk…</h1>'); location.reload(); return; }
   if(w && w.id === "bedsure" && !CUSTMODE){ WS = WS || "_all"; hideGate(); bsOpen({single: !HASALL, role: w.role}); return; }
   if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
@@ -5012,7 +5019,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-014149", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-020451", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
