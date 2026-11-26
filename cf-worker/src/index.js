@@ -57,13 +57,19 @@ async function handleChat(request, env) {
   const email = await authEmail(request, env);
   const fsToken = await getAccessToken(env.GOOGLE_SERVICE_ACCOUNT_JSON);
   const projectId = env.FIREBASE_PROJECT_ID;
-  if (!(await roles.isStaffUser(fsToken, projectId, email))) return json({ error: "Jarvis is available to Yunus Textile staff accounts only." }, 403);
+  let staffOk;
+  try { staffOk = await roles.isStaffUser(fsToken, projectId, email); } catch (e) { staffOk = roles.isCoEmail(email) || email === roles.OWNER_EMAIL; }
+  if (!staffOk) return json({ error: "Jarvis is available to Yunus Textile staff accounts only." }, 403);
 
   const { text, history, scope } = await request.json();
   if (!text || !String(text).trim()) return json({ error: "text is required." }, 400);
 
-  const canWrite = await roles.canAll(fsToken, projectId, email);
-  const context = await rag.buildContext(fsToken, projectId, text, scope || {});
+  let dataDown = false;
+  let canWrite = false;
+  try { canWrite = await roles.canAll(fsToken, projectId, email); } catch (e) { dataDown = true; }
+  let context = "";
+  try { context = await rag.buildContext(fsToken, projectId, text, scope || {}); } catch (e) { dataDown = true; context = "(YQI database is temporarily unavailable - daily free quota reached. Answer from general knowledge, and tell the user live data will be back after the quota resets.)"; }
+  if (dataDown) canWrite = false;
   const contents = [
     ...(Array.isArray(history) ? history.slice(-12) : []),
     { role: "user", parts: [{ text: `Relevant YQI data for this question:\n${context || "(no matching records found)"}\n\nQuestion: ${text}` }] },
@@ -75,7 +81,7 @@ async function handleChat(request, env) {
   let finalText = "";
 
   for (let turn = 0; turn < 4; turn++) {
-    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-2.0-flash", systemInstruction: SYSTEM_PROMPT, contents, tools: availableTools });
+    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.8-flash", systemInstruction: SYSTEM_PROMPT, contents, tools: availableTools });
     const { text: modelText, calls } = gemini.parseResponse(raw);
     if (modelText) finalText = modelText;
     if (!calls.length) break;
@@ -89,14 +95,15 @@ async function handleChat(request, env) {
         pendingActions.push({ id: pendingId, tool: call.name, args: call.args });
         functionResponses.push({ functionResponse: { name: call.name, response: { queued: true, pendingId } } });
       } else {
-        const result = await tools.runReadTool(fsToken, projectId, call.name, call.args);
+        let result;
+        try { result = await tools.runReadTool(fsToken, projectId, call.name, call.args); } catch (e) { result = { error: "Data temporarily unavailable: " + String(e.message || e).slice(0, 120) }; }
         functionResponses.push({ functionResponse: { name: call.name, response: { result } } });
       }
     }
     contents.push({ role: "user", parts: functionResponses });
   }
 
-  await logActivity(fsToken, projectId, { kind: "chat", email, question: text, answer: finalText, usedTools: usedTools.join(","), pendingActions: pendingActions.map((p) => p.id).join(",") });
+  if (!dataDown) await logActivity(fsToken, projectId, { kind: "chat", email, question: text, answer: finalText, usedTools: usedTools.join(","), pendingActions: pendingActions.map((p) => p.id).join(",") });
   return json({ text: finalText || "I couldn't put together an answer from the current data - try rephrasing or narrowing the date range.", pendingActions, usedTools });
 }
 
