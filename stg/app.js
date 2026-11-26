@@ -4145,7 +4145,7 @@ WSTCSS += "#yqWst .dr{display:grid;grid-template-columns:minmax(120px,1.2fr) 2fr
 
 // Wastage PPT: one click, YQI-branded deck for the latest month (native, editable PowerPoint charts)
 function wstPptx(io){ var W = WST; if(!W || !W.rows || !W.rows.length) return Promise.reject(new Error("No wastage data yet."));
-  var lib = window.PptxGenJS ? Promise.resolve() : loadJs("https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js");
+  var lib = window.PptxGenJS ? Promise.resolve() : loadJs("https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js");
   return Promise.all([lib, yqLogo64()]).then(function(a){ var logo = a[1], A = wAgg(W.rows, io), M = A.mons, m = M[M.length - 1], pm = M.length > 1 ? M[M.length - 2] : null;
     var T = A.T[m] || {c: 0, w: 0, rj: 0, lo: 0}, TP = pm ? A.T[pm] : null, wp = wPct(T.w, T.c), wpp = TP ? wPct(TP.w, TP.c) : null, base = Math.max(5000, T.c * 0.002);
     var f0 = function(n){ return Math.round(n || 0).toLocaleString("en-US"); }, p2 = function(v){ return v == null || isNaN(v) ? "–" : v.toFixed(2) + "%"; };
@@ -4949,7 +4949,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-181453", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-181725", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
