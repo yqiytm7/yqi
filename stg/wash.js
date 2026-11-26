@@ -156,7 +156,7 @@
   // ---------- report ----------
   function inRange(at){ var d = new Date(at), s = ymd(d); if(ST.r === "c"){ return (!ST.f || s >= ST.f) && (!ST.t || s <= ST.t); } if(ST.r === "all") return true; var n = +ST.r, z = new Date(); z.setHours(0, 0, 0, 0); return at >= z.getTime() - (n - 1) * 864e5; }
   function report(){ listen(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
-    var o = ov('<div class="wqPg wide"><div class="wqHd big"><button data-x>‹</button><div><b>Wash QC report</b><small>Floor ↔ Washing · gate pass, washing QC, return, acknowledge</small></div><div class="wqHa"><button data-a="chat">💬 Group</button><button data-a="csv">⬇ CSV</button><button data-a="pr">🖨 PDF</button></div></div><div class="wqRp" data-rp><div class="wqEmpty">Loading…</div></div></div>', "wqr");
+    var o = ov('<div class="wqPg wide"><div class="wqHd big"><button data-x>‹</button><div><b>Wash QC report</b><small>Floor ↔ Washing · gate pass, washing QC, return, acknowledge</small></div><div class="wqHa"><button data-a="chat">💬 Group</button><button data-a="csv">⬇ Excel</button><button data-a="pr">🖨 PDF</button></div></div><div class="wqRp" data-rp><div class="wqEmpty">Loading…</div></div></div>', "wqr");
     var B = o.querySelector("[data-rp]");
     o.querySelector('[data-a="chat"]').onclick = function(){ o.__close(); setTimeout(openGroup, 400); };
     o.querySelector('[data-a="csv"]').onclick = function(){ csv(); };
@@ -209,6 +209,7 @@
   }
   function csv(){ var L = filtered(), q = function(v){ v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     var rows = [["Gate pass", "Date", "YTM", "Customer", "Program", "Route", "Sent", "Washing received", "Short to washing", "QC result", "QC checked", "Returned", "Floor received", "Short to floor", "Status", "Issues"]].concat(L.map(function(c){ var g = c.gp; return [g.no, dt(g.at), g.ytm, g.cust, g.prog, g.route, c.sent, c.wr == null ? "" : c.wr, c.s1 || "", c.q ? c.q.res : "", c.q ? c.q.n : "", c.ret || "", c.fr || "", c.s3 || "", (STL[c.st] || [""])[0], c.iss.map(function(i){ return i.by + ": " + i.t; }).join(" | ")]; }));
+    if(window.yqAoaDl) return yqAoaDl("Wash_QC_report_" + ymd(new Date()), rows, "Wash QC report");
     var b = new Blob(["﻿" + rows.map(function(r){ return r.map(q).join(","); }).join("\n")], {type: "text/csv"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "Wash_QC_report_" + ymd(new Date()) + ".csv"; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); }, 500); }
   function viewImg(id){ var o = ov('<div class="wqImgV"><button data-x>✕</button><img alt=""></div>', "wqi"); YQCHAT.fileUrl(id).then(function(u){ o.querySelector("img").src = u; }).catch(function(){ toast("Photo not available"); }); }
   function openGroup(){ if(!window.YQCHAT || !YQCHAT.washOpen) return toast("Chat is loading – try again in a moment"); YQCHAT.washOpen(GID, GNAME, GDESC); }

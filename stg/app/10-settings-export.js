@@ -56,6 +56,12 @@ function yqStyledXlsx(sheets, title){ var ids = []; sheets.forEach(function(sh){
     if(sheets.length === 1 && rc){ var F = (sh[1] || []).filter(function(r){ var k = cls(r[rc]); return k === "bad" || k === "re"; }); if(F.length) add(sh[0] + " · Fails", F, "Only failed / re-inspected rows"); } });
   return wb.xlsx.writeBuffer().then(function(buf){ return new Blob([buf], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}); }); }); }
 window.yqStyledXlsx = yqStyledXlsx;
+// every list download in YQI: one branded Excel (same look as Data & export); plain CSV only if Excel cannot be built
+function yqAoaDl(fname, rows, title){ rows = rows || []; var H = rows[0] || [], body = rows.slice(1).map(function(r){ var o = {}; H.forEach(function(h, i){ var v = r[i]; o[h] = v == null ? "" : v; }); return o; });
+  var csv = function(){ var q = function(v){ v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }; saveBlob(fname + ".csv", new Blob(["\ufeff" + rows.map(function(r){ return r.map(q).join(","); }).join("\n")], {type: "text/csv"})); };
+  try{ window.yqToast && yqToast("Preparing Excel…"); }catch(e){}
+  return yqStyledXlsx([[title || fname, body]], title || fname).then(function(b){ saveBlob(fname + ".xlsx", b); }).catch(function(){ csv(); }); }
+window.yqAoaDl = yqAoaDl;
 window.yqOlGet = function(){ return olLoad(); }; window.yqCanonC = function(n){ try{ return canonC(n); }catch(e){ return String(n || ""); } }; window.yqOlCanUp = function(){ return olCanUp(); }; window.yqOlUp = function(fn){ olUpload(fn); };
 function dxVal(v){ if(v == null) return ""; if(typeof v === "string") return /^data:/.test(v) ? "[image]" : v.length > 30000 ? v.slice(0, 30000) : v; if(typeof v === "number" || typeof v === "boolean") return v; try{ var s = JSON.stringify(v, function(k, x){ return typeof x === "string" && /^data:/.test(x) ? "[image]" : x; }); return s.length > 30000 ? s.slice(0, 30000) : s; }catch(e){ return String(v); } }
 // Clean, human columns for every download: readable headings, no internal codes, JSON turned into text, times into dates, photos kept as pictures.
