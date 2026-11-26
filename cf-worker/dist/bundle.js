@@ -693,7 +693,7 @@ async function handleChat(request, env) {
   let finalText = "";
 
   for (let turn = 0; turn < 4; turn++) {
-    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.8-flash", systemInstruction: SYSTEM_PROMPT, contents, tools: availableTools });
+    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.5-flash-lite", systemInstruction: SYSTEM_PROMPT, contents, tools: availableTools });
     const { text: modelText, calls } = gemini.parseResponse(raw);
     if (modelText) finalText = modelText;
     if (!calls.length) break;
