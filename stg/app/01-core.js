@@ -660,6 +660,8 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  // Target opens only in the Target Desk (the old Target workspace page is not used any more)
+  if(w && w.id === "target" && !CUSTMODE && HASALL){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); ssSet("yqi_tgdesk", "1"); showGate('<h1>Opening Target Desk…</h1>'); location.reload(); return; }
   if(w && w.id === "bedsure" && !CUSTMODE){ WS = WS || "_all"; hideGate(); bsOpen({single: !HASALL, role: w.role}); return; }
   if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
@@ -730,7 +732,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-014149", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-015430", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}

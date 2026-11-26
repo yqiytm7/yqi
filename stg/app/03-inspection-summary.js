@@ -707,7 +707,7 @@ function goDirect(){
     if(++n < 80) setTimeout(f, 150); })();
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
-function startHome(){ bsPrefetch(); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
+function startHome(){ bsPrefetch(); if(ssGet("yqi_tgdesk")){ ssSet("yqi_tgdesk", ""); setTimeout(function(){ try{ tgView(); }catch(e){} }, 400); } try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits(); loadDash();
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening && WS === "_all") showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});

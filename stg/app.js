@@ -1564,7 +1564,7 @@ function monthReport(d, dl){
   (function f(){ var w = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentWindow && fr.contentWindow.__yqDeck && fr.contentDocument.getElementById("nav")) w = fr.contentWindow; }catch(e){} });
     if(w && w.__yqReady && w.__yqReady()){ try{ w.__yqDeck("month", d, dl); }catch(e){} return; } if(++n < 120) setTimeout(f, 250); })();
 }
-function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } if(id === "target" && FS && HASALL){ lsSet(LSK, "_all"); tgView(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
   var w = CLIST.filter(function(x){ return ckey(x.name) === ckey(n) || x.id === slug(n); })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
@@ -4711,7 +4711,7 @@ function goDirect(){
     if(++n < 80) setTimeout(f, 150); })();
   new MutationObserver(function(){ if(armed && document.body.classList.contains("onland")) back(); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
 }
-function startHome(){ bsPrefetch(); try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
+function startHome(){ bsPrefetch(); if(ssGet("yqi_tgdesk")){ ssSet("yqi_tgdesk", ""); setTimeout(function(){ try{ tgView(); }catch(e){} }, 400); } try{ if(HCUST && !YQBACK.has("hc")) YQBACK.onGesture(function(){ if(HOMEON) setHC("", 1); }, "hc"); }catch(e){} if(!HC) hcLoad().then(function(o){ if(o && HOMEON && (!HDATA || !isRows("is_ext"))) renderHome(); });
   try{ var db = makeDbOnce(); ["is_ext", "is_int", "is_extday", "is_hist", "is_actions", "is_imports"].forEach(function(c){ db.collection(c).onSnapshot(function(){}); }); }catch(e){}
   showHome(true); loadEdits(); loadDash();
   new MutationObserver(function(){ var land = document.body.classList.contains("onland"); if(land && !HOMEON && !window.__yqIsOpening && WS === "_all") showHome(true); }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
@@ -4942,6 +4942,8 @@ function installClaude(){
 
 // ---------- open a workspace and start the app ----------
 function openWs(w){
+  // Target opens only in the Target Desk (the old Target workspace page is not used any more)
+  if(w && w.id === "target" && !CUSTMODE && HASALL){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); ssSet("yqi_tgdesk", "1"); showGate('<h1>Opening Target Desk…</h1>'); location.reload(); return; }
   if(w && w.id === "bedsure" && !CUSTMODE){ WS = WS || "_all"; hideGate(); bsOpen({single: !HASALL, role: w.role}); return; }
   if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
@@ -5012,7 +5014,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-014149", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-015430", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}

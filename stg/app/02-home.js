@@ -791,7 +791,7 @@ function monthReport(d, dl){
   (function f(){ var w = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentWindow && fr.contentWindow.__yqDeck && fr.contentDocument.getElementById("nav")) w = fr.contentWindow; }catch(e){} });
     if(w && w.__yqReady && w.__yqReady()){ try{ w.__yqDeck("month", d, dl); }catch(e){} return; } if(++n < 120) setTimeout(f, 250); })();
 }
-function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } if(id === "target" && FS && HASALL){ lsSet(LSK, "_all"); tgView(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
   var w = CLIST.filter(function(x){ return ckey(x.name) === ckey(n) || x.id === slug(n); })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
