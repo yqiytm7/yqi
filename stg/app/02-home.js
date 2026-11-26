@@ -336,7 +336,7 @@ function frBuild(){ var F = FRONTEL, card = function(id, c, c2, ic, t, d, ur, vi
   on("yfN6", function(e){ e.stopPropagation(); var old = F.querySelector(".smenu"); if(old){ old.__close(); return; } var m = $("yqSm"); if(!m) return; var par = m.parentNode, r = this.getBoundingClientRect(), mob = innerWidth <= 760; var wr = document.createElement("div"); wr.className = "umenu"; wr.style.display = "contents"; F.appendChild(wr); wr.appendChild(m); m.classList.add("on"); m.style.top = "auto"; m.style.bottom = (mob ? innerHeight - r.top + 8 : 12) + "px"; m.style.right = mob ? "8px" : "auto"; m.style.left = mob ? "auto" : (r.right + 8) + "px";
     var off = function(ev){ if(!m.contains(ev.target)) m.__close(); }; m.__close = function(){ document.removeEventListener("click", off, true); m.classList.remove("on"); m.style.top = m.style.bottom = m.style.left = m.style.right = ""; if(par && document.body.contains(par) && !par.querySelector(".smenu")) par.appendChild(m); else m.remove(); wr.remove(); }; setTimeout(function(){ document.addEventListener("click", off, true); }, 0); });
   on("yfDash", function(){ frShow(false); });
-  on("yfW", function(){ if(HCUST) openCustName(HCUST); else { frShow(false); setTimeout(function(){ var b = $("yqCpk"); if(b) b.click(); }, 60); } });
+  on("yfW", function(){ frShow(false); setTimeout(function(){ var b = $("yqCpk"); if(b) b.click(); }, 60); });
   on("yfDx", function(){ dataExport(); }); on("yfTgd", function(){ if(modOff("tgt")) return modMsg("Target Desk"); tgView(); }); on("yfOl", function(){ if(modOff("ol")) return modMsg("One-liner"); olView(); }); on("yfWs", function(){ if(modOff("wst")) return modMsg("Wastage"); wstView(); }); on("yfWl", function(){ yqWorkload(""); });   on("yfWq", function(){ if(modOff("wq")) return modMsg("Wash QC"); if(window.YQWASH) YQWASH.open(); });   on("yfScan", function(e){ e.stopPropagation(); scanView(); });
   on("yfUp", function(){ if(!(OWNER || ISED)) return yqAsk("Ask the owner for edit access to upload.", {title: "View only", alert: 1}); var f = $("yqUpF"); if(f) f.click(); });
   on("yfPp", function(){ if(OWNER) peopleAdmin(); else if(window.YQCHAT) YQCHAT.openStaff(); });
@@ -791,8 +791,9 @@ function monthReport(d, dl){
   (function f(){ var w = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentWindow && fr.contentWindow.__yqDeck && fr.contentDocument.getElementById("nav")) w = fr.contentWindow; }catch(e){} });
     if(w && w.__yqReady && w.__yqReady()){ try{ w.__yqDeck("month", d, dl); }catch(e){} return; } if(++n < 120) setTimeout(f, 250); })();
 }
-function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } if(id === "target" && FS && HASALL){ lsSet(LSK, "_all"); tgView(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
+function openCust(id){ if(!id) return; if(id === "bedsure" && FS){ bsOpen(); return; } if(isTgtId(id)){ tgOpen(); return; } lsSet(LSK, id); ssSet("yqi_cur", id); ssSet("yqi_direct", "bed"); showGate('<h1>Opening…</h1>'); location.reload(); }
 function openCustName(n){
+  if(isTgtWs({name: n})) return tgOpen();
   var w = CLIST.filter(function(x){ return ckey(x.name) === ckey(n) || x.id === slug(n); })[0]; if(w) return openCust(w.id);
   if(!OWNER){ HMSG = '<span class="hbad">' + esc(n) + ' has no workspace yet. Ask the owner to add it.</span>'; renderHome(); return; }
   var id = slug(n); FS.collection("ws").doc(id).set({name: n, members: {}, created: Date.now(), by: EMAIL}, {merge: true}).then(function(){ lsSet("yqi_lc", ""); openCust(id); }).catch(function(e){ HMSG = '<span class="hbad">' + esc(errTxt(e)) + '</span>'; renderHome(); });

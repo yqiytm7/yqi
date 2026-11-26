@@ -407,7 +407,7 @@ function afterLogin(u){
     var allW = list.filter(function(w){ return w.id === "_all"; })[0];
     if(!allW) allW = {id: "_all", name: "All customers", role: OWNER ? "owner" : "viewer"};
     HASALL = !!allW;
-    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; if(cp && cp.id === "bedsure"){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); setTimeout(function(){ bsOpen(); }, 400); } return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
+    if(allW){ var cur = ssGet("yqi_cur"), cp = list.filter(function(w){ return w.id === cur && w.id !== "_all"; })[0]; if(cp && cp.id === "bedsure"){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); setTimeout(function(){ bsOpen(); }, 400); } if(cp && isTgtWs(cp) && !CUSTMODE){ cp = null; ssSet("yqi_cur", ""); lsSet(LSK, "_all"); ssSet("yqi_tgdesk", "1"); } return openWs(cp || {id: "_all", name: "All customers", role: allW.role}); }
     if(pick) return openWs(pick);
     if(list.length === 1 && !OWNER) return openWs(list[0]);
     chooseWs(list);
@@ -499,6 +499,10 @@ function hubSub(c, ref, fn, er){
 var CALIAS = {targetstores: "Target", ikeatradinghongkongltd: "IKEA", ikea: "IKEA", carrefourimportsas: "Carrefour", bedsheinternationalco: "Bedsure", bedshe: "Bedsure", schoucompanyas: "Schou JYSK", schoujysk: "Schou JYSK", jysk: "Schou JYSK", walmartstoresinc: "Walmart", sainsburysasialtd: "Sainsbury's", homeretailgroupplc: "Argos", jcpenneypurchasingcorp: "JC Penney", jcpenney: "JC Penney", livecomfortablyllc: "Live Comfortably", atctextiletradingcoltd: "ATC", jayfrancoandsonsinc: "Jay Franco", turnerbianca: "Turner Bianca", eleclerc: "E.Leclerc", leclerc: "E.Leclerc", yunususafmk: "Yunus USA", atc: "ATC", gli: "GLI", glidreamtex: "Dreamtex", dreamtex: "Dreamtex", jla: "JLA Home", jlahome: "JLA Home", revman: "Revman", revmanindustries: "Revman", revmaninternationalinc: "Revman", holtex: "Holtex", holtexdelafronterasderldecv: "Holtex", tradelinks: "Tradelinks", tradelinksinternational: "Tradelinks", stc: "STC", turnerbianca: "Turner Bianca", jlyhome: "JLA Home", sainsbury: "Sainsbury's", sainsburys: "Sainsbury's", thewarehousegroup: "The Warehouse Group"};
 var CREG = {};
 function ckey(n){ return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+// Target has no customer workspace page any more: every way in opens the Target Desk (data stays in Firebase as it is)
+function isTgtWs(w){ if(!w) return false; var n = String(w.name || ""); if(w.id === "target" || ckey(n) === "target") return true; try{ return !!n && canonC(n) === "Target"; }catch(e){ return false; } }
+function isTgtId(id){ return !!id && isTgtWs((CLIST || []).filter(function(x){ return x.id === id; })[0] || {id: id}); }
+function tgOpen(){ if(modOff("tgt")) return modMsg("Target Desk"); tgView(); }
 var CCM = {}, CCL = null, CCA = null, CCN = 0;
 function canonC(n){ if(CCL !== CLIST || CCA !== CALIAS || CCN > 20000){ CCM = {}; CCL = CLIST; CCA = CALIAS; CCN = 0; } var key = typeof n === "string" ? n : String(n == null ? "" : n); var hit = CCM[key]; if(hit !== undefined) return hit; var r = canonC0(n); CCM[key] = r; CCN++; return r; }
 function canonC0(n){ var k = ckey(n); if(CALIAS[k]) return CALIAS[k]; var w = (CLIST || []).filter(function(x){ return ckey(x.name) === k; })[0]; if(w) return w.name; var t = String(n || "").trim(); if(!k) return t; if(!CREG[k] || (CREG[k] === CREG[k].toLowerCase() && t !== t.toLowerCase())) CREG[k] = t; return CREG[k]; }
@@ -661,7 +665,7 @@ function installClaude(){
 // ---------- open a workspace and start the app ----------
 function openWs(w){
   // Target opens only in the Target Desk (the old Target workspace page is not used any more)
-  if(w && w.id === "target" && !CUSTMODE && HASALL){ lsSet(LSK, "_all"); ssSet("yqi_cur", ""); ssSet("yqi_tgdesk", "1"); showGate('<h1>Opening Target Desk…</h1>'); location.reload(); return; }
+  if(isTgtWs(w) && !CUSTMODE){ ssSet("yqi_cur", ""); if(WS === "_all" || !HASALL){ if(lsGet(LSK) === w.id) lsSet(LSK, HASALL ? "_all" : ""); WS = WS || "_all"; hideGate(); tgOpen(); return; } lsSet(LSK, "_all"); ssSet("yqi_tgdesk", "1"); showGate('<h1>Opening Target Desk…</h1>'); location.reload(); return; }
   if(w && w.id === "bedsure" && !CUSTMODE){ WS = WS || "_all"; hideGate(); bsOpen({single: !HASALL, role: w.role}); return; }
   if(w && w.id === "_all" && FS && !lockOk() && HOMEON) return lockMsg("Inspection Summary");
   try{ performance.mark("yq-openws"); }catch(e){}
@@ -732,7 +736,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-015430", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-015534", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
