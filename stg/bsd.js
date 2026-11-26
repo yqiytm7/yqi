@@ -470,6 +470,7 @@ function plDetectCols(H){
   Cc.ihq = ih.length ? ih[0] : -1; Cc.ihc = ih.length > 1 ? ih[1] : -1;
   Cc.pct = H.findIndex(function(h){ return h && (/^%$/.test(h) || /percent/.test(h)); });
   Cc.res = H.findIndex(function(h){ return h && /result|status/.test(h) && !/re.?insp/.test(h); });
+  if(Cc.d >= 0 && /result|status|remark/.test(H[Cc.d] || "")) Cc.d = H.findIndex(function(h){ return h && /date/.test(h) && !/result|status/.test(h); });
   Cc.ri = H.findIndex(function(h, i){ return h && i !== Cc.res && i !== Cc.d && /re.?insp|^ri$|2nd insp/.test(h); });
   return Cc; }
 function readPl(file){ UP2 = {name: file.name}; draw(1);
@@ -486,7 +487,7 @@ function readPl(file){ UP2 = {name: file.name}; draw(1);
       var o = {cols: Horig.map(function(_, ci){ var v = r[ci]; return v == null ? "" : v; }), p: String(g(r, "p")).trim(), n: String(g(r, "n")).trim(), c: String(g(r, "c")).trim(), z: String(g(r, "z")).trim(), l: String(g(r, "l")).trim(), q: q, carton: carton, ihq: ihq, ihc: ihc, d: fmtDate(g(r, "d")), m: String(g(r, "m")).trim(), ms: String(g(r, "ms")).trim(), res: "", reason: "", pushed: false};
       var rv = Cc.res >= 0 ? String(r[Cc.res] == null ? "" : r[Cc.res]).trim() : "", riv = Cc.ri >= 0 ? String(r[Cc.ri] == null ? "" : r[Cc.ri]).trim() : "", kk = kind(rv);
       if(riv && !/^(no|n|-|–|—|0|na|n\/a|nil|none)$/i.test(riv)){ var k2 = kind(riv); kk = k2 === "fl" || k2 === "rej" || k2 === "ni" ? k2 : "re"; }
-      var rmap = {p1: "p", re: "r", fl: "f", rej: "x"}; if(rmap[kk]){ o.res = rmap[kk]; if(kk !== "p1") o.reason = o.m || (kk === "re" ? "Re-inspection (from packing list)" : "From packing list"); }
+      var rmap = {p1: "p", re: "r", fl: "f", rej: "x"}; if(rmap[kk]){ o.res = rmap[kk]; if(kk !== "p1") o.reason = (rv && !kind(rv) ? rv : "") || o.m || (kk === "re" ? "Re-inspection (from packing list)" : "From packing list"); }
       var base = [o.p, o.ms, o.l, o.z, o.c, o.n].join("|"), dup = (seenK[base] = (seenK[base] || 0) + 1); o.k = dup > 1 ? base + "§" + dup : base; return o; }).filter(function(o){ return o.p; });
     if(!out.length){ UP2.err = "No packing-list rows found in “" + best.sn + "”."; draw(1); return; }
     UP2.rows = out; UP2.sheet = best.sn; UP2.headers = Horig; UP2.colIdx = Cc; draw(1); saveDraft(); }); }).catch(function(e){ UP2.err = "Could not read the file: " + (e && e.message || e); draw(1); }); }
