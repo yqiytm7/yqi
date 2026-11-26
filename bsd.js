@@ -20,7 +20,7 @@ function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(
 function f0(n){ return (Math.round(+n || 0)).toLocaleString("en-US"); }
 function fk(n){ n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "K" : n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n); }
 function pc(a, b){ return b ? Math.round(1000 * a / b) / 10 : 0; }
-function kind(s){ return /fail|await/i.test(s) ? "fl" : /1st/i.test(s) ? "p1" : /re-insp/i.test(s) ? "re" : /reject/i.test(s) ? "rej" : /not insp/i.test(s) ? "ni" : ""; }
+function kind(s){ return /fail|await/i.test(s) ? "fl" : /reject/i.test(s) ? "rej" : /not\s*(insp|offer)/i.test(s) ? "ni" : /re[\s\-_.]*insp|\b(ri|2nd|second)\b/i.test(s) ? "re" : /1st|first|\bpass/i.test(s) ? "p1" : ""; }
 function progOf(n){ n = String(n || "").toLowerCase(); var k = PK.filter(function(k){ return n.indexOf(k[0]) >= 0; })[0]; return k ? k[1] : "Other Prints"; }
 function rp(r){ return r.pg || progOf(r.n); }
 function classify(r){ var t = ((r.m || "") + " " + (r.r || "")).toLowerCase(), o = []; DEF.forEach(function(d){ var hit = d[0] === "Other stain" ? /stain|satin/.test(t.replace(/oil stains?/g, "")) : d[1].test(t); if(hit) o.push(d[0]); }); return o; }
@@ -469,6 +469,8 @@ function plDetectCols(H){
   var ih = []; H.forEach(function(h, i){ if(h && /in.?hand/.test(h)) ih.push(i); });
   Cc.ihq = ih.length ? ih[0] : -1; Cc.ihc = ih.length > 1 ? ih[1] : -1;
   Cc.pct = H.findIndex(function(h){ return h && (/^%$/.test(h) || /percent/.test(h)); });
+  Cc.res = H.findIndex(function(h){ return h && /result|status/.test(h) && !/re.?insp/.test(h); });
+  Cc.ri = H.findIndex(function(h, i){ return h && i !== Cc.res && i !== Cc.d && /re.?insp|^ri$|2nd insp/.test(h); });
   return Cc; }
 function readPl(file){ UP2 = {name: file.name}; draw(1);
   C.xlsx().then(function(XLSX){ return file.arrayBuffer().then(function(buf){ var wb = XLSX.read(buf, {type: "array", cellDates: true});
@@ -482,6 +484,9 @@ function readPl(file){ UP2 = {name: file.name}; draw(1);
       var ihq = Cc.ihq >= 0 && r[Cc.ihq] !== "" ? (+String(r[Cc.ihq]).replace(/,/g, "") || 0) : q;
       var ihc = Cc.ihc >= 0 && r[Cc.ihc] !== "" ? (+String(r[Cc.ihc]).replace(/,/g, "") || 0) : carton;
       var o = {cols: Horig.map(function(_, ci){ var v = r[ci]; return v == null ? "" : v; }), p: String(g(r, "p")).trim(), n: String(g(r, "n")).trim(), c: String(g(r, "c")).trim(), z: String(g(r, "z")).trim(), l: String(g(r, "l")).trim(), q: q, carton: carton, ihq: ihq, ihc: ihc, d: fmtDate(g(r, "d")), m: String(g(r, "m")).trim(), ms: String(g(r, "ms")).trim(), res: "", reason: "", pushed: false};
+      var rv = Cc.res >= 0 ? String(r[Cc.res] == null ? "" : r[Cc.res]).trim() : "", riv = Cc.ri >= 0 ? String(r[Cc.ri] == null ? "" : r[Cc.ri]).trim() : "", kk = kind(rv);
+      if(riv && !/^(no|n|-|–|—|0|na|n\/a|nil|none)$/i.test(riv)){ var k2 = kind(riv); kk = k2 === "fl" || k2 === "rej" || k2 === "ni" ? k2 : "re"; }
+      var rmap = {p1: "p", re: "r", fl: "f", rej: "x"}; if(rmap[kk]){ o.res = rmap[kk]; if(kk !== "p1") o.reason = o.m || (kk === "re" ? "Re-inspection (from packing list)" : "From packing list"); }
       var base = [o.p, o.ms, o.l, o.z, o.c, o.n].join("|"), dup = (seenK[base] = (seenK[base] || 0) + 1); o.k = dup > 1 ? base + "§" + dup : base; return o; }).filter(function(o){ return o.p; });
     if(!out.length){ UP2.err = "No packing-list rows found in “" + best.sn + "”."; draw(1); return; }
     UP2.rows = out; UP2.sheet = best.sn; UP2.headers = Horig; UP2.colIdx = Cc; draw(1); saveDraft(); }); }).catch(function(e){ UP2.err = "Could not read the file: " + (e && e.message || e); draw(1); }); }
