@@ -155,6 +155,42 @@ function xlBook(X, sheets, title){
   sheets.forEach(function(sh){ X.utils.book_append_sheet(wb, X.utils.json_to_sheet(sh[1].length ? sh[1] : [{Note: "No rows"}]), sh[0].slice(0, 31)); });
   return wb;
 }
+var EXJSURL = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js", EXJP = null, YQLOGO64 = null;
+function needExcelJs(){ if(window.ExcelJS) return Promise.resolve(window.ExcelJS); if(!EXJP) EXJP = loadJs(EXJSURL).then(function(){ return window.ExcelJS; }, function(e){ EXJP = null; throw e; }); return EXJP; }
+function yqLogo64(){ if(YQLOGO64 !== null) return Promise.resolve(YQLOGO64); return fetch("icon-192.png").then(function(r){ if(!r.ok) throw 0; return r.blob(); }).then(function(b){ return new Promise(function(res){ var f = new FileReader(); f.onload = function(){ res(String(f.result)); }; f.onerror = function(){ res(""); }; f.readAsDataURL(b); }); }).then(function(d){ YQLOGO64 = d || ""; return YQLOGO64; }, function(){ YQLOGO64 = ""; return ""; }); }
+// Branded YQI Excel: logo header, summary line, green headers, wrapped text, coloured results, frozen header, filter, footer.
+function yqStyledXlsx(sheets, title){ return Promise.all([needExcelJs(), yqLogo64()]).then(function(a){ var EX = a[0], logo = a[1], wb = new EX.Workbook(), now = new Date();
+  wb.creator = "YQI · Hamza Khan"; wb.created = now;
+  var when = dmy(ymd(now)) + " " + ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2), who = ""; try{ who = EMAIL || ""; }catch(e){}
+  var lid = logo ? wb.addImage({base64: logo, extension: "png"}) : null, used = {};
+  var G = "FF0E240E", G2 = "FF3B6D11", LG = "FFEAF3DE", ZB = "FFF7FBF2", TX = "FF173404", LIME = "FFB6F36A", RD = "FFA32D2D", RDB = "FFFCEBEB", OK = "FF27500A", AM = "FF854F0B", AMB = "FFFAEEDA";
+  var fill = function(c){ return {type: "pattern", pattern: "solid", fgColor: {argb: c}}; };
+  var cls = function(v){ v = String(v == null ? "" : v); if(!v) return ""; if(/re[\s\-_.]*insp|re-?pass/i.test(v) && !/fail|reject/i.test(v)) return "re"; if(/fail|reject|overdue|abort|await|late/i.test(v)) return "bad"; if(/pass|clean|closed|done|^ok$|approved/i.test(v)) return "ok"; return ""; };
+  var sname = function(n){ var b = String(n || "Sheet").replace(/[\\\/\?\*\[\]:]/g, " ").slice(0, 28) || "Sheet", x = b, i = 2; while(used[x.toLowerCase()]) x = b.slice(0, 25) + " " + (i++); used[x.toLowerCase()] = 1; return x; };
+  function add(name, rows, sub){ rows = rows || []; var cols = []; rows.forEach(function(r){ Object.keys(r || {}).forEach(function(k){ if(cols.indexOf(k) < 0) cols.push(k); }); });
+    cols = cols.filter(function(c){ return rows.some(function(r){ return r[c] !== "" && r[c] != null; }); }); if(!cols.length){ cols = ["Note"]; rows = [{Note: "No rows"}]; }
+    var nC = Math.max(cols.length, 6), ws = wb.addWorksheet(sname(name), {views: [{state: "frozen", ySplit: 5, showGridLines: false}], properties: {tabColor: {argb: G2}}, pageSetup: {orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0}});
+    var rc = cols.filter(function(c){ return /^(result|status|res)$/i.test(c); })[0] || cols.filter(function(c){ return /result|status/i.test(c); })[0];
+    var r1 = ws.getRow(1); r1.height = 36; ws.mergeCells(1, 1, 1, nC); var c1 = ws.getCell(1, 1); c1.value = "YQI  ·  " + name; c1.font = {name: "Calibri", size: 16, bold: true, color: {argb: "FFFFFFFF"}}; c1.alignment = {vertical: "middle", indent: lid != null ? 5 : 1}; c1.fill = fill(G);
+    ws.mergeCells(2, 1, 2, nC); var c2 = ws.getCell(2, 1); c2.value = "Yunus Quality Intelligence · Yunus Textile Mills" + (sub ? "  ·  " + sub : "") + "  ·  Downloaded " + when + (who ? " by " + who : ""); c2.font = {size: 10, color: {argb: LIME}}; c2.alignment = {vertical: "middle", indent: lid != null ? 5 : 1}; c2.fill = fill(G); ws.getRow(2).height = 18;
+    if(lid != null) ws.addImage(lid, {tl: {col: 0.15, row: 0.2}, ext: {width: 44, height: 44}, editAs: "oneCell"});
+    var kp = "Rows  " + rows.length.toLocaleString("en-US"); if(rc){ var po = 0, fa = 0, re = 0; rows.forEach(function(r){ var k = cls(r[rc]); if(k === "ok") po++; else if(k === "bad") fa++; else if(k === "re") re++; }); var dn = po + fa + re; kp += "     ·     Passed  " + po.toLocaleString("en-US") + (re ? "     ·     Re-inspection  " + re : "") + "     ·     Failed  " + fa.toLocaleString("en-US") + (dn ? "     ·     Pass  " + (Math.round(po / dn * 1000) / 10) + "%" : ""); }
+    ws.mergeCells(3, 1, 3, nC); var c3 = ws.getCell(3, 1); c3.value = kp; c3.font = {size: 12, bold: true, color: {argb: TX}}; c3.fill = fill(LG); c3.alignment = {vertical: "middle", indent: 1}; ws.getRow(3).height = 24; c3.border = {bottom: {style: "medium", color: {argb: G2}}};
+    ws.getRow(4).height = 6;
+    var hr = ws.getRow(5); hr.height = 30; cols.forEach(function(c, i){ var h = hr.getCell(i + 1); h.value = c; h.font = {bold: true, color: {argb: "FFFFFFFF"}, size: 11}; h.fill = fill(G2); h.alignment = {vertical: "middle", wrapText: true}; h.border = {right: {style: "thin", color: {argb: "FF639922"}}}; });
+    var W = cols.map(function(c){ return Math.max(8, Math.min(18, String(c).length + 2)); });
+    rows.forEach(function(r, ri){ var row = ws.getRow(6 + ri), z = ri % 2 === 1; cols.forEach(function(c, i){ var v = r[c], cell = row.getCell(i + 1); if(v != null && v !== "") cell.value = v; var L = String(v == null ? "" : v).length; if(L + 2 > W[i]) W[i] = Math.min(55, L + 2);
+        cell.alignment = {vertical: "top", wrapText: true}; cell.font = {size: 10.5, color: {argb: TX}}; cell.border = {bottom: {style: "thin", color: {argb: LG}}}; if(z) cell.fill = fill(ZB);
+        if(c === rc || /result|status/i.test(c)){ var k = cls(v); if(k === "bad"){ cell.fill = fill(RDB); cell.font = {size: 10.5, bold: true, color: {argb: RD}}; } else if(k === "ok"){ cell.fill = fill(LG); cell.font = {size: 10.5, bold: true, color: {argb: OK}}; } else if(k === "re"){ cell.fill = fill(AMB); cell.font = {size: 10.5, bold: true, color: {argb: AM}}; } } }); });
+    W.forEach(function(w, i){ ws.getColumn(i + 1).width = w; }); for(var e = cols.length; e < nC; e++) ws.getColumn(e + 1).width = 12;
+    ws.autoFilter = {from: {row: 5, column: 1}, to: {row: 5, column: cols.length}};
+    var fr = 6 + rows.length + 1; ws.mergeCells(fr, 1, fr, nC); var cf = ws.getCell(fr, 1); cf.value = "YQI · Yunus Quality Intelligence · Developed by Hamza Khan"; cf.font = {italic: true, size: 9, color: {argb: G2}}; cf.fill = fill(ZB);
+    return rc; }
+  if(sheets.length > 1) add("Contents", sheets.map(function(sh){ return {Sheet: sh[0], Rows: (sh[1] || []).length}; }), title || "");
+  sheets.forEach(function(sh){ var rc = add(sh[0], sh[1], title && sheets.length === 1 ? "" : "");
+    if(sheets.length === 1 && rc){ var F = (sh[1] || []).filter(function(r){ var k = cls(r[rc]); return k === "bad" || k === "re"; }); if(F.length) add(sh[0] + " · Fails", F, "Only failed / re-inspected rows"); } });
+  return wb.xlsx.writeBuffer().then(function(buf){ return new Blob([buf], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}); }); }); }
+window.yqStyledXlsx = yqStyledXlsx;
 window.yqOlGet = function(){ return olLoad(); }; window.yqCanonC = function(n){ try{ return canonC(n); }catch(e){ return String(n || ""); } }; window.yqOlCanUp = function(){ return olCanUp(); }; window.yqOlUp = function(fn){ olUpload(fn); };
 function dxVal(v){ if(v == null) return ""; if(typeof v === "string") return /^data:/.test(v) ? "[image]" : v.length > 30000 ? v.slice(0, 30000) : v; if(typeof v === "number" || typeof v === "boolean") return v; try{ var s = JSON.stringify(v, function(k, x){ return typeof x === "string" && /^data:/.test(x) ? "[image]" : x; }); return s.length > 30000 ? s.slice(0, 30000) : s; }catch(e){ return String(v); } }
 function dxFlat(L, cols){ L = L || []; if(cols) return L.map(function(x){ var o = {}; cols.forEach(function(c){ o[c[0]] = dxVal(typeof c[1] === "function" ? c[1](x) : x[c[1]]); }); return o; });
@@ -179,7 +215,7 @@ function dataExport(){ if(!lockOk()) return lockMsg("Data & export"); var o = yq
     S.map(function(s){ return '<div class="dxR"><div><b>' + esc(s.n) + '</b><small><em data-c="' + s.id + '">…</em>' + esc(s.d) + '</small></div><button data-x="' + s.id + '">Excel</button><button data-v="' + s.id + '">CSV</button></div>'; }).join("");
   var get = function(s){ return cache[s.id] ? Promise.resolve(cache[s.id]) : s.get().then(function(r){ cache[s.id] = r || []; return cache[s.id]; }); };
   S.forEach(function(s){ get(s).then(function(r){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = r.length.toLocaleString("en-US") + " rows · "; }).catch(function(){ var e = b.querySelector('[data-c="' + s.id + '"]'); if(e) e.textContent = "not loaded · "; }); });
-  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return needXlsx().then(function(X){ var wb = xlBook(X, sheets, name.replace(/\.xlsx$/i, "")); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); };
+  var stamp = function(){ return ymd(new Date()); }, xl = function(sheets, name){ return yqStyledXlsx(sheets, name.replace(/\.xlsx$/i, "")).then(function(bl){ saveBlob(name, bl); }, function(e){ try{ console.warn("styled xlsx failed", e); }catch(x){} return needXlsx().then(function(X){ var wb = xlBook(X, sheets, name.replace(/\.xlsx$/i, "")); var a = X.write(wb, {type: "array", bookType: "xlsx"}); saveBlob(name, new Blob([a], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); }); }); };
   var err = function(e){ yqAsk(errTxt(e), {title: "Could not download", alert: 1}); };
   b.querySelectorAll("[data-x]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.x; })[0]; x.disabled = true; get(s).then(function(r){ return xl([[s.n, r]], "YQI " + s.n + " " + stamp() + ".xlsx"); }).catch(err).then(function(){ x.disabled = false; }); }; });
   b.querySelectorAll("[data-v]").forEach(function(x){ x.onclick = function(){ var s = S.filter(function(y){ return y.id === x.dataset.v; })[0]; get(s).then(function(r){ saveBlob("YQI " + s.n + " " + stamp() + ".csv", new Blob([dxCsv(r)], {type: "text/csv"})); }).catch(err); }; });
@@ -4850,7 +4886,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261126-125059", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261126-165002", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
