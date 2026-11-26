@@ -20,7 +20,8 @@
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 
   function ready() {
-    return !!(window.FS && window.EMAIL && window.firebase && typeof window.YQLV !== "undefined");
+    var u = window.firebase && firebase.auth && firebase.auth().currentUser;
+    return !!(u && u.email && typeof window.YQLV !== "undefined");
   }
   function staffOK() {
     var lv = window.YQLV || "";
@@ -237,7 +238,7 @@
   // ---------------------------------------------------------------- alerts
   function watchAlerts() {
     try {
-      FS.collection("assistant_alerts").orderBy("at", "desc").limit(30).onSnapshot(function (snap) {
+      firebase.firestore().collection("assistant_alerts").orderBy("at", "desc").limit(30).onSnapshot(function (snap) {
         ALERTS = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         renderOrb(); if (OPEN && TAB === "alerts") render();
       });
@@ -253,7 +254,7 @@
   // ---------------------------------------------------------------- approvals
   function refreshPending() {
     try {
-      FS.collection("assistant_pending").where("status", "==", "pending").limit(25).get().then(function (snap) {
+      firebase.firestore().collection("assistant_pending").where("status", "==", "pending").limit(25).get().then(function (snap) {
         PENDING = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         renderOrb(); if (OPEN && TAB === "approve") render();
       });
@@ -283,14 +284,14 @@
     SETTINGS_LOADED = true;
     var uid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
     if (!uid) return;
-    FS.collection("assistant_settings").doc(uid).get().then(function (d) {
+    firebase.firestore().collection("assistant_settings").doc(uid).get().then(function (d) {
       if (d.exists) SETTINGS = Object.assign(SETTINGS, d.data());
     }).catch(function () { });
   }
   function saveSettings() {
     var uid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
     if (!uid) return;
-    FS.collection("assistant_settings").doc(uid).set(SETTINGS, { merge: true }).catch(function () { });
+    firebase.firestore().collection("assistant_settings").doc(uid).set(SETTINGS, { merge: true }).catch(function () { });
   }
 
   function renderSettings(body) {
