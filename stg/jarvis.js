@@ -302,23 +302,11 @@
   // ------------------------------------------------- welcome
   function greet() {
     if (GREETED) return; GREETED = true;
-    var hr = +new Date().toLocaleString("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", hour12: false });
-    var part = hr < 12 ? "Subah bakhair" : hr < 17 ? "" : "Shaam bakhair", fn = firstName();
-    var line = "Assalam-o-Alaikum" + (fn ? " " + fn + " bhai" : "") + "!" + (part ? " " + part + "." : "");
-    Promise.resolve(window.YQJDATA ? window.YQJDATA() : null).catch(function () { return null; }).then(function (D) {
-      var extra = "";
-      try {
-        var today = new Date().toISOString().slice(0, 10), m0 = today.slice(0, 7);
-        var E = ((D && D.ext) || []).filter(function (r) { return String(r.date || "").slice(0, 7) === m0; }), F = E.filter(function (r) { return !/^pass/i.test(String(r.result || "")); });
-        var C = ((D && D.capa) || []).filter(function (x) { return x.status !== "Closed" && x.due && x.due < today; });
-        if (E.length) extra = " Is mahine " + E.length + " external inspections hui hain, " + (F.length ? F.length + " fail." : "koi fail nahi.");
-        if (C.length) extra += " " + C.length + " CAPA overdue hai.";
-      } catch (e) { }
-      var t = line + extra + " Bataiye, kya karna hai?";
-      HISTORY.push({ role: "model", text: t }); render();
-      if (SETTINGS.autoSpeak) speak(t);
-    });
+    var fn = firstName(), t = "Assalam-o-Alaikum" + (fn ? " " + fn + " bhai" : "") + "! Bataiye, kya karna hai?";
+    HISTORY.push({ role: "model", text: t }); render();
+    if (SETTINGS.autoSpeak) speak(t);
   }
+
 
   // ------------------------------------------------- live data context (from this browser)
   // The app already has inspections / CAPA in memory, so Jarvis answers from that and the
