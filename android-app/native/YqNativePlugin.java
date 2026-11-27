@@ -318,4 +318,86 @@ public class YqNativePlugin extends Plugin {
         getActivity().runOnUiThread(() -> { try { if (sr != null) sr.stopListening(); } catch (Exception e) { } });
         call.resolve();
     }
+
+    // ---------- "Jarvis" wake word: keeps listening while YQI is open on screen ----------
+    private SpeechRecognizer wsr;
+    private boolean wakeOn = false, wakePaused = false;
+    private String wakeLang = "ur-PK";
+    private int savedMusic = -1, savedNotif = -1, savedSys = -1;
+    private static final java.util.regex.Pattern WAKE = java.util.regex.Pattern.compile("(jarvis|jarwis|jervis|jaarvis|\u062c\u0627\u0631\u0648\u0633|\u062c\u0627\u0631\u0648\u06cc\u0633|\u062c\u0627\u0631\u0648\u0632|\u062c\u0627\u0631\u0633|\u091c\u093e\u0930\u094d\u0935\u093f\u0938)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private void hush(boolean on) {
+        try {
+            AudioManager a = am();
+            if (on) {
+                if (savedMusic < 0) { savedMusic = a.getStreamVolume(AudioManager.STREAM_MUSIC); savedNotif = a.getStreamVolume(AudioManager.STREAM_NOTIFICATION); savedSys = a.getStreamVolume(AudioManager.STREAM_SYSTEM); }
+                a.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0); a.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0); a.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0);
+            } else if (savedMusic >= 0) {
+                a.setStreamVolume(AudioManager.STREAM_MUSIC, savedMusic, 0); a.setStreamVolume(AudioManager.STREAM_NOTIFICATION, savedNotif, 0); a.setStreamVolume(AudioManager.STREAM_SYSTEM, savedSys, 0);
+                savedMusic = -1;
+            }
+        } catch (Exception e) { }
+    }
+    @PluginMethod
+    public void wakeStart(PluginCall call) {
+        wakeLang = call.getString("lang", "ur-PK");
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissionForAlias("mic", call, "wakeCb"); return; }
+        wakeOn = true; wakeLoop(); call.resolve();
+    }
+    @PermissionCallback
+    private void wakeCb(PluginCall call) {
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { wakeOn = true; wakeLoop(); }
+        call.resolve();
+    }
+    @PluginMethod
+    public void wakeStop(PluginCall call) { wakeOn = false; wakeKill(); call.resolve(); }
+    private void wakeKill() {
+        getActivity().runOnUiThread(() -> { try { if (wsr != null) { wsr.cancel(); wsr.destroy(); } } catch (Exception e) { } wsr = null; hush(false); });
+    }
+    private void wakeLoop() {
+        if (!wakeOn || wakePaused) return;
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (!wakeOn || wakePaused) return;
+                if (!SpeechRecognizer.isRecognitionAvailable(getContext())) return;
+                if (wsr == null) {
+                    wsr = SpeechRecognizer.createSpeechRecognizer(getContext());
+                    wsr.setRecognitionListener(new RecognitionListener() {
+                        private boolean check(Bundle b, boolean fin) {
+                            ArrayList<String> r = b == null ? null : b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                            if (r == null || r.isEmpty()) return false;
+                            String t = r.get(0); java.util.regex.Matcher m = WAKE.matcher(t);
+                            if (!m.find()) return false;
+                            if (!fin) return true; // wait for the full sentence
+                            String rest = t.substring(m.end()).replaceAll("^[\\s,.!?\u060c]+", "").trim();
+                            wakeOn = false; hush(false);
+                            JSObject o = new JSObject(); o.put("said", rest); notifyListeners("wake", o);
+                            try { wsr.destroy(); } catch (Exception e) { } wsr = null;
+                            return true;
+                        }
+                        @Override public void onResults(Bundle b) { if (!check(b, true)) again(); }
+                        @Override public void onPartialResults(Bundle b) { check(b, false); }
+                        @Override public void onError(int e) { again(); }
+                        @Override public void onReadyForSpeech(Bundle p) { }
+                        @Override public void onBeginningOfSpeech() { }
+                        @Override public void onRmsChanged(float v) { }
+                        @Override public void onBufferReceived(byte[] b) { }
+                        @Override public void onEndOfSpeech() { }
+                        @Override public void onEvent(int t, Bundle b) { }
+                        private void again() { if (wakeOn && !wakePaused) getBridge().getWebView().postDelayed(() -> wakeLoop(), 250); }
+                    });
+                }
+                Intent it = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                it.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                it.putExtra(RecognizerIntent.EXTRA_LANGUAGE, wakeLang);
+                it.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                it.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                hush(true);
+                wsr.startListening(it);
+            } catch (Exception ex) { }
+        });
+    }
+    @Override
+    protected void handleOnPause() { super.handleOnPause(); wakePaused = true; if (wsr != null) wakeKill(); }
+    @Override
+    protected void handleOnResume() { super.handleOnResume(); wakePaused = false; if (wakeOn) wakeLoop(); }
 }

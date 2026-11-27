@@ -557,7 +557,7 @@
       '<input id="jvPitch" type="range" min="-10" max="10" step="1" value="' + (SETTINGS.pitch || 0) + '">' +
       '<div class="lbl">Speak answers out loud</div>' +
       '<label style="display:flex;align-items:center;gap:8px"><input id="jvAuto" type="checkbox"' + (SETTINGS.autoSpeak ? " checked" : "") + "> Auto-speak Jarvis replies</label>" +
-      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWake" type="checkbox"' + (wakeAllowed() ? " checked" : "") + '> "Jarvis" bolne se jaage (app khuli ho, computer/Chrome)</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWake" type="checkbox"' + (wakeAllowed() ? " checked" : "") + '> "Jarvis" bolne se jaage (jab YQI khuli ho)</label>' +
       '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvNat" type="checkbox"' + (SETTINGS.natural !== false ? " checked" : "") + "> Natural voice (online, Urdu)</label>" +
       '<div class="lbl">Jarvis ki awaaz</div><select id="jvGv">' + [["Charon", "Charon — mard, saaf"], ["Orus", "Orus — mard, gehri"], ["Puck", "Puck — mard, josh wali"], ["Fenrir", "Fenrir — mard, tez"], ["Kore", "Kore — aurat, saaf"], ["Aoede", "Aoede — aurat, naram"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.gvoice || "Charon") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
       '<div class="lbl">Mic ki zabaan</div><select id="jvMl">' + [["ur-PK", "Urdu"], ["en-US", "English"], ["hi-IN", "Hindi"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.micLang || "ur-PK") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
@@ -609,10 +609,19 @@
   // ---------------------------------------------------------------- "Hey Jarvis" wake word (browser only, while YQI is open)
   var WAKE = null, WAKE_WANT = false;
   var WAKE_RE = /(jarvis|jarwis|jervis|jarvi|jaarvis|جاروس|جارویس|جاروِس|جاروز|جاروِز|جارس|جاروی)/i;
-  function wakeAllowed() { return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && !window.YQNATIVE && (window.SpeechRecognition || window.webkitSpeechRecognition); }
-  function wakeStop() { WAKE_WANT = false; try { if (WAKE) WAKE.abort(); } catch (e) { } WAKE = null; }
+  var NWAKE = false, NWAKE_L = null;
+  function wakeAllowed() { return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && (window.YQNATIVE ? !!window.YQNATIVE.wakeStart : !!(window.SpeechRecognition || window.webkitSpeechRecognition)); }
+  function wakeStop() { WAKE_WANT = false; try { if (WAKE) WAKE.abort(); } catch (e) { } WAKE = null; if (NWAKE) { NWAKE = false; try { YQNATIVE.wakeStop(); } catch (e) { } } }
   function wakeStart() {
-    if (!wakeAllowed() || VOPEN || OPEN || LISTENING || SPEAKING || document.hidden || WAKE) return;
+    if (!wakeAllowed() || VOPEN || OPEN || LISTENING || SPEAKING || BUSY || document.hidden || WAKE || NWAKE) return;
+    if (window.YQNATIVE) {
+      try {
+        if (!NWAKE_L) NWAKE_L = YQNATIVE.addListener("wake", function (d) { NWAKE = false; var said = String(d && d.said || "").trim(); openVoice({ wake: true, said: said.split(/\s+/).length >= 2 ? said : "" }); });
+        NWAKE = true;
+        YQNATIVE.wakeStart({ lang: SETTINGS.micLang || "ur-PK" }).catch(function () { NWAKE = false; SETTINGS.wake = false; });
+      } catch (e) { NWAKE = false; }
+      return;
+    }
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     try {
       var w = new SR(); WAKE = w; WAKE_WANT = true;
