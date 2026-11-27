@@ -126,7 +126,7 @@ async function open(host, buf, X, o){ o = o || {}; css();
   var names = wb.SheetNames.filter(function(n){ var ws = wb.Sheets[n]; return !(wb.Workbook && wb.Workbook.Sheets && (wb.Workbook.Sheets.filter(function(s){ return s.name === n; })[0] || {}).Hidden); });
   if(!names.length) names = wb.SheetNames.slice();
   var z = +(o.zoom || (window.innerWidth < 700 ? 0.7 : 1));
-  host.innerHTML = '<div class="yqxlbar">' + (names.length > 1 ? names.map(function(n){ return '<button data-xs="' + esc(n) + '">' + esc(n) + '</button>'; }).join("") : "") + '<span style="flex:1"></span><button data-xz="-">−</button><span class="xzv" style="font-size:12px;min-width:38px;text-align:center"></span><button data-xz="+">+</button><button data-xz="f">Fit</button></div><div class="yqxlsc"><div class="xin"></div></div>';
+  host.innerHTML = '<div class="yqxlbar">' + (names.length > 1 ? names.map(function(n){ return '<button data-xs="' + esc(n) + '">' + esc(n) + '</button>'; }).join("") : "") + '<span style="flex:1"></span><button data-xz="-">&minus;</button><span class="xzv" style="font-size:12px;min-width:38px;text-align:center"></span><button data-xz="+">+</button><button data-xz="f">Fit</button></div><div class="yqxlsc"><div class="xin"></div></div>';
   var sc = host.querySelector(".yqxlsc"), inn = host.querySelector(".xin"), cur = names[0], wrap = null;
   var setZ = function(v){ z = Math.max(0.25, Math.min(3, v)); if(wrap) wrap.style.zoom = z; host.querySelector(".xzv").textContent = Math.round(z * 100) + "%"; };
   var show = function(n){ cur = n; var ws = wb.Sheets[n]; if(!ws){ inn.innerHTML = '<div style="padding:20px;color:#666">Empty sheet</div>'; return; }
