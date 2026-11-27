@@ -302,3 +302,4 @@ window.YQJDATA = function(){ var g = function(c){ try{ return isRows(c) || []; }
 window.YQMENAME = function(){ try{ return frName(); }catch(e){ return ""; } };
 window.yqSaveBlob = saveBlob;
 window.yqScanCode = yqScanCode; window.yqLoadJs = loadJs;
+window.yqIsAuth = function(){ try{ return !!(OWNER || ISED || LV === "auth"); }catch(e){ return false; } };
