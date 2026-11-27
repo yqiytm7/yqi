@@ -58,7 +58,7 @@
       else h += '<div class="wqWait">Waiting for ' + whoAck + '</div><div class="wqBtns"><button data-wq="ack" data-id="' + m.id + '" data-ok="1">✓ Acknowledge</button><button data-wq="ack" data-id="' + m.id + '" data-ok="0" class="bad">⚠ Issue</button></div>'; }
     else h += '<div class="wqBtns"><button data-wq="rep" class="gh">📊 Open report</button></div>';
     return h + '</div>'; }
-  function strip(){ return '<div class="wqStrip"><button data-wq="lot">🚚 New gate pass</button><button data-wq="board">📋 Lots · my work</button><button data-wq="rep">📊 Report</button></div>'; }
+  function strip(){ return '<div class="wqStrip"><button data-wq="lot">🚚 New gate pass</button><button data-wq="board">📋 My work</button></div>'; }
 
   // ---------- overlay ----------
   function ov(html, tag){ var o = document.createElement("div"); o.className = "wqOv"; o.innerHTML = html; document.body.appendChild(o); document.body.style.overflow = "hidden";
@@ -157,7 +157,7 @@
 
   // ---------- report ----------
   function inRange(at){ var d = new Date(at), s = ymd(d); if(ST.r === "c"){ return (!ST.f || s >= ST.f) && (!ST.t || s <= ST.t); } if(ST.r === "all") return true; var n = +ST.r, z = new Date(); z.setHours(0, 0, 0, 0); return at >= z.getTime() - (n - 1) * 864e5; }
-  function report(){ listen(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
+  function report(){ listen(); listenG(); if(!isMgr()) return noJob(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
     var o = ov('<div class="wqPg wide"><div class="wqHd big"><button data-x>‹</button><div><b>Wash QC report</b><small>Floor ↔ Washing · gate pass, washing QC, return, acknowledge</small></div><div class="wqHa"><button data-a="chat">💬 Group</button><button data-a="csv">⬇ Excel</button><button data-a="pr">🖨 PDF</button></div></div><div class="wqRp" data-rp><div class="wqEmpty">Loading…</div></div></div>', "wqr");
     var B = o.querySelector("[data-rp]");
     o.querySelector('[data-a="chat"]').onclick = function(){ o.__close(); setTimeout(openGroup, 400); };
@@ -221,7 +221,7 @@
     tx.value = TPL[b.getAttribute("data-yqf")].replace("{d}", pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + d.getFullYear()); tx.dispatchEvent(new Event("input")); tx.focus(); var k = tx.value.indexOf("Customer: ") + 10; try{ tx.setSelectionRange(k, k); }catch(x){} }, true);
   // clicks from chat cards / strip (chat stops bubbling, so listen in capture)
   document.addEventListener("click", function(e){ var b = e.target.closest && e.target.closest("[data-wq]"); if(!b) return; e.stopPropagation(); e.preventDefault(); var a = b.getAttribute("data-wq");
-    if(a === "new"){ listen(); return newForm(b.getAttribute("data-t")); } if(a === "rep" || a === "board") return board(); if(a === "lot"){ listen(); return lotForm(); }
+    if(a === "new"){ listen(); return newForm(b.getAttribute("data-t")); } if(a === "rep" || a === "board") return board(); if(a === "lot"){ listen(); listenG(); return setTimeout(function(){ canStep("gp") ? lotForm() : noJob("gp"); }, GD.members ? 0 : 700); }
     if(a === "step" || a === "lotv"){ listen(); var lid = b.getAttribute("data-id"), lk = b.getAttribute("data-k"); var g0 = function(){ if(a === "step") stepForm(lid, lk); else lotView(lid); }; if(!ROWS.some(function(x){ return x.id === lid; })) setTimeout(g0, 700); else g0(); return; } if(a === "img") return viewImg(b.getAttribute("data-f"));
     if(a === "ack"){ listen(); var id = b.getAttribute("data-id"), ok = b.getAttribute("data-ok") === "1"; var go0 = function(){ ackForm(id, ok); }; if(!ROWS.some(function(x){ return x.id === id; })) setTimeout(go0, 700); else go0(); } }, true);
 
@@ -273,6 +273,9 @@
   ".wlHd{display:flex;align-items:center;gap:12px;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));background:#10260F;color:#fff;flex:none}.wlHd>button[data-x]{width:38px;height:38px;border-radius:11px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;flex:none;cursor:pointer}.wlHt{flex:1;min-width:0}.wlHt b{display:block;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wlHt small{display:block;font-size:11.5px;color:#a9c79a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wlNew{flex:none;border:0;border-radius:11px;padding:10px 14px;font:800 13px Manrope,Inter,sans-serif;background:#A6DD5E;color:#10260F;cursor:pointer}",
   ".wlHero{display:flex;gap:10px;margin:2px 0 10px}.wlHero .sc{flex:none;width:118px;border:0;border-radius:16px;background:linear-gradient(145deg,#10260F,#2C5A1E);color:#fff;padding:12px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:0 6px 18px rgba(16,38,15,.25)}.wlHero .sc i{font-style:normal;font-size:26px}.wlHero .sc b{font:800 14px Manrope,Inter,sans-serif}.wlHero .sc small{font-size:10.5px;color:#bfe0a4}.wlHero .mn{flex:1;display:flex;flex-direction:column;gap:6px;background:#fff;border:1.5px solid #dfe8d6;border-radius:16px;padding:10px}.wlHero .mn input{border:1.5px solid #cfdcc4;border-radius:11px;padding:11px 12px;font:700 15px Inter,sans-serif;width:100%;box-sizing:border-box;text-transform:uppercase}.wlHero .mn button{border:0;border-radius:11px;padding:10px;background:#A6DD5E;color:#10260F;font:800 14px Manrope,Inter,sans-serif;cursor:pointer}",
   ".wlAuto{background:#eef6e6;border:1px dashed #9cc47a;border-radius:10px;padding:9px 12px;font-size:12.5px;color:#2C5A1E;margin:6px 0 10px}",
+  ".wlAs{display:flex;align-items:center;gap:10px;justify-content:space-between;border:1.5px solid #dfe8d6;background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px}.wlAs b{display:block;font-size:14px}.wlAs small{font-size:11px;color:#6b7a63}.wlAs select{max-width:52%;border:1.5px solid #cfdcc4;border-radius:10px;padding:8px;font:600 13px Inter,sans-serif}",
+  ".wlSec{display:flex;align-items:center;gap:8px;font:800 14px Manrope,Inter,sans-serif;color:#10260F;margin:14px 2px 8px}.wlSec b{background:#10260F;color:#fff;border-radius:999px;padding:1px 9px;font-size:11px}.wlSec button{margin-left:auto;border:1px solid #cfdcc4;background:#fff;border-radius:999px;padding:6px 12px;font:700 12px Inter,sans-serif;cursor:pointer}",
+  ".wlTd{display:flex;align-items:center;gap:10px;justify-content:space-between;background:#fff;border:1.5px solid #dfe8d6;border-radius:12px;padding:10px 12px;margin-bottom:8px}.wlTd b{display:block;font-size:13.5px}.wlTd small{font-size:11.5px;color:#66735f}.wlTd button{flex:none;border:0;border-radius:10px;background:#A6DD5E;color:#10260F;font:800 13px Manrope,Inter,sans-serif;padding:9px 12px;cursor:pointer}",
   ".wlMe{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:#4a5a44;margin:0 2px 10px}.wlMe button{border:1px solid #cfdcc4;background:#fff;border-radius:999px;padding:5px 12px;font:700 12px Inter,sans-serif;cursor:pointer}",
   ".wlPick{display:block;width:100%;text-align:left;border:1.5px solid #dfe8d6;background:#fff;border-radius:14px;padding:13px 14px;margin-bottom:9px;cursor:pointer}.wlPick.on{border-color:#2C5A1E;background:#f1f8e9}.wlPick b{display:block;font:800 15px Manrope,Inter,sans-serif;color:#10260F}.wlPick small{display:block;font-size:12px;color:#66735f;margin:3px 0}",
   ".wlKb{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:start}.wlCol{background:#eef3ea;border-radius:14px;padding:8px;min-height:120px}.wlColH{font:800 13px Manrope,Inter,sans-serif;color:#10260F;padding:4px 4px 8px;position:relative}.wlColH b{position:absolute;right:4px;top:3px;background:#10260F;color:#fff;border-radius:999px;padding:1px 8px;font-size:11px}.wlColH small{display:block;font:600 10.5px Inter,sans-serif;color:#6b7a63}.wlColE{text-align:center;color:#9aa792;padding:16px 0}.wlKc{display:block;width:100%;text-align:left;border:0;border-left:4px solid #A6DD5E;background:#fff;border-radius:10px;padding:9px 10px;margin-bottom:7px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06)}.wlKc.hold{border-left-color:#E5484D}.wlKc b{display:block;font:800 13.5px Manrope,Inter,sans-serif}.wlKc span,.wlKc small,.wlKc i{display:block;font-size:11.5px;color:#55624e;font-style:normal}.wlKc em{display:block;font-style:normal;font-size:11px;color:#B4232A;margin-top:3px}.wlKc i{color:#8b9784;margin-top:3px}",
@@ -389,7 +392,7 @@
   // ---------- steps 2–6 on the same record ----------
   function lotHead(L){ return '<div class="wlSum"><div><b>YTM ' + esc(L.ytm) + '</b> · ' + esc(L.cust || "") + '</div><small>' + esc([L.no, L.design, L.size, L.art, L.floor].filter(Boolean).join(" · ")) + '</small>' +
     '<table class="wlT"><tr><th>Part</th><th>Size</th><th>Qty</th></tr>' + (L.items || []).map(function(p){ return '<tr><td>' + esc(p.p) + '</td><td>' + dimTxt(p) + '</td><td>' + n0(p.q) + '</td></tr>'; }).join("") + '<tr class="t"><td>Total</td><td>' + (L.bun ? n0(L.bun) + " bundles" + (L.pb ? " × " + n0(L.pb) : "") : "") + '</td><td>' + n0(L.tot) + '</td></tr></table>' + dots(L) + '</div>'; }
-  function stepForm(id, k){ var L = lotById(id); if(!L) return toast("Lot not found — try again shortly");
+  function stepForm(id, k){ var L = lotById(id); if(!L) return toast("Lot not found — try again shortly"); if(!canStep(k)) return noJob(k);
     var S = SK[k]; if(!S) return; if(L.s && L.s[k]) return toast(S.t + " already done — " + first(L.s[k].by));
     if(L.nx && L.nx.k !== k) return toast("Pehle: " + L.nx.t);
     var s = L.s || {}, b = "";
@@ -448,7 +451,7 @@
     if(d.after){ var sh = d.after.map(function(p, i){ var o0 = (L.items || []).filter(function(q){ return q.l || q.w; })[i] || {}; return p.l || p.w ? p.p + " " + (p.l && o0.l ? r1((o0.l - p.l) / o0.l * 100) + "%" : "–") + " × " + (p.w && o0.w ? r1((o0.w - p.w) / o0.w * 100) + "%" : "–") : ""; }).filter(Boolean); if(sh.length) a.push("Shrinkage L×W: " + sh.join(", ")); }
     if(d.meas){ var df = d.meas.filter(function(m, i){ var p = (L.items || [])[i] || {}; return Math.abs((m.l || 0) - (p.l || 0)) > .25 || Math.abs((m.w || 0) - (p.w || 0)) > .25 || m.q !== p.q; }); if(df.length) a.push("Measured: " + df.map(function(m){ return m.p + " " + r1(m.l) + "×" + r1(m.w) + " in, " + n0(m.q) + " pcs"; }).join("; ")); else a.push("Size & qty as sent ✓"); }
     if(d.note) a.push("“" + d.note + "”"); return a.join(" · "); }
-  function lotView(id){ var L = lotById(id); if(!L) return toast("Lot not found");
+  function lotView(id){ var L = lotById(id); if(!L) return toast("Lot not found"); if(!canView(L)) return noJob();
     var h = lotHead(L) + '<div class="wqSteps">' + stepRows(L).map(function(r){ var d = r.d, x = r.x; return '<div class="wqStep ' + (d ? (d.ok === 0 ? "bad" : "ok") : "wait") + '"><i>' + x.ic + '</i><div><b>' + esc(x.t) + '</b><small>' + (d ? esc(who(d.by)) + ' · ' + dt(d.at) : esc(x.role) + ' — pending') + '</small>' + (d ? '<p>' + esc(stepDetail(x, d, L)) + '</p>' + thumbs(d.ph) : '') + '</div></div>'; }).join("") + '</div>';
     var o = ov('<div class="wqPg"><div class="wqHd"><button data-x>‹</button><div><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.cust, L.design, L.size].filter(Boolean).join(" · ")) + '</small></div>' + lchip(L) + '</div><div class="wqFm">' + h +
       '<div class="wqBtns pad">' + (L.nx ? '<button data-wq="step" data-id="' + L.id + '" data-k="' + L.nx.k + '">' + L.nx.ic + ' ' + esc(L.nx.t) + ' →</button>' : '') + '<button data-sl class="gh">🏷 QR slip</button><button data-pr class="gh">🖨 PDF report</button></div></div></div>', "wlv");
@@ -479,10 +482,7 @@
 
   // ---------- find a lot: QR scan or type lot no / YTM ----------
   var ROLES = [["all", "All steps", []], ["prod", "Production / Cutting", ["gp"]], ["cq", "Cutting QC", ["cq"]], ["wash", "Washing", ["rv", "rt"]], ["wq", "Washing QC", ["wq"]], ["floor", "Floor QC", ["fa"]]];
-  function myRole(){ try{ return localStorage.getItem("yqi_wrole") || ""; }catch(e){ return ""; } }
-  function roleSteps(r){ var x = ROLES.filter(function(z){ return z[0] === r; })[0]; return x ? x[2] : []; }
   function qrText(L){ return "YQIWL:" + L.id + "|" + (L.no || ""); }
-  function openLot(L){ if(!L) return; var mine = roleSteps(myRole()); if(L.nx && (!mine.length || mine.indexOf(L.nx.k) >= 0)) return stepForm(L.id, L.nx.k); lotView(L.id); }
   function findLots(t){ t = String(t || "").trim(); if(!t) return []; var m = /YQIWL:([A-Za-z0-9]+)/.exec(t); if(m){ var L = lotById(m[1]); return L ? [L] : []; }
     var q = t.toUpperCase(); return lots().filter(function(L){ return String(L.no || "").toUpperCase() === q || String(L.no || "").toUpperCase().slice(-q.length) === q || String(L.ytm || "").toUpperCase() === q; }).sort(function(a, b){ return (b.nx ? 1 : 0) - (a.nx ? 1 : 0) || b.at - a.at; }); }
   function scanLot(){ if(!window.yqScanCode) return toast("Scanner did not load — type the lot no");
@@ -490,8 +490,6 @@
   function gotoLot(t){ listen(); var go = function(){ var L = findLots(t); if(!L.length) return toast("“" + t + "” — no lot found"); if(L.length === 1) return openLot(L[0]); pickLot(L); }; if(!ROWS.length) setTimeout(go, 900); else go(); }
   function pickLot(LL){ var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>' + LL.length + ' lots found</b><small>Pick one</small></div></div><div class="wqFm">' + LL.map(function(L){ return '<button class="wlPick" data-p="' + L.id + '"><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.design, L.size, L.floor].filter(Boolean).join(" · ")) + ' · ' + dt(L.at) + '</small>' + lchip(L) + '</button>'; }).join("") + '</div></div>', "wlp");
     o.querySelectorAll("[data-p]").forEach(function(b){ b.onclick = function(){ o.__close(); setTimeout(function(){ openLot(lotById(b.dataset.p)); }, 300); }; }); }
-  function chooseRole(cb){ var cur = myRole(); var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>What is your job?</b><small>Pick once — the app will show only your pending lots</small></div></div><div class="wqFm">' + ROLES.map(function(r){ return '<button class="wlPick' + (cur === r[0] ? " on" : "") + '" data-r="' + r[0] + '"><b>' + esc(r[1]) + '</b><small>' + (r[2].length ? r[2].map(function(k){ return SK[k].ic + " " + SK[k].t; }).join(" · ") : "See every step (manager)") + '</small></button>'; }).join("") + '</div></div>', "wlr");
-    o.querySelectorAll("[data-r]").forEach(function(b){ b.onclick = function(){ try{ localStorage.setItem("yqi_wrole", b.dataset.r); }catch(e){} o.__close(); if(cb) setTimeout(cb, 250); }; }); }
   // ---------- QR slip (stick on the bundle / trolley) ----------
   function loadQr(){ if(window.QRCode) return Promise.resolve(); var L = window.yqLoadJs; if(L) return L("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"); return new Promise(function(ok, no){ var s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
   function qrImg(text){ return loadQr().then(function(){ var d = document.createElement("div"); new QRCode(d, {text: text, width: 220, height: 220, colorDark: "#000", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M}); var c = d.querySelector("canvas"); return c ? c.toDataURL("image/png") : (d.querySelector("img") || {}).src || ""; }); }
@@ -500,10 +498,58 @@
     var one = '<div class="sl"><div class="slh"><div><b>Yunus Textile Mills Limited</b><br><small>Washing gate pass · identification</small></div><div class="no">' + esc(L.no) + '</div></div><div class="slb"><table>' + row("YTM", L.ytm) + row("Customer", L.cust) + row("Design", L.design) + row("Colour", L.color) + row("Size", L.size) + row("Article", L.art + (L.type === "art" ? " (stitched)" : " (precut)")) + row("Shade #", L.shade) + row("Floor", L.floor) +
       row("Qty", (L.items || []).map(function(p){ return p.p + " " + p.q; }).join(" · ") + " = " + L.tot) + row("Bundles", L.bun ? L.bun + (L.pb ? " × " + L.pb : "") : "") + row("Date", dt(L.at)) + row("Prepared by", who(L.by)) + '</table><div class="q">' + (q ? '<img src="' + q + '">' : '') + '<small>Scan in YQI → Washing</small></div></div></div>';
     printDoc(L.no + " slip", '<style>@page{size:A4;margin:8mm}.sl{border:2px solid #000;border-radius:6px;padding:8px 10px;margin-bottom:8mm;page-break-inside:avoid;height:128mm;box-sizing:border-box}.slh{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:6px}.slh b{font-size:16px}.no{font:800 20px Arial;border:2px solid #000;padding:4px 10px;border-radius:6px}.slb{display:flex;gap:10px}.slb table{flex:1;margin:0}.slb th{width:90px;background:#f2f2f2;font-size:11px}.slb td{font-size:14px;font-weight:700}.q{text-align:center;width:230px}.q img{width:220px;height:220px}.q small{display:block;font-size:10px}</style>' + one + one); }).catch(function(){ toast("Could not make QR — check internet"); }); }
+  // ---------- access: owner / authorised assign jobs; workers see only their own step ----------
+  var GD = {}, GUN = null;
+  function listenG(){ if(GUN) return; try{ GUN = fs().collection("chats").doc(GID).onSnapshot(function(d){ GD = d.exists ? d.data() || {} : {}; if(RF) RF(); }, function(){ GUN = null; }); }catch(e){} }
+  function isMgr(){ if(window.__wlWorker) return false; try{ if(window.yqIsAuth && yqIsAuth()) return true; }catch(e){} return (GD.admins || []).indexOf(uid()) >= 0; }
+  function myRole(){ var r = window.__wlWorker === 1 ? "" : typeof window.__wlWorker === "string" ? window.__wlWorker : (GD.wr || {})[uid()] || ""; return r || (isMgr() ? "all" : ""); }
+  function roleSteps(r){ var x = ROLES.filter(function(z){ return z[0] === r; })[0]; return x ? x[2] : []; }
+  function roleName(r){ return (ROLES.filter(function(z){ return z[0] === r; })[0] || ["", "Not assigned"])[1]; }
+  function canStep(k){ return isMgr() || roleSteps(myRole()).indexOf(k) >= 0; }
+  function dayOf(t){ return ymd(new Date(t || 0)); }
+  function closedToday(L){ return !L.nx && L.s && L.s.fa && dayOf(L.s.fa.at) === dayOf(NOW()); }
+  function canView(L){ return isMgr() || closedToday(L) || (L.nx && canStep(L.nx.k)); }
+  function noJob(k){ toast(k ? "This step is for " + SK[k].role + " — not your job" : "Only owner / authorised people can open this"); }
+  function openLot(L){ if(!L) return; if(L.nx && canStep(L.nx.k)) return stepForm(L.id, L.nx.k); if(canView(L)) return lotView(L.id); toast(L.no + " is at " + (L.nx ? L.nx.t + " (" + L.nx.role + ")" : "closed") + " — not your step"); }
+  function assignJobs(){ listenG(); var M = (GD.members || []).slice().sort(function(a, b){ return who(a).localeCompare(who(b)); }), wr = GD.wr || {};
+    var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>Assign jobs</b><small>Each person sees only the step of their job</small></div></div><div class="wqFm">' +
+      (M.length ? M.map(function(u){ return '<div class="wlAs"><div><b>' + esc(who(u)) + '</b><small>' + ((GD.admins || []).indexOf(u) >= 0 ? "Group admin · full access" : "") + '</small></div><select data-u="' + u + '"><option value="">— Not assigned —</option>' + ROLES.slice(1).map(function(r){ return '<option value="' + r[0] + '"' + (wr[u] === r[0] ? " selected" : "") + '>' + esc(r[1]) + '</option>'; }).join("") + '</select></div>'; }).join("") : '<div class="wqEmpty">No members in the Wash QC group yet</div>') +
+      '<div class="wqSt" data-st></div></div></div>', "wlj");
+    o.querySelectorAll("[data-u]").forEach(function(s){ s.onchange = function(){ var up = {}; up["wr." + s.dataset.u] = s.value || firebase.firestore.FieldValue.delete(); o.querySelector("[data-st]").textContent = "Saving…";
+      fs().collection("chats").doc(GID).update(up).then(function(){ o.querySelector("[data-st]").textContent = "Saved ✓ " + who(s.dataset.u) + " → " + (s.value ? roleName(s.value) : "not assigned"); }).catch(function(e){ o.querySelector("[data-st]").textContent = "Not saved: " + (e.code || e.message); }); }; }); }
+  // worker screen: only my job + today's final reports
+  function workBoard(o, B){
+    var typing = function(){ var a = document.activeElement; return a && o.contains(a) && /INPUT|TEXTAREA/.test(a.tagName); };
+    RF = function(err, force){ if(!document.body.contains(o)){ RF = null; return; } if(isMgr()){ o.__close(); RF = null; return setTimeout(board, 250); } if(!force && typing()){ o.__pend = 1; return; } o.__pend = 0;
+      var fiv = (o.querySelector("[data-fi]") || {}).value || "";
+      if(err){ B.innerHTML = '<div class="wqEmpty"><b>Join the Wash QC group first</b><br><button class="wqGo sm" data-join>Open group</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
+      var role = myRole(), mine = roleSteps(role), LL = lots(), my = LL.filter(function(L){ return L.nx && mine.indexOf(L.nx.k) >= 0; }).sort(function(a, b){ return a.at - b.at; }), td = LL.filter(closedToday);
+      o.querySelector(".wlHt small").textContent = role ? "Your job: " + roleName(role) : "Job not assigned";
+      var h = '';
+      if(!role) h += '<div class="wqEmpty"><b>Your job is not assigned yet</b><br>Ask the owner / Wash QC admin to assign your job. Then only your work will show here.</div>';
+      else {
+        h += '<div class="wlHero"><button class="sc" data-scan><i>📷</i><b>Scan QR</b><small>Scan the slip</small></button><form class="mn" data-find><input data-fi placeholder="Type lot no or YTM" autocomplete="off"><button>Open →</button></form></div>';
+        if(mine.indexOf("gp") >= 0) h += '<button class="wqGo" data-nw>🚚 New gate pass</button>';
+        h += '<div class="wlSec">' + mine.map(function(k){ return SK[k].ic + " " + esc(SK[k].t); }).join(" · ") + ' <b>' + my.length + '</b></div>';
+        h += my.length ? '<div class="wlGrid">' + my.map(function(L){ return '<div class="wlC ' + L.stat + '"><div class="wlCh"><b>' + esc(L.no) + '</b>' + lchip(L) + '</div><div class="wlCy">YTM <b>' + esc(L.ytm) + '</b> · ' + esc(L.cust || "") + '</div><div class="wlCs">' + esc([L.design, L.size, L.floor].filter(Boolean).join(" · ")) + ' · ' + n0(L.tot) + ' pcs · ' + dt(L.up || L.at) + '</div>' +
+          '<div class="wqBtns pad"><button data-wq="step" data-id="' + L.id + '" data-k="' + L.nx.k + '">' + L.nx.ic + ' ' + esc(L.nx.t) + ' →</button></div></div>'; }).join("") + '</div>' : '<div class="wlEm">Nothing pending for you right now ✓</div>';
+      }
+      h += '<div class="wlSec">📄 Today\'s final reports <b>' + td.length + '</b>' + (td.length ? '<button data-all>⬇ Download all</button>' : '') + '</div>';
+      h += td.length ? td.map(function(L){ return '<div class="wlTd"><div><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.cust, L.design, L.size].filter(Boolean).join(" · ")) + ' · closed ' + hm(L.s.fa.at) + '</small></div><button data-dl="' + L.id + '">⬇ PDF</button></div>'; }).join("") : '<div class="wlEm">No lot closed today yet</div>';
+      B.innerHTML = h; var f2 = B.querySelector("[data-fi]"); if(f2 && fiv) f2.value = fiv;
+      B.querySelectorAll("input").forEach(function(e){ e.addEventListener("blur", function(){ setTimeout(function(){ if(o.__pend && !typing() && RF) RF(); }, 150); }); });
+      var sc = B.querySelector("[data-scan]"); if(sc) sc.onclick = scanLot;
+      var fm = B.querySelector("[data-find]"); if(fm) fm.onsubmit = function(e){ e.preventDefault(); var v = B.querySelector("[data-fi]").value.trim(); if(v) gotoLot(v); };
+      var nw = B.querySelector("[data-nw]"); if(nw) nw.onclick = function(){ lotForm(); };
+      B.querySelectorAll("[data-dl]").forEach(function(b){ b.onclick = function(){ var L = lotById(b.dataset.dl); if(L) printDoc(L.no + " Wash report", lotPrint(L)); }; });
+      var al = B.querySelector("[data-all]"); if(al) al.onclick = function(){ printDoc("Wash QC final " + ymd(new Date(NOW())), listPrint(td, "Closed today · " + ymd(new Date(NOW())))); };
+    };
+    RF(); }
   // ---------- board: everything open, by who has to do it ----------
   var BS = {tab: "todo", q: "", r: "30"};
-  function board(){ listen(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
-    var o = ov('<div class="wqPg wide"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>Washing Lots</b><small>Gate pass → Cutting QC → Washing → Floor QC</small></div><button class="wlNew" data-a="new">+ Gate pass</button></div><div class="wlBar"><button data-a="xl">Excel</button><button data-a="pr">PDF report</button><button data-a="old">Old records</button></div><div class="wqRp" data-rp><div class="wqEmpty">Loading…</div></div></div>', "wlb");
+  function board(){ listen(); listenG(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
+    if(!isMgr()){ var w = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>My work · Washing</b><small></small></div></div><div class="wqFm" data-rp></div></div>', "wlw"); return workBoard(w, w.querySelector("[data-rp]")); }
+    var o = ov('<div class="wqPg wide"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>Washing Lots</b><small>Gate pass → Cutting QC → Washing → Floor QC</small></div><button class="wlNew" data-a="new">+ Gate pass</button></div><div class="wlBar"><button data-a="xl">Excel</button><button data-a="pr">PDF report</button><button data-a="old">Old records</button><button data-a="job">👥 Assign jobs</button></div><div class="wqRp" data-rp><div class="wqEmpty">Loading…</div></div></div>', "wlb");
     var B = o.querySelector("[data-rp]");
     var list = function(){ var q = BS.q.trim().toLowerCase(), z = new Date(); z.setHours(0, 0, 0, 0); var from = BS.r === "all" ? 0 : z.getTime() - (+BS.r - 1) * 864e5;
       return lots().filter(function(L){ if(L.nx == null && (L.at || 0) < from) return false; if(q && [L.no, L.ytm, L.cust, L.design, L.floor, L.prog].join(" ").toLowerCase().indexOf(q) < 0) return false; return true; }); };
@@ -511,13 +557,14 @@
     o.querySelector('[data-a="xl"]').onclick = function(){ lotsExcel(list()); };
     o.querySelector('[data-a="pr"]').onclick = function(){ printDoc("Wash QC report " + ymd(new Date()), listPrint(list(), BS.r === "all" ? "All" : "Last " + BS.r + " days + all open lots")); };
     o.querySelector('[data-a="old"]').onclick = function(){ report(); };
+    o.querySelector('[data-a="job"]').onclick = assignJobs;
     var typing = function(){ var a = document.activeElement; return a && o.contains(a) && /INPUT|TEXTAREA/.test(a.tagName); };
-    RF = function(err, force){ if(!document.body.contains(o)){ RF = null; return; } if(!force && typing()){ o.__pend = 1; return; } o.__pend = 0;
+    RF = function(err, force){ if(!document.body.contains(o)){ RF = null; return; } if(!isMgr()){ o.__close(); RF = null; return setTimeout(board, 250); } if(!force && typing()){ o.__pend = 1; return; } o.__pend = 0;
       var keep = {}; o.querySelectorAll("[data-fi],[data-q]").forEach(function(e){ keep[e.hasAttribute("data-fi") ? "fi" : "q"] = e.value; }); if(err){ B.innerHTML = '<div class="wqEmpty"><b>Join the Wash QC group first</b><br><button class="wqGo sm" data-join>Open group</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
       var y = B.scrollTop, LL = list(), open = LL.filter(function(L){ return L.nx; }), cnt = {}; open.forEach(function(L){ cnt[L.nx.k] = (cnt[L.nx.k] || 0) + 1; });
       var role = myRole(), mine = roleSteps(role), myN = open.filter(function(L){ return mine.indexOf(L.nx.k) >= 0; }).length;
       var h = '<div class="wlHero"><button class="sc" data-scan><i>📷</i><b>Scan QR</b><small>Scan the slip</small></button><form class="mn" data-find><input data-fi placeholder="Type lot no or YTM" autocomplete="off"><button>Open →</button></form></div>' +
-        '<div class="wlMe"><span>Your job: <b>' + esc((ROLES.filter(function(r){ return r[0] === role; })[0] || ["", "chunein"])[1]) + '</b></span><button data-role>Change</button></div>';
+        '<div class="wlMe"><span>Owner / authorised · <b>full access</b></span><button data-role>👥 Assign jobs</button></div>';
       if(BS.tab === "todo" && mine.length && !BS.touched) BS.tab = "mine";
       h += '<div class="wlSr"><input class="wlQ" data-q placeholder="Search YTM, lot no, customer, floor" value="' + esc(BS.q) + '"><div class="wlRg">' + [["7", "7D"], ["30", "30D"], ["all", "All"]].map(function(r){ return '<button data-r="' + r[0] + '"' + (BS.r === r[0] ? ' class="on"' : '') + '>' + r[1] + '</button>'; }).join("") + '</div></div>';
       var tb = (mine.length ? [["mine", "My work", myN]] : []).concat([["todo", "All open", open.length]]).concat(STEPS.slice(1).map(function(s){ return [s.k, s.t.replace(" verify", "").replace(" 5%", "").replace(" final OK", " OK").replace(" to floor", ""), cnt[s.k] || 0, s.role]; })).concat([["closed", "Closed", LL.length - open.length]]);
@@ -534,12 +581,12 @@
       B.querySelectorAll("[data-st]").forEach(function(b){ b.onclick = function(){ BS.tab = b.dataset.st; BS.touched = 1; RF(); }; });
       B.querySelector("[data-scan]").onclick = scanLot;
       B.querySelector("[data-find]").onsubmit = function(e){ e.preventDefault(); var v = B.querySelector("[data-fi]").value.trim(); if(v) gotoLot(v); };
-      B.querySelector("[data-role]").onclick = function(){ chooseRole(function(){ BS.touched = 0; BS.tab = "todo"; RF(); }); };
+      B.querySelector("[data-role]").onclick = assignJobs;
       B.querySelectorAll("[data-open-l]").forEach(function(b){ b.onclick = function(){ openLot(lotById(b.dataset.openL)); }; });
       B.querySelectorAll("[data-v]").forEach(function(b){ b.onclick = function(){ lotView(b.dataset.v); }; });
       B.querySelectorAll("[data-nw]").forEach(function(b){ b.onclick = function(){ lotForm(); }; });
       var qi = B.querySelector("[data-q]"); qi.oninput = function(){ BS.q = qi.value; clearTimeout(qi.__t); qi.__t = setTimeout(function(){ RF(null, 1); var q2 = B.querySelector("[data-q]"); if(q2){ q2.focus(); q2.setSelectionRange(q2.value.length, q2.value.length); } }, 400); }; };
-    RF(); if(!myRole()) setTimeout(function(){ chooseRole(function(){ BS.touched = 0; RF(); }); }, 500); }
+    RF(); }
   window.YQWASH = {GID: GID, card: function(m){ return m && m.wt === "lot" ? lotCard(m) : card(m); }, strip: strip, report: board, oldReport: report, open: function(){ board(); }, group: openGroup, newForm: newForm, lotForm: lotForm, _lotHtml: function(m){ return "<style>" + PCSS + "</style>" + lotPrint(lcalc(m)); }};
 })();
 
