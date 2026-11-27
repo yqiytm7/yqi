@@ -283,7 +283,7 @@ async function isOwnerOrEditor(token, projectId, email) {
 // account / card needed for the free tier).
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-async function generate(o) { if (o.web) { try { return await generate0(o); } catch (e) {} } return generate0(Object.assign({}, o, { web: false })); } async function generate0({ apiKey, model, systemInstruction, contents, tools, web }) {
+async function generate(o) { o = Object.assign({}, o, { web: false }); if (o.web) { try { return await generate0(o); } catch (e) { globalThis.__webErr = String(e && e.message || e).slice(0, 200); for (const m2 of ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite"]) { try { return await generate0(Object.assign({}, o, { model: m2 })); } catch (e2) { globalThis.__webErr += " | " + m2 + ": " + String(e2 && e2.message || e2).slice(0, 120); } } } } return generate0(Object.assign({}, o, { web: false })); } async function generate0({ apiKey, model, systemInstruction, contents, tools, web }) {
   const body = {
     systemInstruction: systemInstruction ? { role: "system", parts: [{ text: systemInstruction }] } : undefined,
     contents,
@@ -674,7 +674,7 @@ async function handleTts(request, env) { await authEmail(request, env); const b 
   try { staffOk = await roles.isStaffUser(fsToken, projectId, email); } catch (e) { staffOk = roles.isCoEmail(email) || email === roles.OWNER_EMAIL; }
   if (!staffOk) return json({ error: "Jarvis is available to Yunus Textile staff accounts only." }, 403);
 
-  const { text, history, scope, ctx, sys, web } = await request.json();
+  const { text, history, scope, ctx, sys, web, webq } = await request.json();
   if (!text || !String(text).trim()) return json({ error: "text is required." }, 400);
 
   let dataDown = false;
@@ -682,7 +682,7 @@ async function handleTts(request, env) { await authEmail(request, env); const b 
   try { canWrite = await roles.canAll(fsToken, projectId, email); } catch (e) { dataDown = true; }
   let context = "";
   try { context = ctx ? "Live data from the YQI app (already loaded on the user's screen - use it, it is complete and current):\n" + String(ctx).slice(0, 16000) : await rag.buildContext(fsToken, projectId, text, scope || {}); } catch (e) { dataDown = true; context = "(YQI database is temporarily unavailable - daily free quota reached. Answer from general knowledge, and tell the user live data will be back after the quota resets.)"; }
-  if (dataDown) canWrite = false;
+  if (web) { try { const rr = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(String(webq || text).slice(0, 200)), { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" } }); const hh = await rr.text(); const un = (s) => s.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim(); const sn = [...hh.matchAll(/class="result__a"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)].slice(0, 6).map((m) => "- " + un(m[1]) + ": " + un(m[2])).join("\n"); globalThis.__webErr = "ddg " + rr.status + " n=" + (sn ? sn.split("\n").length : 0); if (sn) context += "\n\nWeb search results (" + new Date().toISOString().slice(0, 10) + "):\n" + sn; } catch (e) { globalThis.__webErr = "ddg fail " + String(e && e.message || e).slice(0, 100); } } if (dataDown) canWrite = false;
   const contents = [
     ...(Array.isArray(history) ? history.slice(-12) : []),
     { role: "user", parts: [{ text: `Relevant YQI data for this question:\n${context || "(no matching records found)"}\n\nQuestion: ${text}` }] },
@@ -717,7 +717,7 @@ async function handleTts(request, env) { await authEmail(request, env); const b 
   }
 
   if (!dataDown) await logActivity(fsToken, projectId, { kind: "chat", email, question: text, answer: finalText, usedTools: usedTools.join(","), pendingActions: pendingActions.map((p) => p.id).join(",") });
-  return json({ text: finalText || "I couldn't put together an answer from the current data - try rephrasing or narrowing the date range.", pendingActions, usedTools });
+  return json({ text: finalText || "I couldn't put together an answer from the current data - try rephrasing or narrowing the date range.", pendingActions, usedTools, webErr: web ? (globalThis.__webErr || "") : undefined });
 }
 
 async function handleApprove(request, env) {
