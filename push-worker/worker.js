@@ -1,3 +1,4 @@
+// NOTE: the live worker (Cloudflare dashboard) stores QR-login tokens in KV (binding QRKV) instead of Firestore — copy the live code before redeploying from here. Cron: every 5 min → feedRun (last 20 min of messages only).
 // YQI server (Cloudflare Worker): push notifications + "link a computer" QR login.
 // Secret set in Cloudflare: SA = Firebase service-account JSON.
 // Cron trigger: every minute → inspection feed (#INTERNAL / #EXTERNAL chat messages → Inspection Summary).
@@ -99,7 +100,7 @@ async function feedRun(env) {
   const at = await accessToken(env); let done = 0, seen = 0; const G = FEEDG;
   for (const gid of Object.keys(G)) {
     const r = await fetch(DOCS + "chats/" + gid + ":runQuery", { method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
-      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "m" }], orderBy: [{ field: { fieldPath: "at" }, direction: "DESCENDING" }], limit: 40 } }) });
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "m" }], orderBy: [{ field: { fieldPath: "at" }, direction: "DESCENDING" }], where: { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN_OR_EQUAL", value: { integerValue: String(Date.now() - 1200000) } } }, limit: 40 } }) });
     if (!r.ok) continue;
     const rows = (await r.json()).filter(x => x.document); seen += rows.length;
     for (const x of rows) {
