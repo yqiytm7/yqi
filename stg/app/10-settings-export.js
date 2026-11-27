@@ -299,3 +299,4 @@ async function custWipe(kind){ var X = HCUST; if(!X) return; if(!(OWNER || ISED)
 
 // Jarvis reads the data already loaded in this browser (no extra Firebase reads)
 window.YQJDATA = function(){ var g = function(c){ try{ return isRows(c) || []; }catch(e){ return []; } }, D = {ext: g("is_ext"), int: g("is_int"), wst: window.YQWST || null, capa: CAPA || []}; if(CAPA || !FS) return Promise.resolve(D); return Promise.race([capaLoad().then(function(L){ D.capa = L || []; return D; }), new Promise(function(r){ setTimeout(function(){ r(D); }, 2500); })]).catch(function(){ return D; }); };
+window.YQMENAME = function(){ try{ return frName(); }catch(e){ return ""; } };

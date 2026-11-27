@@ -49,12 +49,12 @@
 
   // ---------------------------------------------------------------- styles
   var CSS = "" +
-    "#jvOrb{position:fixed;z-index:2147483000;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#9BE58A,#3D6B22 70%);box-shadow:0 6px 20px rgba(17,30,24,.35);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}" +
+    "#jvOrb{position:fixed;z-index:2147483646;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#9BE58A,#3D6B22 70%);box-shadow:0 6px 20px rgba(17,30,24,.35);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}" +
     "@media(min-width:900px){#jvOrb{bottom:24px;right:28px}}" +
     "#jvOrb .jvBadge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:9px;background:#D64545;color:#fff;font:700 10.5px/18px Manrope,sans-serif;text-align:center;padding:0 4px}" +
     "#jvOrb.listening{animation:jvPulse 1.2s infinite}#jvOrb.speaking{animation:jvPulse .6s infinite}" +
     "@keyframes jvPulse{0%{box-shadow:0 0 0 0 rgba(155,229,138,.6)}100%{box-shadow:0 0 0 18px rgba(155,229,138,0)}}" +
-    "#jvPanel{position:fixed;z-index:2147483001;right:0;bottom:0;left:0;top:0;background:rgba(10,20,14,.35);display:flex;align-items:flex-end;justify-content:flex-end}" +
+    "#jvPanel{position:fixed;z-index:2147483647;right:0;bottom:0;left:0;top:0;background:rgba(10,20,14,.35);display:flex;align-items:flex-end;justify-content:flex-end}" +
     "#jvPanel .jvBox{background:var(--bg,#F4F2EB);width:100%;max-width:420px;height:100%;max-height:100%;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.2);font-family:Manrope,sans-serif}" +
     "@media(min-width:900px){#jvPanel{align-items:stretch}#jvPanel .jvBox{margin:16px;height:calc(100% - 32px);border-radius:18px;overflow:hidden}}" +
     "#jvPanel .jvHead{background:var(--hero,#0C1A14);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}" +
@@ -218,7 +218,7 @@
   // ------------------------------------------------- brain: who Jarvis is + app map
   function meName() {
     var u = null; try { u = firebase.auth().currentUser; } catch (e) { }
-    var n = (u && u.displayName) || "";
+    var n = (window.YQMENAME && window.YQMENAME()) || (u && u.displayName) || "";
     if (!n) { var el = document.querySelector(".pfN, .ppName, [data-me-name]"); n = el ? el.textContent : ""; }
     if (!n && u && u.email) n = u.email.split("@")[0].replace(/[._\d]+/g, " ");
     return String(n || "").trim();
@@ -409,7 +409,7 @@
     stopSpeak(); SPEAKING = true; renderOrb();
     var done = function () { SPEAKING = false; renderOrb(); if (VOICE_MODE && OPEN && !LISTENING) setTimeout(function () { if (VOICE_MODE && OPEN && !LISTENING && !BUSY) toggleMic(); }, 350); };
     var browser = function () {
-      if (!window.speechSynthesis) return done();
+      window.__jvVoice = "browser"; if (!window.speechSynthesis) return done();
       var u = new SpeechSynthesisUtterance(text);
       var v = pickVoice(); if (v) u.voice = v;
       u.lang = (v && v.lang) || SETTINGS.languageCode || "ur-PK";
@@ -426,7 +426,7 @@
       .then(function (d) {
         if (AUDIO !== my) return; // interrupted
         var rate = +((/rate=(\d+)/i.exec(d.mime || "") || [])[1] || 24000);
-        var a = new Audio(wavFromPcm(d.audio, rate)); AUDIO = a; TTS_FAIL = 0;
+        var a = new Audio(wavFromPcm(d.audio, rate)); AUDIO = a; TTS_FAIL = 0; window.__jvVoice = "natural";
         a.onended = function () { AUDIO = null; done(); }; a.onerror = function () { AUDIO = null; browser(); };
         return a.play().catch(function () { AUDIO = null; browser(); });
       }).catch(function () { TTS_FAIL++; if (AUDIO === my) { AUDIO = null; browser(); } });
