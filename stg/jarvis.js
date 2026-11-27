@@ -740,6 +740,7 @@
 
   // ---------------------------------------------------------------- real-time voice (Gemini Live): listens all the time, answers instantly, can be interrupted
   var LIVE = null;
+  window.__altronLive = function (t) { if (LIVE && LIVE.ws && LIVE.ready) LIVE.ws.send(JSON.stringify({ realtimeInput: { text: t } })); return !!LIVE; };
   var LIVE_MODEL = "models/gemini-3.1-flash-live-preview";
   function liveOk() { return SETTINGS.live !== false && window.WebSocket && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext); }
   function b64FromI16(i16) { var u8 = new Uint8Array(i16.buffer), s = "", CH = 0x8000; for (var i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH)); return btoa(s); }
