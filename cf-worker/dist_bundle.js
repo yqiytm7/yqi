@@ -287,7 +287,7 @@ async function generate(o) { if (o.web) { try { return await generate0(o); } cat
   const body = {
     systemInstruction: systemInstruction ? { role: "system", parts: [{ text: systemInstruction }] } : undefined,
     contents,
-    tools: web ? [{ googleSearch: {} }].concat(tools && tools.length ? [{ functionDeclarations: tools }] : []) : (tools && tools.length ? [{ functionDeclarations: tools }] : undefined), toolConfig: web && tools && tools.length ? { includeServerSideToolInvocations: true } : undefined,
+    tools: web ? [{ googleSearch: {} }] : (tools && tools.length ? [{ functionDeclarations: tools }] : undefined),
     generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
   };
   const res = await fetch(`${API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
