@@ -662,7 +662,7 @@
     body.querySelector("#jvRate").oninput = function (e) { SETTINGS.speakingRate = +e.target.value; saveSettings(); };
     body.querySelector("#jvPitch").oninput = function (e) { SETTINGS.pitch = +e.target.value; saveSettings(); };
     body.querySelector("#jvAuto").onchange = function (e) { SETTINGS.autoSpeak = !!e.target.checked; saveSettings(); };
-    body.querySelector("#jvWake").onchange = function (e) { SETTINGS.wake = !!e.target.checked; saveSettings(); if (SETTINGS.wake) setTimeout(wakeStart, 300); else wakeStop(); };
+    body.querySelector("#jvWake").onchange = function (e) { if (window.YQNATIVE) SETTINGS.wakePhone = !!e.target.checked; else SETTINGS.wake = !!e.target.checked; saveSettings(); if (SETTINGS.wake) setTimeout(wakeStart, 300); else wakeStop(); };
     body.querySelector("#jvWatch").onchange = function (e) { SETTINGS.watch = !!e.target.checked; saveSettings(); };
     body.querySelector("#jvBrief").onchange = function (e) { SETTINGS.brief = !!e.target.checked; saveSettings(); };
     body.querySelector("#jvNat").onchange = function (e) { SETTINGS.natural = !!e.target.checked; saveSettings(); };
@@ -706,7 +706,7 @@
   // ---------------------------------------------------------------- "Hey Jarvis" wake word (browser only, while YQI is open)
   var WAKE = null, WAKE_WANT = false;
   var NWAKE = false, NWAKE_L = null;
-  function wakeAllowed() { return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && (window.YQNATIVE ? !!window.YQNATIVE.wakeStart : !!(window.SpeechRecognition || window.webkitSpeechRecognition)); }
+  function wakeAllowed() { if (window.YQNATIVE) return SETTINGS.wakePhone === true && !!window.YQNATIVE.wakeStart; return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
   function wakeStop() { WAKE_WANT = false; try { if (WAKE) WAKE.abort(); } catch (e) { } WAKE = null; if (NWAKE) { NWAKE = false; try { YQNATIVE.wakeStop(); } catch (e) { } } }
   function wakeStart() {
     if (!wakeAllowed() || VOPEN || OPEN || LISTENING || SPEAKING || BUSY || document.hidden || WAKE || NWAKE) return;
@@ -952,7 +952,7 @@
   (function wait() {
     if (ready()) {
       if (!staffOK()) return; // guests / customers don't get Jarvis
-      injectCss(); buildOrb(); watchAlerts(); refreshPending(); loadSettings(); setTimeout(wakeStart, 4000); setTimeout(watchData, 9000); setInterval(watchData, 5 * 60 * 1000); try { if (window.YQNATIVE && YQNATIVE.askNotify) YQNATIVE.askNotify(); else if (window.Notification && Notification.permission === "default") setTimeout(function () { Notification.requestPermission().catch(function () { }); }, 15000); } catch (e) { }
+      injectCss(); buildOrb(); watchAlerts(); refreshPending(); loadSettings(); setTimeout(function () { if (window.YQNATIVE && !wakeAllowed()) { try { YQNATIVE.wakeStop(); } catch (e) { } } wakeStart(); }, 4000); setTimeout(watchData, 9000); setInterval(watchData, 5 * 60 * 1000); try { if (window.YQNATIVE && YQNATIVE.askNotify) YQNATIVE.askNotify(); else if (window.Notification && Notification.permission === "default") setTimeout(function () { Notification.requestPermission().catch(function () { }); }, 15000); } catch (e) { }
       return;
     }
     if (tries++ > 600) return; // ~60s, then give up quietly
