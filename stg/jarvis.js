@@ -199,8 +199,12 @@
       var w = /\[\[WEB:\s*([^\]]+)\]\]/i.exec(t);
       if (w && !opt.webq) { HISTORY.push({ role: "sys", text: "🌐 Internet par dekh raha hoon…" }); render(); return ask(text, { webq: w[1].trim() }); }
       t = t.replace(/\[\[WEB:[^\]]*\]\]/gi, "").trim();
-      var steps = null, m = /\[\[DO:\s*([\s\S]*?)\]\]\s*$/.exec(t) || /\[\[DO:\s*(\[[\s\S]*\])\s*\]\]/.exec(t);
-      if (m) { try { steps = JSON.parse(m[1]); } catch (e) { steps = null; } t = t.replace(m[0], "").trim(); }
+      var steps = null, di = t.indexOf("[[DO:");
+      if (di >= 0) {
+        var raw = t.slice(di + 5), a1 = raw.indexOf("["), a2 = raw.lastIndexOf("]");
+        if (a1 >= 0 && a2 > a1) { for (var cut = a2; cut > a1 && !steps; cut = raw.lastIndexOf("]", cut - 1)) { try { steps = JSON.parse(raw.slice(a1, cut + 1)); if (!Array.isArray(steps)) steps = [steps]; } catch (e) { steps = null; } } }
+        t = t.slice(0, di).trim();
+      }
       BUSY = false;
       HISTORY.push({ role: "model", text: t || (steps ? "Ye kaam karun?" : "(jawab nahi mila)") });
       if (steps && steps.length) { PENDING_DO = { steps: steps, text: t }; PLAN_TEXT = t; HISTORY.push({ role: "do" }); }
