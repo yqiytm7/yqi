@@ -501,8 +501,8 @@
   // ---------- access: owner / authorised assign jobs; workers see only their own step ----------
   var GD = {}, GUN = null;
   function listenG(){ if(GUN) return; try{ GUN = fs().collection("chats").doc(GID).onSnapshot(function(d){ GD = d.exists ? d.data() || {} : {}; if(RF) RF(); }, function(){ GUN = null; }); }catch(e){} }
-  function isMgr(){ try{ if(window.yqIsAuth && yqIsAuth()) return true; }catch(e){} return (GD.admins || []).indexOf(uid()) >= 0; }
-  function myRole(){ var r = (GD.wr || {})[uid()] || ""; return r || (isMgr() ? "all" : ""); }
+  function isMgr(){ if(window.__wlWorker) return false; try{ if(window.yqIsAuth && yqIsAuth()) return true; }catch(e){} return (GD.admins || []).indexOf(uid()) >= 0; }
+  function myRole(){ var r = window.__wlWorker === 1 ? "" : typeof window.__wlWorker === "string" ? window.__wlWorker : (GD.wr || {})[uid()] || ""; return r || (isMgr() ? "all" : ""); }
   function roleSteps(r){ var x = ROLES.filter(function(z){ return z[0] === r; })[0]; return x ? x[2] : []; }
   function roleName(r){ return (ROLES.filter(function(z){ return z[0] === r; })[0] || ["", "Not assigned"])[1]; }
   function canStep(k){ return isMgr() || roleSteps(myRole()).indexOf(k) >= 0; }
