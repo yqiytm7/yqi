@@ -158,7 +158,7 @@
   function renderChat(body) {
     body.innerHTML = HISTORY.map(function (m) {
       if (m.role === "sys") return '<div class="jvMsg sys">' + esc(m.text) + "</div>";
-      return '<div class="jvMsg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.text) + "</div>";
+      return '<div class="jvMsg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.text).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/^\* /gm, "• ") + "</div>";
     }).join("") + (BUSY ? '<div class="jvMsg ai"><span class="jvDot"></span><span class="jvDot"></span><span class="jvDot"></span></div>' : "");
     body.scrollTop = body.scrollHeight;
   }
@@ -204,7 +204,11 @@
       var ago = function (d) { var t = new Date(); t.setDate(t.getDate() - d); return t.toISOString().slice(0, 10); };
       var E = (D.ext || []).filter(function (r) { return r && r.date; }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
       var I = (D.int || []).filter(function (r) { return r && r.date; }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
-      out.push("Today: " + today + ". OQL = major defects / sample size (limit 2.5%).");
+      out.push("Today: " + today + ". OQL = major defects / sample size (limit 2.5%). Answer for exactly the period the user asks (\"is mahine\"/this month = " + today.slice(0, 7) + ", \"aaj\" = today, \"kal\" = yesterday). Reply in the user's language, short.");
+      var per = function (lab, from, to) { var L = E.filter(function (r) { return r.date >= from && r.date <= to; }), F = L.filter(isFail), c = {}; F.forEach(function (r) { c[r.customer || "?"] = (c[r.customer || "?"] || 0) + 1; });
+        out.push(lab + " (" + from + " to " + to + "): " + L.length + " external inspections, " + F.length + " failed" + (F.length ? " — " + Object.keys(c).map(function (k) { return k + " " + c[k]; }).join(", ") : "")); };
+      var m0 = today.slice(0, 7) + "-01", pm = new Date(today.slice(0, 7) + "-01T00:00:00Z"); pm.setUTCMonth(pm.getUTCMonth() - 1); var p0 = pm.toISOString().slice(0, 10), p1 = new Date(Date.parse(m0) - 864e5).toISOString().slice(0, 10);
+      if (E.length) { per("Today", today, today); per("Last 7 days", ago(7), today); per("This month", m0, today); per("Last month", p0, p1); }
       if (E.length) {
         out.push("\n## External inspections: " + E.length + " records, " + E[E.length - 1].date + " to " + E[0].date);
         var g = {}; E.forEach(function (r) { var k = String(r.date).slice(0, 7) + " | " + (r.customer || "?"), x = g[k] = g[k] || { n: 0, f: 0, s: 0, m: 0 }; x.n++; if (isFail(r)) x.f++; x.s += +r.sample || 0; x.m += +r.major || 0; });
