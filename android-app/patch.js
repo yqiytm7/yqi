@@ -13,6 +13,7 @@ cp(path.join(__dirname, 'res'), RES);
 const mf = path.join(M, 'AndroidManifest.xml'); let m = fs.readFileSync(mf, 'utf8');
 const perms = ['REQUEST_INSTALL_PACKAGES', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'ACCESS_NETWORK_STATE'];
 const add = perms.filter(p => !m.includes('android.permission.' + p + '"')).map(p => `    <uses-permission android:name="android.permission.${p}" />`).join('\n')
+  + '\n    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>'
   + '\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />\n';
 m = m.replace('</manifest>', add + '</manifest>');
 fs.writeFileSync(mf, m);

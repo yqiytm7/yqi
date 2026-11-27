@@ -12,6 +12,12 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.content.pm.PackageManager;
+import java.util.ArrayList;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.MediaStore;
@@ -42,7 +48,8 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 @CapacitorPlugin(name = "YqNative", permissions = {
-    @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+    @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }),
+    @Permission(alias = "mic", strings = { Manifest.permission.RECORD_AUDIO })
 })
 public class YqNativePlugin extends Plugin {
     private PowerManager.WakeLock prox;
@@ -262,5 +269,53 @@ public class YqNativePlugin extends Plugin {
                 bp.authenticate(b.build());
             } catch (Exception e) { call.reject(e.getMessage()); }
         });
+    }
+
+    // ---------- Jarvis voice: Android speech recognition (WebView has no SpeechRecognition) ----------
+    private SpeechRecognizer sr;
+    @PluginMethod
+    public void listen(PluginCall call) {
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissionForAlias("mic", call, "micCb"); return; }
+        startListen(call);
+    }
+    @PermissionCallback
+    private void micCb(PluginCall call) {
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListen(call);
+        else { JSObject o = new JSObject(); o.put("text", ""); o.put("error", "denied"); call.resolve(o); }
+    }
+    private void startListen(final PluginCall call) {
+        final String lang = call.getString("lang", "ur-PK");
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (sr != null) { try { sr.destroy(); } catch (Exception e) { } sr = null; }
+                if (!SpeechRecognizer.isRecognitionAvailable(getContext())) { JSObject o = new JSObject(); o.put("text", ""); o.put("error", "unavailable"); call.resolve(o); return; }
+                sr = SpeechRecognizer.createSpeechRecognizer(getContext());
+                Intent it = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                it.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                it.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
+                it.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang);
+                it.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                it.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+                sr.setRecognitionListener(new RecognitionListener() {
+                    boolean done = false;
+                    private void fin(String t, String err) { if (done) return; done = true; JSObject o = new JSObject(); o.put("text", t == null ? "" : t); if (err != null) o.put("error", err); call.resolve(o); }
+                    @Override public void onResults(Bundle b) { ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION); fin(r != null && !r.isEmpty() ? r.get(0) : "", null); }
+                    @Override public void onError(int e) { fin("", "e" + e); }
+                    @Override public void onReadyForSpeech(Bundle p) { }
+                    @Override public void onBeginningOfSpeech() { }
+                    @Override public void onRmsChanged(float v) { }
+                    @Override public void onBufferReceived(byte[] b) { }
+                    @Override public void onEndOfSpeech() { }
+                    @Override public void onPartialResults(Bundle b) { }
+                    @Override public void onEvent(int t, Bundle b) { }
+                });
+                sr.startListening(it);
+            } catch (Exception ex) { JSObject o = new JSObject(); o.put("text", ""); o.put("error", String.valueOf(ex.getMessage())); call.resolve(o); }
+        });
+    }
+    @PluginMethod
+    public void stopListen(PluginCall call) {
+        getActivity().runOnUiThread(() -> { try { if (sr != null) sr.stopListening(); } catch (Exception e) { } });
+        call.resolve();
     }
 }
