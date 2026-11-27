@@ -11,8 +11,8 @@
   var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.yqi-ytm7.workers.dev";
 
   var SETTINGS = { voiceURI: "", languageCode: "ur-PK", micLang: "ur-PK", speakingRate: 1, pitch: 0, autoSpeak: true, natural: true, gvoice: "Charon" };
-  var AN = "Jarvis"; // assistant name (also the wake word)
-  var WAKE_NAMES = { jarvis: "jarvis|jarwis|jervis|jaarvis|جاروس|جارویس|جاروِس|جاروز|جارس", ultron: "ultron|altron|alton|ultran|ultra on|الٹرون|آلٹرون|اولٹرون|الٹران|الٹرن" };
+  var AN = "Altron"; // assistant name (also the wake word)
+  var WAKE_NAMES = { jarvis: "jarvis|jarwis|jervis|jaarvis|جاروس|جارویس|جاروِس|جاروز|جارس", altron: "altron|ultron|aal tron|al tron|ul tron|ultra on|ultraun|altran|alton|ultran|ultra on|الٹرون|آلٹرون|اولٹرون|الٹران|الٹرن" };
   function wakeRe() { var k = AN.toLowerCase(); return new RegExp("(" + (WAKE_NAMES[k] || k) + ")", "i"); }
   var GREETED = false, VOICE_MODE = false, AUDIO = null, PENDING_DO = null, PLAN_TEXT = "", DONE = [];
   var HISTORY = [], OPEN = false, BUSY = false, SETTINGS_LOADED = false;
