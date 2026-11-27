@@ -4713,8 +4713,10 @@ function openIS(route){
   showHome(false); var t = $("yqTip"); if(t) t.style.display = "none";
   try{ if(!YQBACK.has("is")) YQBACK.push(function(){ if(HOMEON){ YQBACK.back(); return; } showHome(true); }, "is"); }catch(e){}
   if(!started){ window.__yqIsOpening = 1; showGate('<h1>Opening Inspection Summary…</h1>'); runApp(); }
-  var n = 0; (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); if(route) goRoute(route); return; } if(++n < 100) setTimeout(f, 100); else hideGate(); })();
+  var n = 0, isOn = function(){ var ok = false; document.querySelectorAll("iframe").forEach(function(fr){ try{ if(fr.contentDocument && fr.contentDocument.getElementById("nav")) ok = true; }catch(e){} }); return ok; };
+  (function f(){ var b = document.querySelector('[data-v="insp"]'); if(b){ b.click(); hideGate(); if(route) goRoute(route); return; } if(isOn()){ hideGate(); if(route) goRoute(route); return; } if(++n < 150) setTimeout(f, 100); else hideGate(); })();
 }
+window.yqShowHome = function(){ try{ if(YQBACK.has("is")){ YQBACK.back(); return; } }catch(e){} showHome(true); };
 window.yqGoWastage = function(){ goRoute("import"); var n = 0; (function f(){ var c = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ c = fr.contentDocument.getElementById("yqWcard") || c; }catch(e){} }); if(c && c.offsetParent){ c.scrollIntoView({behavior: "smooth", block: "start"}); return; } if(++n < 40) setTimeout(f, 150); })(); };
 function goRoute(r){ var n = 0; (function f(){ var a = null; document.querySelectorAll("iframe").forEach(function(fr){ try{ var d = fr.contentDocument; if(d && d.getElementById("nav")) a = d.querySelector('a[data-r="' + r + '"]') || a; }catch(e){} }); if(a){ a.click(); return; } if(++n < 80) setTimeout(f, 150); })();
 }
@@ -5109,7 +5111,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-155445", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-171013", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
