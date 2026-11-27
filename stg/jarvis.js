@@ -20,7 +20,7 @@
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 
   function ready() {
-    var u = window.firebase && firebase.auth && firebase.auth().currentUser;
+    var u = null; try { u = window.firebase && firebase.apps && firebase.apps.length && firebase.auth && firebase.auth().currentUser; } catch (e) { u = null; }
     return !!(u && u.email && typeof window.YQLV !== "undefined");
   }
   function staffOK() {
