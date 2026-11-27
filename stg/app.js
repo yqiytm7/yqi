@@ -4878,7 +4878,7 @@ qiList = function(o){ sheetTop(); qiCss(); [["yqQpCss", QPCSS], ["yqTbCss", TBCS
   // team donut
   var tg = QP_G.map(function(g){ return {g: g, n: VL.filter(function(x){ return grp(x.type) === g[0]; }).length}; }), tN = tg.reduce(function(a, z){ return a + z.n; }, 0), Cd = 2 * Math.PI * 45, off = 0;
   // defects
-  var df = {}; L.forEach(function(x){ (x.defects || []).forEach(function(r){ var k = r.n || r.t || r.name; if(k) df[k] = (df[k] || 0) + (+r.q || 1); }); }), dfl = Object.keys(df).map(function(k){ return [k, df[k]]; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, 5), dmx = dfl.length ? dfl[0][1] : 1;
+  var df = {}; L.forEach(function(x){ (x.defects || []).forEach(function(r){ var k = r.n || r.t || r.name; if(k) df[k] = (df[k] || 0) + (+r.q || 1); }); }); var dfl = Object.keys(df).map(function(k){ return [k, df[k]]; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, 5), dmx = dfl.length ? dfl[0][1] : 1;
   var dn = now.toLocaleDateString("en-GB", {weekday: "long", day: "numeric", month: "long"});
   var h = '<div class="ilW"><div class="ilH"><div><h2>Inspections</h2><p>' + esc(dn) + ' · ' + A.length + ' on record' + (nAsg ? ' · ' + nAsg + ' to assign' : '') + (nMine ? ' · ' + nMine + ' waiting for you' : '') + '</p></div><div class="bt"><button class="ilB p" id="yqQiN">' + ilSv("plus") + 'New inspection</button><button class="ilB" id="yqQiTr">' + ilSv("map") + 'Order tracker</button>' + (canBook() ? '<button class="ilB" id="yqQiBk">' + ilSv("book") + 'Book</button>' : '') + (lockOk() ? '<button class="ilB" id="yqQiX">' + ilSv("dl") + 'Excel</button>' : '') + '</div></div>' +
     '<div class="ilK">' + [["Inspections", L.length, "in this view", "#3d9a1f"], ["This month", mon, now.toLocaleDateString("en-GB", {month: "long"}), "#2f6fd6"], ["Pass rate", null, done.length + " with a result", "#3fae1c", 1], ["Failed", done.length - pass, done.length - pass ? "need re-inspection" : "none", "#e5484d"], ["Open", open, "booked or assigned", "#d98a0b"], ["Today DHU", null, dh.length ? dh.length + " checks today" : "no inline yet", "#8a5cf6", 2]].map(function(k, j){
@@ -5528,7 +5528,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261128-003043", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261128-003230", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
