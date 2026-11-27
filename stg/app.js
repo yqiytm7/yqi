@@ -4740,7 +4740,7 @@ var qiPickV3 = qiPick; qiPick = function(o){ qiPickV3(o); var B = o.querySelecto
     W.style.setProperty("--c", g[2]);
     W.innerHTML = '<div class="qpH"><div><h2>Start an inspection</h2><p>' + esc(g[3]) + '</p></div></div>' +
       '<div class="qpTabs">' + QP_G.map(function(z){ var n = ids.filter(function(id){ return grp(id) === z[0]; }).reduce(function(a, id){ return a + ((S[id] || {}).n || 0); }, 0); return '<button data-tb="' + z[0] + '" class="' + (z[0] === tab ? "on" : "") + '" style="--c:' + z[2] + '"><i></i>' + esc(z[1]) + '<b>' + n.toLocaleString("en-US") + '</b></button>'; }).join("") + '</div>' +
-      '<div class="qpK"><div><span>Inspections</span><b data-cnt="' + T.n + '">0</b></div><div><span>This month</span><b data-cnt="' + T.m + '">0</b></div><div><span>Pass rate</span><b data-cnt="' + pr + '" data-sfx="%">0</b></div><div><span>Failed</span><b class="' + (T.f ? "r" : "") + '" data-cnt="' + T.f + '">0</b></div></div><div class="qpG"></div>';
+      '<div class="qpK"><div><span>Inspections</span><b data-cnt="' + T.n + '">0</b></div><div><span>This month</span><b data-cnt="' + T.m + '">0</b></div><div><span>Pass rate</span>' + (T.p + T.f ? '<b data-cnt="' + pr + '" data-sfx="%">0</b>' : '<b>—</b>') + '</div><div><span>Failed</span><b class="' + (T.f ? "r" : "") + '" data-cnt="' + T.f + '">0</b></div></div><div class="qpG"></div>';
     var G = W.querySelector(".qpG");
     mine.forEach(function(id, i){ var b = btn[id], d = QP_T[id] || ["qc", (QI_TYPES.filter(function(t){ return t[0] === id; })[0] || [0, id])[1], "", "list"], s = S[id] || {n: 0, p: 0, f: 0, m: 0, last: 0}, dn = s.p + s.f, pp = dn ? Math.round(s.p * 100 / dn) : 0;
       b.className = "qpC"; b.style.setProperty("--c", g[2]); b.style.animationDelay = (i * 45) + "ms";
@@ -5379,7 +5379,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261128-001236", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261128-001425", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
