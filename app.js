@@ -4665,6 +4665,9 @@ async function custWipe(kind){ var X = HCUST; if(!X) return; if(!(OWNER || ISED)
     window.__yqBusy = 0; HMSG = '<span class="hok">✓ Removed ' + all.toLocaleString() + ' ' + nm + ' records of ' + esc(X) + '. Backup saved. Upload the correct file now.</span>'; HDATA = null; loadHomeTry(0); renderHome(); try{ if(window.yqDataPing) yqDataPing(kind === "ext" ? "is_ext" : "is_int", X + " " + nm + " data removed", ""); }catch(e){} }
   catch(e){ window.__yqBusy = 0; HMSG = ""; renderHome(); yqAsk(errTxt(e) + "\n" + done + " of " + all + " were removed. The backup file has everything.", {title: "Stopped", alert: 1}); } }
 
+
+// Jarvis reads the data already loaded in this browser (no extra Firebase reads)
+window.YQJDATA = function(){ var g = function(c){ try{ return isRows(c) || []; }catch(e){ return []; } }; return {ext: g("is_ext"), int: g("is_int"), wst: window.YQWST || null, capa: CAPA || []}; };
 // ---------- Offline: what you save without internet stays on this phone and uploads by itself ----------
 var OBK = "yqi_outbox", OBRUN = 0;
 function obGet(){ try{ return JSON.parse(localStorage.getItem(OBK) || "[]") || []; }catch(e){ return []; } }
@@ -5102,7 +5105,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-093623", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-095539", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
