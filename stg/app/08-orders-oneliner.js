@@ -37,7 +37,7 @@ function qiBooked(o, x, just){ sheetStep(o, function(){ qiList(o); }); var B = o
       .then(function(){ var nx = (QIL || []).filter(function(y){ return y._id === x._id; })[0] || x; qiBooked(o, nx); toastQ("Assigned ✓"); }).catch(function(e){ yqAsk(errTxt(e), {title: "Not saved", alert: 1}); }); };
   if($("yqBkA")) $("yqBkA").onclick = assign;
   if($("yqBkRe")) $("yqBkRe").onclick = function(){ QICOL().doc(x._id).set({st: "booked"}, {merge: true}).then(qiLoad).then(function(){ var nx = (QIL || []).filter(function(y){ return y._id === x._id; })[0] || x; qiBooked(o, nx); }); };
-  if($("yqBkGo")) $("yqBkGo").onclick = function(){ var y = JSON.parse(JSON.stringify(x)); y.date = y.date || y.plan; if(!y.insp) y.insp = y.asgName || ""; qiForm(o, y); };
+  if($("yqBkGo")) $("yqBkGo").onclick = function(){ var y = JSON.parse(JSON.stringify(x)); y.date = y.date || y.plan; if(!y.insp) y.insp = y.asgName || ""; if(!y.startAt){ y.startAt = window.yqNow ? yqNow() : Date.now(); y.startBy = EMAIL; x.startAt = y.startAt; try{ QICOL().doc(x._id).update({startAt: y.startAt, startBy: EMAIL}).catch(function(){}); }catch(e){} } qiForm(o, y); };
   o.querySelector(".ycpBody").scrollTop = 0; }
 
 // ---------- One-liner (weekly plan) upload → YTM fills the inspection by itself ----------
