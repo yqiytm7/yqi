@@ -5108,7 +5108,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-150249", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-152051", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
@@ -5119,7 +5119,7 @@ setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000)
     var b = document.createElement("div"); b.id = "yqUpd"; b.setAttribute("role", "alert"); b.innerHTML = '<div class="ic"><i>↻</i></div><div class="tx"><b>New version of YQI is ready</b><span>Tap Refresh to get the latest features. Your saved data stays as it is.</span></div><button class="x" aria-label="Later">×</button><button class="go">Refresh now</button>'; document.body.appendChild(b);
     b.querySelector(".go").onclick = function(){ this.disabled = true; this.textContent = "Updating…"; refresh(nv); };
     b.querySelector(".x").onclick = function(){ snooze = Date.now() + 10 * 60e3; b.remove(); }; }
-  function check(){ if(V.indexOf("__") === 0 && !window.__yqVerTest) return; try{ fetch(base + "version.json?t=" + Date.now(), {cache: "no-store"}).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){ if(j && j.v && j.v !== (window.__yqVerTest || V)) show(j.v); }).catch(function(){}); }catch(e){} }
+  function check(){ if(V.indexOf("__") === 0 && !window.__yqVerTest) return; if(/staging/.test(location.pathname) && !window.__yqVerTest) return; try{ fetch(base + "version.json?t=" + Date.now(), {cache: "no-store"}).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){ if(j && j.v && j.v !== (window.__yqVerTest || V)) show(j.v); }).catch(function(){}); }catch(e){} }
   window.yqVerCheck = check; setTimeout(check, 3000); setInterval(check, 90000);
   document.addEventListener("visibilitychange", function(){ if(!document.hidden) check(); }); window.addEventListener("focus", check); window.addEventListener("online", check);
   try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function(e){ if(e.data && e.data.yqiUpdate) check(); }); }catch(e){}

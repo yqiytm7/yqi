@@ -15,7 +15,9 @@
   function who(u){ try{ var p = window.YQCHAT && YQCHAT.people()[u]; if(p && p.name) return p.name; }catch(e){} var c = firebase.auth().currentUser; return u === uid() && c ? (c.displayName || String(c.email || "").split("@")[0]) : "Someone"; }
   function first(u){ return u === uid() ? "You" : who(u).split(" ")[0]; }
   function toast(t){ var d = document.createElement("div"); d.className = "wqToast"; d.textContent = t; document.body.appendChild(d); setTimeout(function(){ d.remove(); }, 2600); }
-  function gpNo(){ var d = new Date(); return pad(d.getMonth() + 1) + pad(d.getDate()) + "-" + pad(d.getHours()) + pad(d.getMinutes()) + Math.random().toString(36).slice(2, 4).toUpperCase(); }
+  function NOW(){ return window.yqNow ? yqNow() : Date.now(); }
+  function SAT(){ try{ return firebase.firestore.FieldValue.serverTimestamp(); }catch(e){ return null; } }
+  function gpNo(){ var d = new Date(NOW()); return pad(d.getMonth() + 1) + pad(d.getDate()) + "-" + pad(d.getHours()) + pad(d.getMinutes()) + Math.random().toString(36).slice(2, 4).toUpperCase(); }
   var TY = {gp: {ic: "🚚", lb: "GATE PASS · FLOOR → WASHING", col: "#10260F", fg: "#A6DD5E"}, qc: {ic: "🧪", lb: "WASHING QC 5%", col: "#1F5FAF", fg: "#fff"}, rt: {ic: "📦", lb: "RETURN · WASHING → FLOOR", col: "#B87A12", fg: "#fff"}};
   var CHK = [["hand", "Hand feel"], ["col", "Colour / shade"], ["shr", "Shrinkage / size"], ["stn", "Stains / spots"], ["dmg", "Fabric / stitch damage"], ["odr", "Smell / dampness"]];
 
@@ -146,7 +148,7 @@
       if(!okv && !P.length) return st("Add a photo of the issue");
       if(!okv && !note) return st("Write what the issue is");
       go.disabled = true; go.textContent = "Saving…";
-      upPhotos(P, st).then(function(ph){ var a = {by: uid(), at: Date.now(), q: q, ok: okv, note: note}; if(ph.length) a.ph = ph;
+      upPhotos(P, st).then(function(ph){ var a = {by: uid(), at: NOW(), q: q, ok: okv, note: note}; if(navigator.onLine !== false && SAT()) a.sat = SAT(); if(ph.length) a.ph = ph;
         var aref = fs().collection("chats").doc(GID).collection("m").doc(id); return (navigator.onLine === false && window.yqSave ? yqSave(aref, {ack: a}, true) : aref.update({ack: a})).then(function(){
           var txt = (okv ? "✓ " : "⚠ ") + (m.wt === "gp" ? "Washing received " : "Floor QC received ") + m.no + " · " + n0(q) + " pcs" + (q !== +m.qty ? " (" + (q - m.qty > 0 ? "+" : "") + n0(q - m.qty) + ")" : "") + (okv ? "" : " · ISSUE") + (note ? " · " + note : "");
           return YQCHAT.washPost(GID, {k: "text", t: txt, rp: {id: m.id, by: m.by, t: m.t || m.no}}, txt); }); })
@@ -270,6 +272,7 @@
   ".wlGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}.wlC{background:#fff;border:1px solid #DCE6D2;border-radius:16px;padding:12px 14px;font-size:13px}.wlC.hold,.wlC.iss{border-color:#f2b8b5}.wlCh{display:flex;justify-content:space-between;align-items:center;gap:8px}.wlCy{margin-top:4px}.wlCp{margin-top:4px;color:#40503a}.wlC small{color:#55664d}",
   ".wlHd{display:flex;align-items:center;gap:12px;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));background:#10260F;color:#fff;flex:none}.wlHd>button[data-x]{width:38px;height:38px;border-radius:11px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;flex:none;cursor:pointer}.wlHt{flex:1;min-width:0}.wlHt b{display:block;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wlHt small{display:block;font-size:11.5px;color:#a9c79a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wlNew{flex:none;border:0;border-radius:11px;padding:10px 14px;font:800 13px Manrope,Inter,sans-serif;background:#A6DD5E;color:#10260F;cursor:pointer}",
   ".wlHero{display:flex;gap:10px;margin:2px 0 10px}.wlHero .sc{flex:none;width:118px;border:0;border-radius:16px;background:linear-gradient(145deg,#10260F,#2C5A1E);color:#fff;padding:12px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:0 6px 18px rgba(16,38,15,.25)}.wlHero .sc i{font-style:normal;font-size:26px}.wlHero .sc b{font:800 14px Manrope,Inter,sans-serif}.wlHero .sc small{font-size:10.5px;color:#bfe0a4}.wlHero .mn{flex:1;display:flex;flex-direction:column;gap:6px;background:#fff;border:1.5px solid #dfe8d6;border-radius:16px;padding:10px}.wlHero .mn input{border:1.5px solid #cfdcc4;border-radius:11px;padding:11px 12px;font:700 15px Inter,sans-serif;width:100%;box-sizing:border-box;text-transform:uppercase}.wlHero .mn button{border:0;border-radius:11px;padding:10px;background:#A6DD5E;color:#10260F;font:800 14px Manrope,Inter,sans-serif;cursor:pointer}",
+  ".wlAuto{background:#eef6e6;border:1px dashed #9cc47a;border-radius:10px;padding:9px 12px;font-size:12.5px;color:#2C5A1E;margin:6px 0 10px}",
   ".wlMe{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:#4a5a44;margin:0 2px 10px}.wlMe button{border:1px solid #cfdcc4;background:#fff;border-radius:999px;padding:5px 12px;font:700 12px Inter,sans-serif;cursor:pointer}",
   ".wlPick{display:block;width:100%;text-align:left;border:1.5px solid #dfe8d6;background:#fff;border-radius:14px;padding:13px 14px;margin-bottom:9px;cursor:pointer}.wlPick.on{border-color:#2C5A1E;background:#f1f8e9}.wlPick b{display:block;font:800 15px Manrope,Inter,sans-serif;color:#10260F}.wlPick small{display:block;font-size:12px;color:#66735f;margin:3px 0}",
   ".wlKb{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:start}.wlCol{background:#eef3ea;border-radius:14px;padding:8px;min-height:120px}.wlColH{font:800 13px Manrope,Inter,sans-serif;color:#10260F;padding:4px 4px 8px;position:relative}.wlColH b{position:absolute;right:4px;top:3px;background:#10260F;color:#fff;border-radius:999px;padding:1px 8px;font-size:11px}.wlColH small{display:block;font:600 10.5px Inter,sans-serif;color:#6b7a63}.wlColE{text-align:center;color:#9aa792;padding:16px 0}.wlKc{display:block;width:100%;text-align:left;border:0;border-left:4px solid #A6DD5E;background:#fff;border-radius:10px;padding:9px 10px;margin-bottom:7px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06)}.wlKc.hold{border-left-color:#E5484D}.wlKc b{display:block;font:800 13.5px Manrope,Inter,sans-serif}.wlKc span,.wlKc small,.wlKc i{display:block;font-size:11.5px;color:#55624e;font-style:normal}.wlKc em{display:block;font-style:normal;font-size:11px;color:#B4232A;margin-top:3px}.wlKc i{color:#8b9784;margin-top:3px}",
@@ -330,11 +333,10 @@
       '<div class="wqG2"><div class="wqF"><label>Colour</label><input data-k="color" placeholder="e.g. Maxim Blue"></div><div class="wqF"><label>Shade #</label><input data-k="shade" placeholder="e.g. 169"></div></div>' +
       '<div class="wqF"><label>Panels / article — size aur quantity <span class="wlU"><button data-u="in" class="on">inch</button><button data-u="cm">cm</button></span></label><div data-parts></div><div class="wlAdd"><button data-add="Pillow">+ Pillow</button><button data-add="Panel">+ Panel</button><button data-add="Article">+ Article</button></div><div class="wlTot" data-tot></div></div>' +
       '<div class="wqG2"><div class="wqF"><label>Bundles</label><input data-k="bun" type="number" inputmode="numeric" min="0"></div><div class="wqF"><label>Pcs per bundle</label><input data-k="pb" type="number" inputmode="numeric" min="0"></div></div>' +
-      '<div class="wqG2"><div class="wqF"><label>Estimated time of consumption</label><input data-k="eta" type="datetime-local"></div><div class="wqF"><label>Washing</label><select data-k="to"><option>In-house washing</option><option>Outside washing</option></select></div></div>' +
+      '<div class="wqG2"><div class="wqF"><label>Washing se wapsi (andaza)</label><select data-k="etah"><option value="6">6 ghante</option><option value="12">12 ghante</option><option value="24" selected>24 ghante</option><option value="48">2 din</option><option value="72">3 din</option></select></div><div class="wqF"><label>Washing</label><select data-k="to"><option>In-house washing</option><option>Outside washing</option></select></div></div>' +
       phField("ph", "Photo — trolley / bundles (optional)") + '<div class="wqF"><label>Note</label><textarea data-k="note" rows="2" placeholder="Washing ke liye koi hidayat (optional)"></textarea></div>' +
-      '<div class="wqSt" data-st></div><button class="wqGo" data-go>Gate pass banao · Cutting QC ko bhejo →</button></div></div>', "wlf");
+      '<div class="wlAuto">🕒 Date / time khud lagega (server time) — koi edit nahi kar sakta</div><div class="wqSt" data-st></div><button class="wqGo" data-go>Gate pass banao · Cutting QC ko bhejo →</button></div></div>', "wlf");
     var $k = function(k){ return o.querySelector('[data-k="' + k + '"]'); }, V = function(k){ var e = $k(k); return e ? String(e.value).trim() : ""; };
-    var eta = new Date(Date.now() + 864e5); eta.setMinutes(eta.getMinutes() - eta.getTimezoneOffset()); $k("eta").value = eta.toISOString().slice(0, 16);
     var PB = o.querySelector("[data-parts]"), TOT = o.querySelector("[data-tot]");
     var drawParts = function(){ PB.innerHTML = items.map(function(p, i){ var cv = U === "in" ? (p.l || p.w ? cm(p.l) + " × " + cm(p.w) + " cm" : "") : (p.l || p.w ? r1(p.l / 2.54) + " × " + r1(p.w / 2.54) + " in" : "");
         return '<div class="wlPr"><select data-pi="' + i + '" data-f="p">' + PARTS.map(function(x){ return '<option' + (x === p.p ? " selected" : "") + '>' + x + '</option>'; }).join("") + '</select><input data-pi="' + i + '" data-f="l" type="number" inputmode="decimal" placeholder="L ' + U + '" value="' + esc(p.l) + '"><span>×</span><input data-pi="' + i + '" data-f="w" type="number" inputmode="decimal" placeholder="W ' + U + '" value="' + esc(p.w) + '"><input data-pi="' + i + '" data-f="q" type="number" inputmode="numeric" placeholder="Qty pcs" value="' + esc(p.q) + '" class="q"><button data-rmp="' + i + '">✕</button><small>' + cv + '</small></div>'; }).join("");
@@ -371,7 +373,7 @@
     yi.onchange = function(){ if(!olm){ var r = olFind(yi.value); if(r){ olm = r; showOl(); } } };
     var P = phPicker(o, "ph"), stE = o.querySelector("[data-st]"), st = function(x){ stE.textContent = x; }, go = o.querySelector("[data-go]");
     go.onclick = function(){
-      var m = {k: "wash", wt: "lot", floor: V("floor"), ytm: V("ytm").toUpperCase(), design: V("design") === "__o" ? "" : V("design"), size: V("size") === "__o" ? "" : V("size"), art: V("art"), type: ty, color: V("color"), shade: V("shade"), bun: +V("bun") || 0, pb: +V("pb") || 0, eta: V("eta"), to: V("to"), note: V("note"), s: {}};
+      var m = {k: "wash", wt: "lot", floor: V("floor"), ytm: V("ytm").toUpperCase(), design: V("design") === "__o" ? "" : V("design"), size: V("size") === "__o" ? "" : V("size"), art: V("art"), type: ty, color: V("color"), shade: V("shade"), bun: +V("bun") || 0, pb: +V("pb") || 0, eta: (function(){ var e = new Date(NOW() + (+V("etah") || 24) * 36e5); e.setMinutes(e.getMinutes() - e.getTimezoneOffset()); return e.toISOString().slice(0, 16); })(), to: V("to"), note: V("note"), s: {}};
       if(!m.floor) return st("Floor chunein"); if(!m.ytm) return st("YTM likhein");
       m.items = items.map(function(p){ var f = U === "cm" ? 1 / 2.54 : 1; return {p: p.p, l: p.l ? r1(+p.l * f) : 0, w: p.w ? r1(+p.w * f) : 0, q: +p.q || 0}; }).filter(function(p){ return p.q > 0; });
       if(!m.items.length) return st("Kam se kam ek panel / article ki quantity likhein");
@@ -418,7 +420,7 @@
       var sl = al && p.l ? r1((p.l - al) / p.l * 100) : null, sw = aw && p.w ? r1((p.w - aw) / p.w * 100) : null; sm.innerHTML = "shrinkage " + (sl != null ? "L " + sl + "%" : "") + (sw != null ? " · W " + sw + "%" : "") + ((sl > 5 || sw > 5) ? ' <b class="bad">zyada</b>' : ""); }; });
     var P = phPicker(o, "ph"), stE = o.querySelector("[data-st]"), st = function(x){ stE.textContent = x; }, go = o.querySelector("[data-go]");
     var Vk = function(q){ var e = o.querySelector('[data-k="' + q + '"]'); return e ? String(e.value).trim() : ""; };
-    go.onclick = function(){ var d = {by: uid(), at: Date.now(), ok: +seg.ok, note: Vk("note")};
+    go.onclick = function(){ var d = {by: uid(), at: NOW(), ok: +seg.ok, note: Vk("note")}; if(navigator.onLine !== false && SAT()) d.sat = SAT();
       if(k === "cq"){ d.meas = (L.items || []).map(function(p, i){ return {p: p.p, l: +o.querySelector('[data-ml="' + i + '"]').value || 0, w: +o.querySelector('[data-mw="' + i + '"]').value || 0, q: +o.querySelector('[data-mq="' + i + '"]').value || 0}; }); d.chk = {}; o.querySelectorAll("[data-ck]").forEach(function(x){ d.chk[x.dataset.ck] = x.classList.contains("bad") ? 0 : 1; }); d.q = d.meas.reduce(function(a, x){ return a + x.q; }, 0); if(!P.length) return st("Photo zaroori hai"); }
       if(k === "rv" || k === "rt" || k === "fa"){ if(Vk("q") === "") return st("Ginti likhein"); d.q = +Vk("q"); }
       if(k === "rv"){ d.bun = +Vk("bun") || 0; if(d.q !== L.tot && !d.note) return st("Ginti alag hai (" + n0(d.q - L.tot) + ") — note likhein"); }
@@ -427,11 +429,11 @@
       if(k === "fa" && L.ret != null && d.q < L.ret && !d.note) return st("Kam mile (" + n0(L.ret - d.q) + ") — note likhein");
       if(!d.ok && !d.note) return st("Issue kya hai — likhein"); if(!d.ok && !P.length && k !== "wq") return st("Issue ki photo lagayein");
       go.disabled = true; go.textContent = "Save ho raha hai…";
-      upPhotos(P, st).then(function(ph){ if(ph.length) d.ph = ph; var nx = STEPS[S.i + 1], up = {up: Date.now()}; up["s." + k] = d; up.nx = nx ? nx.k : "done";
+      upPhotos(P, st).then(function(ph){ if(ph.length) d.ph = ph; var nx = STEPS[S.i + 1], up = {up: NOW()}; up["s." + k] = d; up.nx = nx ? nx.k : "done";
         var ref = fs().collection("chats").doc(GID).collection("m").doc(id);
         var txt = S.ic + " " + (L.no || "") + " · YTM " + L.ytm + " · " + S.t + (d.ok ? " ✓" : " ⚠ ISSUE") + (d.q != null ? " · " + n0(d.q) + " pcs" : "") + (nx ? " → " + nx.t : " · CLOSED");
         var w = navigator.onLine === false && window.yqSave ? yqSave(ref, up, true) : ref.update(up);
-        return w.then(function(){ try{ fs().collection("chats").doc(GID).update({at: Date.now(), last: {t: txt.slice(0, 120), by: uid(), at: Date.now(), k: "text"}}); }catch(e){} }); })
+        return w.then(function(){ try{ fs().collection("chats").doc(GID).update({at: NOW(), last: {t: txt.slice(0, 120), by: uid(), at: NOW(), k: "text"}}); }catch(e){} }); })
         .then(function(){ toast("Save ho gaya" + (STEPS[S.i + 1] ? " · ab " + STEPS[S.i + 1].role : " · lot CLOSED")); o.__close(); })
         .catch(function(e){ go.disabled = false; go.textContent = "Dobara try karein"; st("Save nahi hua: " + (e.code || e.message)); });
     }; }
@@ -509,7 +511,9 @@
     o.querySelector('[data-a="xl"]').onclick = function(){ lotsExcel(list()); };
     o.querySelector('[data-a="pr"]').onclick = function(){ printDoc("Wash QC report " + ymd(new Date()), listPrint(list(), BS.r === "all" ? "All" : "Last " + BS.r + " days + all open lots")); };
     o.querySelector('[data-a="old"]').onclick = function(){ report(); };
-    RF = function(err){ if(!document.body.contains(o)){ RF = null; return; } if(err){ B.innerHTML = '<div class="wqEmpty"><b>Pehle Wash QC group join karein</b><br><button class="wqGo sm" data-join>Group kholo</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
+    var typing = function(){ var a = document.activeElement; return a && o.contains(a) && /INPUT|TEXTAREA/.test(a.tagName); };
+    RF = function(err, force){ if(!document.body.contains(o)){ RF = null; return; } if(!force && typing()){ o.__pend = 1; return; } o.__pend = 0;
+      var keep = {}; o.querySelectorAll("[data-fi],[data-q]").forEach(function(e){ keep[e.hasAttribute("data-fi") ? "fi" : "q"] = e.value; }); if(err){ B.innerHTML = '<div class="wqEmpty"><b>Pehle Wash QC group join karein</b><br><button class="wqGo sm" data-join>Group kholo</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
       var y = B.scrollTop, LL = list(), open = LL.filter(function(L){ return L.nx; }), cnt = {}; open.forEach(function(L){ cnt[L.nx.k] = (cnt[L.nx.k] || 0) + 1; });
       var role = myRole(), mine = roleSteps(role), myN = open.filter(function(L){ return mine.indexOf(L.nx.k) >= 0; }).length;
       var h = '<div class="wlHero"><button class="sc" data-scan><i>📷</i><b>Scan QR</b><small>Slip scan karein</small></button><form class="mn" data-find><input data-fi placeholder="Lot no ya YTM likhein" autocomplete="off"><button>Kholo →</button></form></div>' +
@@ -524,7 +528,8 @@
       if(wide){ h += '<div class="wlKb">' + STEPS.slice(1).map(function(s){ var c = show.filter(function(L){ return L.nx.k === s.k; }); return '<div class="wlCol"><div class="wlColH">' + s.ic + ' ' + esc(s.t) + '<b>' + c.length + '</b><small>' + esc(s.role) + '</small></div>' + (c.length ? c.map(function(L){ return '<button class="wlKc ' + L.stat + '" data-open-l="' + L.id + '"><b>' + esc(L.no) + '</b><span>YTM ' + esc(L.ytm) + ' · ' + esc(L.cust || "") + '</span><small>' + esc([L.design, L.size].filter(Boolean).join(" · ")) + ' · ' + n0(L.tot) + ' pcs</small>' + (L.iss.length ? '<em>⚠ ' + esc(L.iss.join(", ")) + '</em>' : '') + '<i>' + dt(L.up || L.at) + '</i></button>'; }).join("") : '<div class="wlColE">—</div>') + '</div>'; }).join("") + '</div>'; show = []; }
       h += wide ? '' : show.length ? '<div class="wlGrid">' + show.map(function(L){ return '<div class="wlC ' + L.stat + '"><div class="wlCh"><b>' + esc(L.no) + '</b>' + lchip(L) + '</div><div class="wlCy">YTM <b>' + esc(L.ytm) + '</b> · ' + esc(L.cust || "") + '</div><small>' + esc([L.design, L.size, L.floor].filter(Boolean).join(" · ")) + '</small><div class="wlCp">' + partsLine(L) + ' · <b>' + n0(L.tot) + '</b></div>' + dots(L) +
         '<div class="wqBtns pad">' + (L.nx ? '<button data-wq="step" data-id="' + L.id + '" data-k="' + L.nx.k + '">' + L.nx.ic + ' ' + esc(L.nx.t) + '</button>' : '') + '<button data-v="' + L.id + '" class="gh">📄 Report</button></div></div>'; }).join("") + '</div>' : '<div class="wlEm"><b>No lots here</b><span>' + (BS.tab === "closed" ? "Closed lots will appear here." : "Create a gate pass to start a new lot.") + '</span>' + (BS.tab === "closed" ? '' : '<button data-nw>+ New gate pass</button>') + '</div>';
-      B.innerHTML = h; B.scrollTop = y;
+      B.innerHTML = h; B.scrollTop = y; var fi0 = B.querySelector("[data-fi]"); if(fi0 && keep.fi) fi0.value = keep.fi;
+      B.querySelectorAll("input").forEach(function(e){ e.addEventListener("blur", function(){ setTimeout(function(){ if(o.__pend && !typing() && RF) RF(); }, 150); }); });
       B.querySelectorAll("[data-r]").forEach(function(b){ b.onclick = function(){ BS.r = b.dataset.r; RF(); }; });
       B.querySelectorAll("[data-st]").forEach(function(b){ b.onclick = function(){ BS.tab = b.dataset.st; BS.touched = 1; RF(); }; });
       B.querySelector("[data-scan]").onclick = scanLot;
@@ -533,7 +538,7 @@
       B.querySelectorAll("[data-open-l]").forEach(function(b){ b.onclick = function(){ openLot(lotById(b.dataset.openL)); }; });
       B.querySelectorAll("[data-v]").forEach(function(b){ b.onclick = function(){ lotView(b.dataset.v); }; });
       B.querySelectorAll("[data-nw]").forEach(function(b){ b.onclick = function(){ lotForm(); }; });
-      var qi = B.querySelector("[data-q]"); qi.oninput = function(){ BS.q = qi.value; clearTimeout(qi.__t); qi.__t = setTimeout(function(){ RF(); var q2 = B.querySelector("[data-q]"); if(q2){ q2.focus(); q2.setSelectionRange(q2.value.length, q2.value.length); } }, 300); }; };
+      var qi = B.querySelector("[data-q]"); qi.oninput = function(){ BS.q = qi.value; clearTimeout(qi.__t); qi.__t = setTimeout(function(){ RF(null, 1); var q2 = B.querySelector("[data-q]"); if(q2){ q2.focus(); q2.setSelectionRange(q2.value.length, q2.value.length); } }, 400); }; };
     RF(); if(!myRole()) setTimeout(function(){ chooseRole(function(){ BS.touched = 0; RF(); }); }, 500); }
   window.YQWASH = {GID: GID, card: function(m){ return m && m.wt === "lot" ? lotCard(m) : card(m); }, strip: strip, report: board, oldReport: report, open: function(){ board(); }, group: openGroup, newForm: newForm, lotForm: lotForm, _lotHtml: function(m){ return "<style>" + PCSS + "</style>" + lotPrint(lcalc(m)); }};
 })();

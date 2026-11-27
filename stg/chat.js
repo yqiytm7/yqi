@@ -9,7 +9,7 @@ var MAXF = 12 * 1024 * 1024, CHUNK = 700000, DARK = false;
 function ask(m, o){ return window.yqAsk ? window.yqAsk(m, o) : Promise.resolve(window.confirm(m)); }
 window.YQCHAT = {setToken: function(t, k){ setToken(t, k); },
   washPost: function(cid, m, prev){ if(!MY || !FS) return Promise.reject(new Error("Chat is not ready yet")); var getC = CHATS[cid] ? Promise.resolve(CHATS[cid]) : navigator.onLine === false ? Promise.resolve({id: cid, members: []}) : FS.collection("chats").doc(cid).get().then(function(d){ if(!d.exists) throw new Error("Open the Wash QC group first"); return Object.assign({id: cid}, d.data()); });
-    return getC.then(function(c){ m.by = MY; m.at = now(); var ref = FS.collection("chats").doc(cid).collection("m").doc(), u = {at: m.at, last: {t: String(prev || "").slice(0, 120), by: MY, at: m.at, k: m.k === "wash" ? "text" : m.k}}; u["rd." + MY] = m.at; (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
+    return getC.then(function(c){ m.by = MY; m.at = now(); if(m.k === "wash" && navigator.onLine !== false) try{ m.sat = FV.serverTimestamp(); }catch(e){} var ref = FS.collection("chats").doc(cid).collection("m").doc(), u = {at: m.at, last: {t: String(prev || "").slice(0, 120), by: MY, at: m.at, k: m.k === "wash" ? "text" : m.k}}; u["rd." + MY] = m.at; (c.members || []).forEach(function(x){ if(x !== MY) u["n." + x] = FV.increment(1); });
       if(OPEN === cid){ MSGS.push(Object.assign({id: ref.id, pend: 1}, m)); renderMsgs(); }
       if(navigator.onLine === false && window.yqSave){ return yqSave(ref, m).then(function(){ return ref.id; }); }
       return ref.set(m).then(function(){ return FS.collection("chats").doc(cid).update(u); }).then(function(){ try{ pushNote(Object.assign({id: cid}, c), String(prev || "").slice(0, 120)); }catch(e){} return ref.id; }); }); },
@@ -26,7 +26,9 @@ window.YQCHAT = {setToken: function(t, k){ setToken(t, k); },
 // ---------- helpers ----------
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); }
-function now(){ return Date.now(); }
+var SKEW = 0; function tsync(){ try{ fetch(location.pathname.replace(/[^\/]*$/, "") + "version.json?ts=" + Date.now(), {cache: "no-store"}).then(function(r){ var d = Date.parse(r.headers.get("date") || ""); if(d) SKEW = d - Date.now(); }).catch(function(){}); }catch(e){} }
+tsync(); setInterval(tsync, 6e5); document.addEventListener("visibilitychange", function(){ if(!document.hidden) tsync(); });
+function now(){ return Date.now() + SKEW; } window.yqNow = now;
 function pad(n){ return (n < 10 ? "0" : "") + n; }
 function hm(t){ var d = new Date(t); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
 function sameDay(a, b){ return new Date(a).toDateString() === new Date(b).toDateString(); }
@@ -597,7 +599,7 @@ function linkify(t, hl){ var s = esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a hre
 // ---------- sending ----------
 function post(m, preview){
   var id = OPEN, c = CHATS[id]; if(!c) return Promise.reject(new Error("no chat"));
-  m.by = MY; m.at = now(); if(REPLY){ m.rp = REPLY; REPLY = null; replyBar(); }
+  m.by = MY; m.at = now(); if(m.k === "wash" && navigator.onLine !== false) try{ m.sat = FV.serverTimestamp(); }catch(e){} if(REPLY){ m.rp = REPLY; REPLY = null; replyBar(); }
   if(c.type === "group" && m.t){ var mn = mentionsOf(m.t, c); if(mn.length) m.mn = mn; }
   var tg = []; if(c.cu) tg.push(c.cu); String(m.t || "").replace(/\b(YTM|PO|LOT)\s*[-#:]?\s*([A-Z0-9-]{3,})/gi, function(a, k, n){ tg.push(k.toUpperCase() + " " + n.toUpperCase()); }); if(tg.length) m.tg = tg.filter(function(x, i, a){ return a.indexOf(x) === i; }).slice(0, 6);
   var ref = FS.collection("chats").doc(id).collection("m").doc();
