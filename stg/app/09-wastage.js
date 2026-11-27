@@ -987,3 +987,37 @@ function trBoard(o, q){ sheetStep(o, function(){ qiList(o); }); trCss(); if(!$("
     $("yqTbBk").onclick = function(){ qiList(o); };
     $("yqTbX").onclick = function(){ yqAoaDl("YQI-order-tracker-" + ymd(new Date()), [["Customer", "Program", "YTM", "Order qty", "Cut", "Packed", "Missing stages"].concat(TR_ST.map(function(t){ return t[1]; }))].concat(rows.map(function(r){ return [r.cu, r.pg, r.y, r.qty, r.cut, r.pk, r.g].concat(r.S.map(function(sv, i){ var n2 = r.R[TR_ST[i][0]].length; return (TRL[sv] || "Not yet") + (n2 ? " (" + n2 + ")" : ""); })); })), "Order tracker"); };
     o.querySelector(".ycpBody").scrollTop = 0; }); }
+
+// ---------- Re-inspection: must start from a failed report number ----------
+var RE_SKIP = {_id: 1, no: 1, at: 1, upd: 1, defects: 1, docs: 1, photos: 1, res: 1, calc: 1, signs: 1, sg: 1, check: 1, meas: 1, st: 1, asg: 1, doneAt: 1, email: 1, remarks: 1, capa: 1, concl: 1, actions: 1, ov: 1, ovr: 1, signers: 1, ck: 1, qch: 1, ans: 1, fm: 1, scan: 1, startAt: 1, reOf: 1, reOfId: 1};
+function reFind(no){ var k = String(no || "").trim().toUpperCase(); if(!k) return null; return (QIL || []).filter(function(x){ return String(x.no || "").toUpperCase() === k || String(x.no || "").toUpperCase().slice(-4) === k && k.length === 4; })[0] || null; }
+function reGate(o){ sheetStep(o, function(){ qiPick(o); }); if(!$("yqFriCss")){ var st0 = document.createElement("style"); st0.id = "yqFriCss"; st0.textContent = FRICSS; document.head.appendChild(st0); } trCss();
+  var B = o.querySelector("#yqRpB"), fails = (QIL || []).filter(function(x){ return trRes(x) === "Fail" && x.type !== "old" && !(QIL || []).some(function(z){ return z.reOfId === x._id && trRes(z) === "Pass"; }); }).sort(function(a, b){ return (b.upd || b.at || 0) - (a.upd || a.at || 0); });
+  B.innerHTML = '<div class="frW"><div class="frH">Re-inspection</div><div class="frS">Enter the report number of the failed inspection. The re-inspection opens against the same order, quantity and lot.</div>' +
+    '<div class="frQ"><div class="t"><i>#</i>Failed report number</div><div style="display:flex;gap:6px"><input id="yqReN" placeholder="e.g. QI-260901-UZIX" autocomplete="off" style="text-transform:uppercase"><button class="frAdd" id="yqReGo" style="margin:0;white-space:nowrap">Find</button></div><div id="yqReM" class="frS" style="margin:8px 0 0"></div></div>' +
+    (fails.length ? '<div class="frQ"><div class="t"><i>⚠</i>Failed and not yet passed (' + fails.length + ')</div><div class="frDl">' + fails.slice(0, 30).map(function(x){ return '<button data-re="' + esc(x.no) + '">' + esc(x.no + " · " + qiName(x.type) + (x.ytm ? " · YTM " + x.ytm : "") + (x.date ? " · " + dmy(x.date) : "")) + '</button>'; }).join("") + '</div></div>' : '') +
+    '<div class="frNav"><button class="b" id="yqReB">‹ Back</button><button class="n" id="yqReC" disabled style="opacity:.45">Start re-inspection</button></div></div>';
+  var pick = null, M = $("yqReM"), C = $("yqReC");
+  var chk = function(){ var x = reFind($("yqReN").value); pick = null; C.disabled = true; C.style.opacity = ".45";
+    if(!$("yqReN").value.trim()){ M.innerHTML = ""; return; }
+    if(!x){ M.innerHTML = '<b style="color:#e5484d">Report not found.</b> Check the number.'; return; }
+    var r = trRes(x), done = (QIL || []).filter(function(z){ return z.reOfId === x._id; });
+    if(r !== "Fail"){ M.innerHTML = '<b style="color:#e5484d">' + esc(x.no) + ' is ' + esc(r || "not finished") + '.</b> A re-inspection can only be opened against a failed report.'; return; }
+    if(done.some(function(z){ return trRes(z) === "Pass"; })){ M.innerHTML = '<b style="color:#e5484d">Already re-inspected and passed</b> (' + esc(done.map(function(z){ return z.no; }).join(", ")) + ').'; return; }
+    pick = x; C.disabled = false; C.style.opacity = "";
+    M.innerHTML = '<div style="border:1px solid #e5484d55;border-radius:10px;padding:9px 11px;margin-top:4px;line-height:1.6"><b style="color:#e5484d">FAILED · ' + esc(x.no) + '</b> · ' + esc(qiName(x.type)) + '<br>' + esc([x.cust || x.customer, x.ytm ? "YTM " + x.ytm : "", x.po ? "PO " + x.po : "", x.design].filter(Boolean).join(" · ")) + '<br>' + esc([x.lot ? "Lot " + x.lot + " pcs" : "", x.aqlMa ? "AQL " + x.aqlMa + " / " + (x.aqlMi || "") : "", x.date ? "Inspected " + dmy(x.date) : "", x.insp ? "by " + x.insp : ""].filter(Boolean).join(" · ")) + (done.length ? '<br>Earlier re-inspections: ' + esc(done.map(function(z){ return z.no + " (" + (trRes(z) || "open") + ")"; }).join(", ")) : '') + '</div>'; };
+  var t0; $("yqReN").oninput = function(){ clearTimeout(t0); t0 = setTimeout(chk, 250); }; $("yqReGo").onclick = chk; $("yqReN").onkeydown = function(e){ if(e.key === "Enter"){ chk(); if(pick) C.click(); } };
+  B.querySelectorAll("[data-re]").forEach(function(b){ b.onclick = function(){ $("yqReN").value = b.dataset.re; chk(); }; });
+  $("yqReB").onclick = function(){ qiPick(o); };
+  C.onclick = function(){ if(!pick) return; C.disabled = true; C.textContent = "Opening…"; var go = function(full){ var src = full || pick, v = {}; Object.keys(src).forEach(function(k){ if(!RE_SKIP[k]) v[k] = JSON.parse(JSON.stringify(src[k])); });
+    v.type = "reins"; v.reOf = pick.no; v.reOfId = pick._id; v.reType = pick.type; v.date = ymd(new Date()); v.defects = []; v.docs = []; v.rolls = [{}]; v.tests = [{}]; v.aqlMa = pick.aqlMa || "2.5"; v.aqlMi = pick.aqlMi || "4.0"; v.target = pick.target || 5; v.limit = pick.limit || 40;
+    v.remarks = "Re-inspection of " + pick.no + " (failed" + (pick.date ? " on " + dmy(pick.date) : "") + ")"; qiForm(o, v); }; try{ QICOL().doc(pick._id).get().then(function(d){ go(d && d.exists ? d.data() : null); }, function(){ go(null); }); }catch(e){ go(null); } };
+  setTimeout(function(){ var i = $("yqReN"); if(i) i.focus(); }, 50); o.querySelector(".ycpBody").scrollTop = 0; }
+var qiPickRe0 = qiPick; qiPick = function(o){ qiPickRe0(o); var b = o.querySelector('[data-qt="reins"]'); if(b){ b.onclick = function(){ reGate(o); }; var sb = b.querySelector(".qpSB"); if(sb) sb.textContent = "Needs the failed report number"; } };
+var qiFormRe0 = qiForm; qiForm = function(o, x){ if(x && x.type === "reins" && !x.reOfId && !x._id && !x.no) return reGate(o); return qiFormRe0(o, x); };
+var qiShowRe0 = qiShow; qiShow = function(o, x, just){ qiShowRe0(o, x, just); try{ var q2 = o.querySelector(".q2"); if(!q2 || !x) return; var kids = (QIL || []).filter(function(z){ return z.reOfId && z.reOfId === x._id; }), links = [];
+  if(x.reOf){ var par = (QIL || []).filter(function(z){ return z._id === x.reOfId; })[0]; links.push(['Re-inspection of', x.reOf, par, "#e5484d"]); }
+  kids.forEach(function(z){ links.push(['Re-inspected →', z.no + " · " + (trRes(z) || "open"), z, trRes(z) === "Pass" ? "#3fae1c" : "#d98a0b"]); });
+  if(!links.length) return; var d = document.createElement("div"); d.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px";
+  links.forEach(function(l){ var b = document.createElement("button"); b.style.cssText = "border:1px solid " + l[3] + ";color:" + l[3] + ";background:transparent;border-radius:999px;padding:5px 11px;font:800 12px Inter,system-ui,sans-serif;cursor:pointer"; b.textContent = l[0] + " " + l[1]; if(l[2]) b.onclick = function(){ qiShow(o, l[2]); }; d.appendChild(b); });
+  q2.parentNode.insertBefore(d, q2); }catch(e){} };
