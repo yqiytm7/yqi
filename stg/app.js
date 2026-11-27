@@ -2485,8 +2485,8 @@ var FRICSS = '#yqSh.dk .frSeg button.on.y{background:#2f7a14!important;border-co
   '#yqSh.dk .frQ,#yqSh.dk .frT,#yqSh.dk .frD,#yqSh.dk .frK div{background:#172215;border-color:#2c3a29;color:#e8efe2}#yqSh.dk .frH{color:#e8efe2}#yqSh.dk .frT th{background:#1f2c1c;color:#b9c8b0;border-color:#2c3a29}#yqSh.dk .frT td{border-color:#26331f}#yqSh.dk .frQ input,#yqSh.dk .frQ select,#yqSh.dk .frQ textarea,#yqSh.dk .frT input,#yqSh.dk .frT select,#yqSh.dk .frD input,#yqSh.dk .frD select{background:#0f180e;color:#e8efe2;border-color:#3a4c35}#yqSh.dk .frSeg button,#yqSh.dk .frDl button,#yqSh.dk .frCam,#yqSh.dk .frAdd,#yqSh.dk .frSt button,#yqSh.dk .frNav .b{background:#1f2c1c;color:#d7f5b8;border-color:#3a4c35}#yqSh.dk .frSt button.on{background:#3d9a1f;color:#fff}#yqSh.dk .frSt button.ok{background:#21401a}#yqSh.dk .frSt button.bad{background:#4a1d1a;color:#ffb4ab}#yqSh.dk .frG label,#yqSh.dk .frS,#yqSh.dk .frK small{color:#a9b8a0}#yqSh.dk .frNav{--frbg:#0f170e}#yqSh.dk .frDl button{color:#e8efe2}';
 function friForm(o, x){ sheetStep(o, function(){ if(x && (x.st === "booked" || x.st === "assigned") && x._id) qiBooked(o, x); else qiList(o); }); qiCss();
   if(!$("yqFriCss")){ var st = document.createElement("style"); st.id = "yqFriCss"; st.textContent = FRICSS; document.head.appendChild(st); }
-  var DRW = false, B = o.querySelector("#yqRpB"), v = friDefaults(JSON.parse(JSON.stringify(x))), DK = "yqi_fri_" + (v._id || "new"), S = 0;
-  try{ var dr = JSON.parse(lsGet(DK) || "null"); if(dr && dr.v && (dr.at || 0) > (v.upd || 0) && (dr.v.ytm || "") === (v.ytm || "")){ v = friDefaults(dr.v); S = dr.s || 0; setTimeout(function(){ toastQ("Draft restored"); }, 300); } }catch(e){}
+  var DRW = false, B = o.querySelector("#yqRpB"), v = friDefaults(JSON.parse(JSON.stringify(x))), DK = "yqi_fri_" + (v._id || "new_" + v.type), S = 0;
+  try{ var dr = JSON.parse(lsGet(DK) || "null"); if(dr && dr.v && (dr.at || 0) > (v.upd || 0) && (dr.v.ytm || "") === (v.ytm || "") && (dr.v.type || "") === (v.type || "") && (dr.v.reOfId || "") === (v.reOfId || "")){ v = friDefaults(dr.v); S = dr.s || 0; setTimeout(function(){ toastQ("Draft restored"); }, 300); } }catch(e){}
   if(v.ytm && !v.ol) olFill(v, v.ytm).then(function(n){ if(n){ friDefaults(v); if(!v.styles.some(function(r){ return r.pull; })) friPull(v); draw(); } });
   if(!v.styles.some(function(r){ return r.pull; })) friPull(v);
   var save = function(){ try{ lsSet(DK, JSON.stringify({v: v, s: S, at: Date.now()})); }catch(e){} };
@@ -5537,7 +5537,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261128-003635", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261128-003912", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
