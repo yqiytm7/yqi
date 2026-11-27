@@ -559,12 +559,12 @@
   // ---------------------------------------------------------------- full-screen voice mode
   var VOPEN = false, ANALYSER = null, VRAF = 0;
   function PENDING_DO_WAIT() { return false; }
-  var VCSS = "#jvVoice{position:fixed;inset:0;z-index:2147483647;background:radial-gradient(ellipse at 50% 42%,#13301f 0%,#07120c 55%,#030806 100%);color:#e9f5ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Manrope,sans-serif;animation:jvFade .35s ease}" +
+  var VCSS = "#jvVoice{position:fixed;inset:0;z-index:2147483647;background:radial-gradient(ellipse at 50% 42%,#13301f 0%,#07120c 55%,#030806 100%);color:#e9f5ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Manrope,sans-serif;animation:jvFade .35s ease;padding:40px 16px calc(120px + env(safe-area-inset-bottom,0px));box-sizing:border-box}" +
     "@keyframes jvFade{from{opacity:0}to{opacity:1}}" +
-    "#jvVoice canvas{width:min(72vw,380px);height:min(72vw,380px)}" +
+    "#jvVoice canvas{width:min(72vw,380px,44vh);height:min(72vw,380px,44vh)}" +
     "#jvVoice .vst{font:600 12px Manrope;letter-spacing:.22em;text-transform:uppercase;color:#8fd19a;margin-top:6px;min-height:16px}" +
     "#jvVoice .vme{max-width:min(86vw,640px);text-align:center;color:#9fb6a6;font-size:14px;margin-top:16px;min-height:20px}" +
-    "#jvVoice .vai{max-width:min(88vw,680px);text-align:center;font-size:clamp(17px,2.4vw,22px);line-height:1.45;margin-top:10px;min-height:32px;max-height:30vh;overflow:auto;white-space:pre-wrap}" +
+    "#jvVoice .vai{max-width:min(88vw,680px);text-align:center;font-size:clamp(17px,2.4vw,22px);line-height:1.45;margin-top:10px;min-height:32px;max-height:24vh;overflow:auto;white-space:pre-wrap}" +
     "#jvVoice .vbar{position:absolute;bottom:calc(28px + env(safe-area-inset-bottom,0px));display:flex;gap:18px;align-items:center}" +
     "#jvVoice .vbar button{width:56px;height:56px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;font-size:22px;cursor:pointer}" +
     "#jvVoice .vbar button.mic{width:72px;height:72px;font-size:28px;background:#2f7d4a;border-color:#4fb06c}" +

@@ -111,7 +111,7 @@
     if ($("jvOrb")) return;
     var b = document.createElement("button");
     b.id = "jvOrb"; b.title = "Jarvis - YQI assistant"; b.innerHTML = "✦";
-    b.onclick = togglePanel;
+    b.onclick = function () { if (VOPEN) closeVoice(); else if (OPEN) closePanel(); else openVoice(); };
     document.body.appendChild(b);
   }
 
@@ -123,7 +123,7 @@
     var o = document.createElement("div"); o.id = "jvPanel";
     o.innerHTML =
       '<div class="jvBox">' +
-      '<div class="jvHead"><span style="font-size:20px">✦</span><b>Jarvis</b><button data-x title="Close">✕</button></div>' +
+      '<div class="jvHead"><span style="font-size:20px">✦</span><b>Jarvis</b><button data-vo title="Voice mode">🎙</button><button data-x title="Close">✕</button></div>' +
       '<div id="jvTabs">' +
       '<button data-t="chat" class="on">Chat</button>' +
       '<button data-t="alerts">Alerts</button>' +
@@ -136,6 +136,7 @@
     document.body.appendChild(o);
     o.addEventListener("click", function (e) { if (e.target === o) closePanel(); });
     o.querySelector("[data-x]").onclick = closePanel;
+    o.querySelector("[data-vo]").onclick = function () { closePanel(); openVoice(); };
     o.querySelectorAll("#jvTabs button").forEach(function (btn) {
       btn.onclick = function () { TAB = btn.getAttribute("data-t"); o.querySelectorAll("#jvTabs button").forEach(function (x) { x.classList.toggle("on", x === btn); }); render(); };
     });
@@ -149,6 +150,7 @@
   function closePanel() { OPEN = false; VOICE_MODE = false; try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } var p = $("jvPanel"); if (p) p.remove(); }
 
   function render() {
+    renderVoice();
     var body = $("jvBody"); if (!body) return;
     if (TAB === "chat") renderChat(body);
     else if (TAB === "alerts") renderAlerts(body);
@@ -169,13 +171,13 @@
     if (n) n.onclick = function () { PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "model", text: "Theek hai, nahi karta." }); render(); };
   }
 
-  function sendText(byVoice) {
+  function sendText(byVoice, said) {
     if (byVoice !== true) VOICE_MODE = false;
-    var inp = $("jvInput"); if (!inp) return;
-    var text = inp.value.trim(); if (!text || BUSY) return;
-    inp.value = "";
-    if (PENDING_DO && /^(haan|han|ha|ji|jee|yes|ok|okay|kar do|karo|theek|ٹھیک|ہاں|جی|کر دو|کرو)\b/i.test(text)) { var P = PENDING_DO; PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "user", text: text }); runSteps(P.steps); return; }
-    if (PENDING_DO && /^(nahi|nahin|no|mat|cancel|نہیں|مت)\b/i.test(text)) { PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "user", text: text }); HISTORY.push({ role: "model", text: "Theek hai, nahi karta." }); render(); return; }
+    var inp = $("jvInput"), text = said != null ? String(said).trim() : (inp ? inp.value.trim() : "");
+    if (!text || BUSY) return;
+    if (inp && said == null) inp.value = "";
+    if (PENDING_DO && /^(haan|han|ha|ji|jee|yes|ok|okay|kar do|karo|theek|ٹھیک|ہاں|جی|کر دو|کرو)(?=\s|$|[.!,،۔])/i.test(text)) { var P = PENDING_DO; PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "user", text: text }); runSteps(P.steps); return; }
+    if (PENDING_DO && /^(nahi|nahin|no|mat|cancel|نہیں|مت)(?=\s|$|[.!,،۔])/i.test(text)) { PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "user", text: text }); HISTORY.push({ role: "model", text: "Theek hai, nahi karta." }); render(); return; }
     PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; });
     HISTORY.push({ role: "user", text: text });
     if (TAB === "chat") render();
@@ -277,7 +279,7 @@
     return best ? best.e : null;
   }
   function runSteps(steps) {
-    closePanel();
+    closePanel(); closeVoice(true);
     var i = 0, fail = "";
     var next = function () {
       if (i >= steps.length) return Promise.resolve();
@@ -371,11 +373,11 @@
     RECOG.lang = SETTINGS.micLang || "ur-PK"; stopSpeak();
     RECOG.interimResults = false;
     RECOG.maxAlternatives = 1;
-    RECOG.onstart = function () { LISTENING = true; renderOrb(); var b = document.querySelector("#jvInputRow .mic"); if (b) b.classList.add("on"); };
-    RECOG.onend = function () { LISTENING = false; renderOrb(); var b = document.querySelector("#jvInputRow .mic"); if (b) b.classList.remove("on"); };
+    RECOG.onstart = function () { LISTENING = true; renderOrb(); renderVoice(); var b = document.querySelector("#jvInputRow .mic"); if (b) b.classList.add("on"); };
+    RECOG.onend = function () { LISTENING = false; renderOrb(); renderVoice(); var b = document.querySelector("#jvInputRow .mic"); if (b) b.classList.remove("on"); };
     RECOG.onresult = function (e) {
       var t = e.results[0][0].transcript;
-      var inp = $("jvInput"); if (inp) { inp.value = t; VOICE_MODE = true; sendText(true); }
+      VOICE_MODE = true; sendText(true, t);
     };
     RECOG.start();
   }
@@ -406,8 +408,8 @@
   var TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"], TTS_FAIL = 0;
   function speak(text) {
     text = cleanSpeech(text); if (!text) return;
-    stopSpeak(); SPEAKING = true; renderOrb();
-    var done = function () { SPEAKING = false; renderOrb(); if (VOICE_MODE && OPEN && !LISTENING) setTimeout(function () { if (VOICE_MODE && OPEN && !LISTENING && !BUSY) toggleMic(); }, 350); };
+    stopSpeak(); SPEAKING = true; renderOrb(); renderVoice();
+    var done = function () { SPEAKING = false; renderOrb(); renderVoice(); var live = function () { return (VOICE_MODE && OPEN) || VOPEN; }; if (live() && !LISTENING) setTimeout(function () { if (live() && !LISTENING && !BUSY && !PENDING_DO_WAIT()) toggleMic(); }, 350); };
     var browser = function () {
       window.__jvVoice = "browser"; if (!window.speechSynthesis) return done();
       var u = new SpeechSynthesisUtterance(text);
@@ -427,7 +429,8 @@
         if (AUDIO !== my) return; // interrupted
         var rate = +((/rate=(\d+)/i.exec(d.mime || "") || [])[1] || 24000);
         var a = new Audio(wavFromPcm(d.audio, rate)); AUDIO = a; TTS_FAIL = 0; window.__jvVoice = "natural";
-        a.onended = function () { AUDIO = null; done(); }; a.onerror = function () { AUDIO = null; browser(); };
+        try { if (!window.__jvAC) window.__jvAC = new (window.AudioContext || window.webkitAudioContext)(); var src = __jvAC.createMediaElementSource(a), an = __jvAC.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(__jvAC.destination); ANALYSER = an; if (__jvAC.state === "suspended") __jvAC.resume(); } catch (e) { ANALYSER = null; }
+        a.onended = function () { AUDIO = null; ANALYSER = null; done(); }; a.onerror = function () { AUDIO = null; browser(); };
         return a.play().catch(function () { AUDIO = null; browser(); });
       }).catch(function () { TTS_FAIL++; if (AUDIO === my) { AUDIO = null; browser(); } });
   }
@@ -551,6 +554,82 @@
     el.querySelectorAll("[data-pick]").forEach(function (b) {
       b.onclick = function () { SETTINGS.voiceURI = b.getAttribute("data-pick"); saveSettings(); renderSettings($("jvBody")); };
     });
+  }
+
+  // ---------------------------------------------------------------- full-screen voice mode
+  var VOPEN = false, ANALYSER = null, VRAF = 0;
+  function PENDING_DO_WAIT() { return false; }
+  var VCSS = "#jvVoice{position:fixed;inset:0;z-index:2147483647;background:radial-gradient(ellipse at 50% 42%,#13301f 0%,#07120c 55%,#030806 100%);color:#e9f5ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Manrope,sans-serif;animation:jvFade .35s ease;padding:40px 16px calc(120px + env(safe-area-inset-bottom,0px));box-sizing:border-box}" +
+    "@keyframes jvFade{from{opacity:0}to{opacity:1}}" +
+    "#jvVoice canvas{width:min(72vw,380px,44vh);height:min(72vw,380px,44vh)}" +
+    "#jvVoice .vst{font:600 12px Manrope;letter-spacing:.22em;text-transform:uppercase;color:#8fd19a;margin-top:6px;min-height:16px}" +
+    "#jvVoice .vme{max-width:min(86vw,640px);text-align:center;color:#9fb6a6;font-size:14px;margin-top:16px;min-height:20px}" +
+    "#jvVoice .vai{max-width:min(88vw,680px);text-align:center;font-size:clamp(17px,2.4vw,22px);line-height:1.45;margin-top:10px;min-height:32px;max-height:24vh;overflow:auto;white-space:pre-wrap}" +
+    "#jvVoice .vbar{position:absolute;bottom:calc(28px + env(safe-area-inset-bottom,0px));display:flex;gap:18px;align-items:center}" +
+    "#jvVoice .vbar button{width:56px;height:56px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;font-size:22px;cursor:pointer}" +
+    "#jvVoice .vbar button.mic{width:72px;height:72px;font-size:28px;background:#2f7d4a;border-color:#4fb06c}" +
+    "#jvVoice .vbar button.mic.on{background:#c0392b;border-color:#e57364}" +
+    "#jvVoice .vdo{margin-top:16px;display:flex;gap:10px}#jvVoice .vdo button{border:none;border-radius:22px;padding:10px 22px;font:700 14px Manrope;cursor:pointer}#jvVoice .vdo .ok{background:#4fb06c;color:#fff}#jvVoice .vdo .no{background:rgba(255,255,255,.12);color:#fff}" +
+    "#jvVoice .vtop{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;color:#8fb59a;font:700 13px Manrope;letter-spacing:.12em}";
+  function openVoice() {
+    if (VOPEN) return; VOPEN = true; loadSettings();
+    if (!$("jvVCss")) { var st = document.createElement("style"); st.id = "jvVCss"; st.textContent = VCSS; document.head.appendChild(st); }
+    var v = document.createElement("div"); v.id = "jvVoice";
+    v.innerHTML = '<div class="vtop"><span>✦ JARVIS</span><span></span></div><canvas width="760" height="760"></canvas><div class="vst"></div><div class="vme"></div><div class="vai"></div><div class="vdo"></div>' +
+      '<div class="vbar"><button data-vchat title="Chat / likh kar">💬</button><button class="mic" data-vmic title="Boliye">🎤</button><button data-vx title="Band">✕</button></div>';
+    document.body.appendChild(v);
+    v.querySelector("[data-vx]").onclick = function () { closeVoice(); };
+    v.querySelector("[data-vchat]").onclick = function () { closeVoice(); openPanel(); };
+    v.querySelector("[data-vmic]").onclick = function () { if (SPEAKING) { stopSpeak(); } VOICE_MODE = true; toggleMic(); };
+    VOICE_MODE = true;
+    drawOrb(); renderVoice();
+    if (!GREETED) greet(); else if (!LISTENING && !SPEAKING && !BUSY) toggleMic();
+  }
+  function closeVoice(keepTalk) {
+    if (!VOPEN) return; VOPEN = false; cancelAnimationFrame(VRAF);
+    if (!keepTalk) { VOICE_MODE = false; stopSpeak(); try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } }
+    var v = $("jvVoice"); if (v) v.remove();
+  }
+  function renderVoice() {
+    var v = $("jvVoice"); if (!v) return;
+    var st = BUSY ? "Soch raha hoon…" : SPEAKING ? "Bol raha hoon" : LISTENING ? "Sun raha hoon…" : "Mic dabakar boliye";
+    v.querySelector(".vst").textContent = st;
+    var lastU = null, lastA = null; for (var i = HISTORY.length - 1; i >= 0; i--) { var m = HISTORY[i]; if (!lastA && (m.role === "model" || m.role === "sys")) lastA = m; if (!lastU && m.role === "user") lastU = m; if (lastA && lastU) break; }
+    v.querySelector(".vme").textContent = lastU ? "“" + lastU.text + "”" : "";
+    v.querySelector(".vai").innerHTML = lastA ? esc(lastA.text).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>") : "";
+    var mic = v.querySelector("[data-vmic]"); if (mic) mic.classList.toggle("on", LISTENING);
+    var d = v.querySelector(".vdo");
+    if (PENDING_DO) {
+      d.innerHTML = '<button class="ok" data-vy>Haan, karo</button><button class="no" data-vn>Nahi</button>';
+      d.querySelector("[data-vy]").onclick = function () { var P = PENDING_DO; PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); if (P) runSteps(P.steps); };
+      d.querySelector("[data-vn]").onclick = function () { PENDING_DO = null; HISTORY = HISTORY.filter(function (m) { return m.role !== "do"; }); HISTORY.push({ role: "model", text: "Theek hai, nahi karta." }); render(); };
+    } else d.innerHTML = "";
+  }
+  // animated orb: breathes when idle, ripples when listening, spins when thinking, follows the voice when speaking
+  function drawOrb() {
+    var v = $("jvVoice"); if (!v) return; var c = v.querySelector("canvas"), g = c.getContext("2d"), W = c.width, H = c.height, t0 = performance.now(), buf = new Uint8Array(128), lvl = 0;
+    var frame = function (now) {
+      if (!VOPEN) return; var t = (now - t0) / 1000, amp = 0;
+      if (SPEAKING) { if (ANALYSER) { ANALYSER.getByteFrequencyData(buf); var sum = 0; for (var i = 2; i < 60; i++) sum += buf[i]; amp = Math.min(1, sum / (58 * 150)); } else amp = 0.35 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1)); }
+      else if (LISTENING) amp = 0.18 + 0.12 * Math.sin(t * 4);
+      else if (BUSY) amp = 0.12;
+      else amp = 0.06 + 0.04 * Math.sin(t * 1.6);
+      lvl += (amp - lvl) * 0.18;
+      g.clearRect(0, 0, W, H); var cx = W / 2, cy = H / 2, R = W * 0.25 * (1 + lvl * 0.35);
+      // glow
+      var gr = g.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 1.9); gr.addColorStop(0, "rgba(120,230,150," + (0.35 + lvl * 0.4) + ")"); gr.addColorStop(1, "rgba(20,60,35,0)"); g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R * 1.9, 0, 7); g.fill();
+      // flowing rings
+      for (var k = 0; k < 4; k++) {
+        g.beginPath(); var n = 90;
+        for (var j = 0; j <= n; j++) { var a = j / n * Math.PI * 2, wob = Math.sin(a * (3 + k) + t * (1.2 + k * 0.5) * (BUSY ? 3 : 1)) * (6 + lvl * 46) + Math.cos(a * (2 + k) - t * 0.9) * (4 + lvl * 20), rr = R * (0.78 + k * 0.09) + wob; var x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; if (j) g.lineTo(x, y); else g.moveTo(x, y); }
+        g.strokeStyle = ["rgba(170,255,190,.85)", "rgba(110,220,150,.55)", "rgba(80,190,200,.4)", "rgba(200,255,160,.28)"][k]; g.lineWidth = 3 - k * 0.5; g.stroke();
+      }
+      // core
+      var cg = g.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.05, cx, cy, R * 0.75); cg.addColorStop(0, "#d9ffe0"); cg.addColorStop(0.45, "#5ec27a"); cg.addColorStop(1, "#14432a"); g.fillStyle = cg; g.beginPath(); g.arc(cx, cy, R * 0.62, 0, 7); g.fill();
+      if (LISTENING) { var p = (t % 1.4) / 1.4; g.strokeStyle = "rgba(160,255,180," + (1 - p) * 0.6 + ")"; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, R * (0.9 + p * 0.9), 0, 7); g.stroke(); }
+      VRAF = requestAnimationFrame(frame);
+    };
+    VRAF = requestAnimationFrame(frame);
   }
 
   // ---------------------------------------------------------------- boot
