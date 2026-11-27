@@ -171,7 +171,7 @@ async function runQuery(token, projectId, { collectionId, filters = [], orderByF
   }
   if (orderByField) structuredQuery.orderBy = [{ field: { fieldPath: orderByField }, direction: desc ? "DESCENDING" : "ASCENDING" }];
 
-  const d = await req(token, `${base(projectId)}:runQuery`, { method: "POST", body: JSON.stringify({ structuredQuery }) });
+  const d = await req(token, `${base(projectId)}/ws/${collectionId === "amzcat" ? "bedsure" : "_all"}:runQuery`, { method: "POST", body: JSON.stringify({ structuredQuery }) });
   return (Array.isArray(d) ? d : []).filter((r) => r.document).map((r) => ({ id: docIdFromName(r.document.name), ...decodeFields(r.document.fields) }));
 }
 
@@ -576,7 +576,7 @@ async function scanMissingYtm(token, projectId) {
 
 async function scanOverdueCapa(token, projectId) {
   const today = daysAgo(0);
-  const rows = await runQuery(token, projectId, { collectionId: "capa", filters: [{ field: "status", op: "EQUAL", value: "open" }], limit: 500 });
+  const rows = await runQuery(token, projectId, { collectionId: "capa", filters: [{ field: "status", op: "NOT_EQUAL", value: "Closed" }], limit: 500 });
   const overdue = rows.filter((r) => r.due && r.due < today);
   if (overdue.length) {
     await raise(token, projectId, {

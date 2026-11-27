@@ -93,7 +93,7 @@ export async function runQuery(token, projectId, { collectionId, filters = [], o
   }
   if (orderByField) structuredQuery.orderBy = [{ field: { fieldPath: orderByField }, direction: desc ? "DESCENDING" : "ASCENDING" }];
 
-  const d = await req(token, `${base(projectId)}:runQuery`, { method: "POST", body: JSON.stringify({ structuredQuery }) });
+  const d = await req(token, `${base(projectId)}/ws/${collectionId === "amzcat" ? "bedsure" : "_all"}:runQuery`, { method: "POST", body: JSON.stringify({ structuredQuery }) });
   return (Array.isArray(d) ? d : []).filter((r) => r.document).map((r) => ({ id: docIdFromName(r.document.name), ...decodeFields(r.document.fields) }));
 }
 

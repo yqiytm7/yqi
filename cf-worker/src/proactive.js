@@ -55,7 +55,7 @@ async function scanMissingYtm(token, projectId) {
 
 async function scanOverdueCapa(token, projectId) {
   const today = daysAgo(0);
-  const rows = await runQuery(token, projectId, { collectionId: "capa", filters: [{ field: "status", op: "EQUAL", value: "open" }], limit: 500 });
+  const rows = await runQuery(token, projectId, { collectionId: "capa", filters: [{ field: "status", op: "NOT_EQUAL", value: "Closed" }], limit: 500 });
   const overdue = rows.filter((r) => r.due && r.due < today);
   if (overdue.length) {
     await raise(token, projectId, {
