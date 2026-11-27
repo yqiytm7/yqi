@@ -58,7 +58,7 @@
       else h += '<div class="wqWait">Waiting for ' + whoAck + '</div><div class="wqBtns"><button data-wq="ack" data-id="' + m.id + '" data-ok="1">✓ Acknowledge</button><button data-wq="ack" data-id="' + m.id + '" data-ok="0" class="bad">⚠ Issue</button></div>'; }
     else h += '<div class="wqBtns"><button data-wq="rep" class="gh">📊 Open report</button></div>';
     return h + '</div>'; }
-  function strip(){ return '<div class="wqStrip"><button data-wq="lot">🚚 New gate pass</button><button data-wq="board">📋 Lots · mera kaam</button><button data-wq="rep">📊 Report</button></div>'; }
+  function strip(){ return '<div class="wqStrip"><button data-wq="lot">🚚 New gate pass</button><button data-wq="board">📋 Lots · my work</button><button data-wq="rep">📊 Report</button></div>'; }
 
   // ---------- overlay ----------
   function ov(html, tag){ var o = document.createElement("div"); o.className = "wqOv"; o.innerHTML = html; document.body.appendChild(o); document.body.style.overflow = "hidden";
@@ -285,16 +285,16 @@
 
   // ===================== Wash lot — ONE record from gate pass to floor QC final OK =====================
   var STEPS = [
-    {k: "gp", ic: "🚚", t: "Gate pass", role: "Production / Cutting", hint: "Lot banao aur washing ko bhejo"},
-    {k: "cq", ic: "✂️", t: "Cutting QC verify", role: "Cutting QC", hint: "Size, shade, ginti check + photo"},
-    {k: "rv", ic: "📥", t: "Washing receive", role: "Washing", hint: "Jo aaya woh gin kar receive karo"},
+    {k: "gp", ic: "🚚", t: "Gate pass", role: "Production / Cutting", hint: "Create the lot and send to washing"},
+    {k: "cq", ic: "✂️", t: "Cutting QC verify", role: "Cutting QC", hint: "Check size, shade, count + photo"},
+    {k: "rv", ic: "📥", t: "Washing receive", role: "Washing", hint: "Count what arrived and receive it"},
     {k: "wq", ic: "🧪", t: "Washing QC 5%", role: "Washing QC", hint: "5% check, shrinkage, photo"},
-    {k: "rt", ic: "📦", t: "Return to floor", role: "Washing", hint: "Wapas bhejo — pallet ki photo"},
-    {k: "fa", ic: "✅", t: "Floor QC final OK", role: "Floor QC", hint: "Maal wapas mil gaya — final OK"}];
+    {k: "rt", ic: "📦", t: "Return to floor", role: "Washing", hint: "Send back — pallet photo"},
+    {k: "fa", ic: "✅", t: "Floor QC final OK", role: "Floor QC", hint: "Goods received back — final OK"}];
   var SK = {}; STEPS.forEach(function(s, i){ SK[s.k] = s; s.i = i; });
   var PARTS = ["Front", "Reverse", "Pillow front", "Pillow back", "Pillow", "Flap", "Border", "Panel", "Article"];
   var ARTS = ["Duvet cover", "Duvet set", "Mattress pad", "Flat sheet", "Fitted sheet", "Sheet set", "Pillowcase", "Comforter", "Quilt", "Bedspread", "Cushion cover", "Other"];
-  var LCHK = [["size", "Size / measurement"], ["shade", "Shade / colour"], ["count", "Ginti (count)"], ["cut", "Cutting clean / fray"]];
+  var LCHK = [["size", "Size / measurement"], ["shade", "Shade / colour"], ["count", "Count"], ["cut", "Cutting clean / fray"]];
   var r1 = function(v){ return Math.round(v * 10) / 10; };
   function cm(i){ return r1((+i || 0) * 2.54); }
   function dimTxt(p){ if(!(+p.l) && !(+p.w)) return "—"; return r1(+p.l) + " × " + r1(+p.w) + " in <small>(" + cm(p.l) + " × " + cm(p.w) + " cm)</small>"; }
@@ -307,7 +307,7 @@
   function lots(){ return ROWS.filter(function(m){ return m.wt === "lot"; }).map(lcalc).sort(function(a, b){ return (b.at || 0) - (a.at || 0); }); }
   function lotById(id){ var m = ROWS.filter(function(x){ return x.id === id; })[0] || (window.YQCHAT && YQCHAT.msg && YQCHAT.msg(id)); return m && m.wt === "lot" ? lcalc(m) : null; }
   function floors(){ var O = window.YQOL || {}, F = {}; Object.keys(O).forEach(function(k){ var u = O[k] && O[k].unit; if(u) F[String(u).trim()] = 1; }); ["YTM-7 First Floor-A", "YTM-7 Second Floor-A", "YTM-7 First Floor-B", "YTM-7 Second Floor-B", "YTM-6", "Multi Needle"].forEach(function(x){ F[x] = 1; }); return Object.keys(F).sort(); }
-  var LST = {open: ["In process", "#1F5FAF", "#DCE8F7"], hold: ["Issue — dekhna hai", "#B3261E", "#FDEBEA"], done: ["Closed ✓", "#2a5216", "#DDF1C6"], iss: ["Closed with issue", "#B3261E", "#FDEBEA"]};
+  var LST = {open: ["In process", "#1F5FAF", "#DCE8F7"], hold: ["Issue — needs attention", "#B3261E", "#FDEBEA"], done: ["Closed ✓", "#2a5216", "#DDF1C6"], iss: ["Closed with issue", "#B3261E", "#FDEBEA"]};
   function lchip(L){ var s = LST[L.stat] || LST.open; return '<span class="wqChip" style="color:' + s[1] + ';background:' + s[2] + '">' + (L.nx && L.stat === "open" ? "Next: " + L.nx.t : s[0]) + '</span>'; }
   function dots(L){ var s = L.s || {}; return '<div class="wlDots">' + STEPS.map(function(x, i){ var d = i === 0 ? {by: L.by, at: L.at, ok: 1} : s[x.k]; var c = d ? (d.ok === 0 ? "dB" : "dO") : (L.nx && L.nx.k === x.k ? "dN" : ""); return '<span class="' + c + '" title="' + esc(x.t) + '"><i>' + (d ? (d.ok === 0 ? "!" : "✓") : x.ic) + '</i><em>' + esc(x.t.split(" ")[0]) + '</em></span>'; }).join("") + '</div>'; }
   function partsLine(L){ return (L.items || []).map(function(p){ return esc(p.p) + " <b>" + n0(p.q) + "</b>"; }).join(" · "); }
@@ -316,26 +316,26 @@
     h += '<div class="wqBody"><div class="wqY">YTM <b>' + esc(L.ytm || "—") + '</b>' + (L.cust ? ' · ' + esc(L.cust) : '') + '</div><div class="wqS">' + esc([L.design, L.size, L.art, L.type === "art" ? "Stitched" : "Precut"].filter(Boolean).join(" · ")) + '</div>' +
       '<div class="wqS">' + esc(L.floor || "") + '</div><div class="wqN">' + partsLine(L) + ' · <b>' + n0(L.tot) + ' pcs</b></div>' + dots(L) + '</div>';
     if(L.nx) h += '<div class="wqBtns"><button data-wq="step" data-id="' + L.id + '" data-k="' + L.nx.k + '">' + L.nx.ic + ' ' + esc(L.nx.t) + ' →</button><button data-wq="lotv" data-id="' + L.id + '" class="gh" style="flex:.45">📄 Report</button></div>';
-    else h += '<div class="wqAck ' + (L.stat === "done" ? "ok" : "bad") + '">' + (L.stat === "done" ? "✓ Closed — floor QC ne OK kar diya" : "⚠ Closed with issue") + '</div><div class="wqBtns"><button data-wq="lotv" data-id="' + L.id + '" class="gh">📄 Report</button></div>';
+    else h += '<div class="wqAck ' + (L.stat === "done" ? "ok" : "bad") + '">' + (L.stat === "done" ? "✓ Closed — floor QC approved" : "⚠ Closed with issue") + '</div><div class="wqBtns"><button data-wq="lotv" data-id="' + L.id + '" class="gh">📄 Report</button></div>';
     return h + '</div>'; }
 
   // ---------- step 1: gate pass (identification form) ----------
-  function lotForm(){ if(!uid()) return toast("Pehle sign in karein");
+  function lotForm(){ if(!uid()) return toast("Please sign in first");
     try{ window.yqOlGet && yqOlGet(); }catch(e){}
     var U = "in", items = [{p: "Front", l: "", w: "", q: ""}, {p: "Reverse", l: "", w: "", q: ""}], olm = null, ty = "pre";
-    var o = ov('<div class="wqPg"><div class="wqHd"><button data-x>‹</button><div><b>🚚 New gate pass · Wash lot</b><small>Production / Cutting bharta hai · ek hi report aakhir tak chalegi</small></div></div><div class="wqFm">' +
+    var o = ov('<div class="wqPg"><div class="wqHd"><button data-x>‹</button><div><b>🚚 New gate pass · Wash lot</b><small>Filled by Production / Cutting · one report runs to the end</small></div></div><div class="wqFm">' +
       '<div class="wlRole">' + STEPS.map(function(s){ return '<span><i>' + s.ic + '</i>' + esc(s.t) + '<small>' + esc(s.role) + '</small></span>'; }).join("") + '</div>' +
-      '<div class="wqG2"><div class="wqF"><label>Floor</label><select data-k="floor"><option value="">— chunein —</option>' + floors().map(function(f){ return '<option>' + esc(f) + '</option>'; }).join("") + '</select></div>' +
-      '<div class="wqF"><label>YTM</label><input data-k="ytm" placeholder="YTM number likhein" autocomplete="off" inputmode="text"><div class="wlSug" data-sug></div></div></div>' +
+      '<div class="wqG2"><div class="wqF"><label>Floor</label><select data-k="floor"><option value="">— select —</option>' + floors().map(function(f){ return '<option>' + esc(f) + '</option>'; }).join("") + '</select></div>' +
+      '<div class="wqF"><label>YTM</label><input data-k="ytm" placeholder="Enter YTM number" autocomplete="off" inputmode="text"><div class="wlSug" data-sug></div></div></div>' +
       '<div class="wlOl" data-ol></div>' +
       '<div class="wqG2"><div class="wqF"><label>Design</label><select data-k="design"><option value="">—</option></select></div><div class="wqF"><label>Size</label><select data-k="size"><option value="">—</option></select></div></div>' +
       '<div class="wqG2"><div class="wqF"><label>Article</label><select data-k="art">' + ARTS.map(function(a){ return '<option>' + a + '</option>'; }).join("") + '</select></div><div class="wqF"><label>Type</label><div class="wqSeg" data-seg="ty"><button data-v="pre" class="on">Precut panels</button><button data-v="art">Stitched article</button></div></div></div>' +
       '<div class="wqG2"><div class="wqF"><label>Colour</label><input data-k="color" placeholder="e.g. Maxim Blue"></div><div class="wqF"><label>Shade #</label><input data-k="shade" placeholder="e.g. 169"></div></div>' +
-      '<div class="wqF"><label>Panels / article — size aur quantity <span class="wlU"><button data-u="in" class="on">inch</button><button data-u="cm">cm</button></span></label><div data-parts></div><div class="wlAdd"><button data-add="Pillow">+ Pillow</button><button data-add="Panel">+ Panel</button><button data-add="Article">+ Article</button></div><div class="wlTot" data-tot></div></div>' +
+      '<div class="wqF"><label>Panels / article — size and quantity <span class="wlU"><button data-u="in" class="on">inch</button><button data-u="cm">cm</button></span></label><div data-parts></div><div class="wlAdd"><button data-add="Pillow">+ Pillow</button><button data-add="Panel">+ Panel</button><button data-add="Article">+ Article</button></div><div class="wlTot" data-tot></div></div>' +
       '<div class="wqG2"><div class="wqF"><label>Bundles</label><input data-k="bun" type="number" inputmode="numeric" min="0"></div><div class="wqF"><label>Pcs per bundle</label><input data-k="pb" type="number" inputmode="numeric" min="0"></div></div>' +
-      '<div class="wqG2"><div class="wqF"><label>Washing se wapsi (andaza)</label><select data-k="etah"><option value="6">6 ghante</option><option value="12">12 ghante</option><option value="24" selected>24 ghante</option><option value="48">2 din</option><option value="72">3 din</option></select></div><div class="wqF"><label>Washing</label><select data-k="to"><option>In-house washing</option><option>Outside washing</option></select></div></div>' +
-      phField("ph", "Photo — trolley / bundles (optional)") + '<div class="wqF"><label>Note</label><textarea data-k="note" rows="2" placeholder="Washing ke liye koi hidayat (optional)"></textarea></div>' +
-      '<div class="wlAuto">🕒 Date / time khud lagega (server time) — koi edit nahi kar sakta</div><div class="wqSt" data-st></div><button class="wqGo" data-go>Gate pass banao · Cutting QC ko bhejo →</button></div></div>', "wlf");
+      '<div class="wqG2"><div class="wqF"><label>Expected back from washing</label><select data-k="etah"><option value="6">6 hours</option><option value="12">12 hours</option><option value="24" selected>24 hours</option><option value="48">2 days</option><option value="72">3 days</option></select></div><div class="wqF"><label>Washing</label><select data-k="to"><option>In-house washing</option><option>Outside washing</option></select></div></div>' +
+      phField("ph", "Photo — trolley / bundles (optional)") + '<div class="wqF"><label>Note</label><textarea data-k="note" rows="2" placeholder="Any instruction for washing (optional)"></textarea></div>' +
+      '<div class="wlAuto">🕒 Date / time is stamped automatically (server time) — nobody can edit it</div><div class="wqSt" data-st></div><button class="wqGo" data-go>Create gate pass · send to Cutting QC →</button></div></div>', "wlf");
     var $k = function(k){ return o.querySelector('[data-k="' + k + '"]'); }, V = function(k){ var e = $k(k); return e ? String(e.value).trim() : ""; };
     var PB = o.querySelector("[data-parts]"), TOT = o.querySelector("[data-tot]");
     var drawParts = function(){ PB.innerHTML = items.map(function(p, i){ var cv = U === "in" ? (p.l || p.w ? cm(p.l) + " × " + cm(p.w) + " cm" : "") : (p.l || p.w ? r1(p.l / 2.54) + " × " + r1(p.w / 2.54) + " in" : "");
@@ -351,10 +351,10 @@
     // YTM search + one-liner details
     var yi = $k("ytm"), sug = o.querySelector("[data-sug]"), olB = o.querySelector("[data-ol]");
     var pick = function(y){ var r = olFind(y); olm = r; yi.value = r ? (r.ytm || y) : y; sug.innerHTML = ""; showOl(); };
-    var showOl = function(){ var r = olm; if(!r){ olB.innerHTML = yi.value.trim() ? '<div class="wlNo">One-liner mein nahi mila — phir bhi bhej sakte hain</div>' : ""; return; }
+    var showOl = function(){ var r = olm; if(!r){ olB.innerHTML = yi.value.trim() ? '<div class="wlNo">Not in the one-liner — you can still send it</div>' : ""; return; }
       if(r.unit && !$k("floor").value){ var fs0 = $k("floor"); if(![].some.call(fs0.options, function(x){ return x.value === r.unit; })) fs0.insertAdjacentHTML("beforeend", '<option>' + esc(r.unit) + '</option>'); fs0.value = r.unit; }
       var L = r.lines || [], ds = [], ss = []; L.forEach(function(l){ if(l.d && ds.indexOf(l.d) < 0) ds.push(l.d); });
-      $k("design").innerHTML = (ds.length > 1 ? '<option value="">— design chunein —</option>' : '') + ds.map(function(d){ return '<option>' + esc(d) + '</option>'; }).join("") + '<option value="__o">Other…</option>';
+      $k("design").innerHTML = (ds.length > 1 ? '<option value="">— select design —</option>' : '') + ds.map(function(d){ return '<option>' + esc(d) + '</option>'; }).join("") + '<option value="__o">Other…</option>';
       var setSizes = function(){ var d = $k("design").value; ss = []; L.forEach(function(l){ if((!d || l.d === d) && l.s && ss.indexOf(l.s) < 0) ss.push(l.s); }); $k("size").innerHTML = (ss.length > 1 ? '<option value="">— size —</option>' : '') + ss.map(function(x){ return '<option>' + esc(x) + '</option>'; }).join("") + '<option value="__o">Other…</option>'; };
       $k("design").onchange = function(){ if($k("design").value === "__o"){ var v = prompt("Design"); if(v){ $k("design").insertAdjacentHTML("afterbegin", '<option selected>' + esc(v) + '</option>'); } } setSizes(); var c = /([A-Za-z]+\s*(blue|white|grey|gray|pink|green|beige|black|red|navy|cream|ivory|sand|taupe|brown|yellow|natural))/i.exec($k("design").value); if(c && !$k("color").value) $k("color").value = c[1]; };
       var autoQty = function(){ var d = $k("design").value, z = $k("size").value, ln = L.filter(function(l){ return l.d === d && l.s === z; }); if(!ln.length) return; var q = ln.reduce(function(a, l){ return a + (+l.cut || +l.q || 0); }, 0); if(!q) return;
@@ -374,70 +374,70 @@
     var P = phPicker(o, "ph"), stE = o.querySelector("[data-st]"), st = function(x){ stE.textContent = x; }, go = o.querySelector("[data-go]");
     go.onclick = function(){
       var m = {k: "wash", wt: "lot", floor: V("floor"), ytm: V("ytm").toUpperCase(), design: V("design") === "__o" ? "" : V("design"), size: V("size") === "__o" ? "" : V("size"), art: V("art"), type: ty, color: V("color"), shade: V("shade"), bun: +V("bun") || 0, pb: +V("pb") || 0, eta: (function(){ var e = new Date(NOW() + (+V("etah") || 24) * 36e5); e.setMinutes(e.getMinutes() - e.getTimezoneOffset()); return e.toISOString().slice(0, 16); })(), to: V("to"), note: V("note"), s: {}};
-      if(!m.floor) return st("Floor chunein"); if(!m.ytm) return st("YTM likhein");
+      if(!m.floor) return st("Select floor"); if(!m.ytm) return st("Enter YTM");
       m.items = items.map(function(p){ var f = U === "cm" ? 1 / 2.54 : 1; return {p: p.p, l: p.l ? r1(+p.l * f) : 0, w: p.w ? r1(+p.w * f) : 0, q: +p.q || 0}; }).filter(function(p){ return p.q > 0; });
-      if(!m.items.length) return st("Kam se kam ek panel / article ki quantity likhein");
+      if(!m.items.length) return st("Enter quantity for at least one panel / article");
       var r = olm || olFind(m.ytm); if(r){ m.cust = r.cust || ""; m.prog = r.prog || ""; m.po = (r.po || []).join(", "); m.oq = r.qty || 0; }
       m.no = "WL-" + gpNo(); m.tot = m.items.reduce(function(a, p){ return a + p.q; }, 0);
-      go.disabled = true; go.textContent = "Bhej raha hoon…";
+      go.disabled = true; go.textContent = "Sending…";
       upPhotos(P, st).then(function(ph){ m.ph = ph; m.t = "🧺 " + m.no + " · YTM " + m.ytm + " · " + n0(m.tot) + " pcs → Cutting QC"; return post(m, m.t); })
-        .then(function(id){ toast(navigator.onLine === false ? "Internet nahi — phone mein save, khud bhej dega" : "Gate pass ban gaya · Cutting QC ko notify"); o.__close(); m.id = id; if(id && confirm("Gate pass " + m.no + " ban gaya.\n\nQR slip print karein? (bundle / trolley par lagayein)")) slip(lcalc(m)); })
-        .catch(function(e){ go.disabled = false; go.textContent = "Dobara try karein"; st("Nahi gaya: " + (e.code || e.message)); });
+        .then(function(id){ toast(navigator.onLine === false ? "No internet — saved on phone, will send automatically" : "Gate pass created · Cutting QC notified"); o.__close(); m.id = id; if(id && confirm("Gate pass " + m.no + " created.\n\nPrint the QR slip? (stick it on the bundle / trolley)")) slip(lcalc(m)); })
+        .catch(function(e){ go.disabled = false; go.textContent = "Please try again"; st("Not sent: " + (e.code || e.message)); });
     };
     setTimeout(function(){ yi.focus(); }, 250); }
 
   // ---------- steps 2–6 on the same record ----------
   function lotHead(L){ return '<div class="wlSum"><div><b>YTM ' + esc(L.ytm) + '</b> · ' + esc(L.cust || "") + '</div><small>' + esc([L.no, L.design, L.size, L.art, L.floor].filter(Boolean).join(" · ")) + '</small>' +
     '<table class="wlT"><tr><th>Part</th><th>Size</th><th>Qty</th></tr>' + (L.items || []).map(function(p){ return '<tr><td>' + esc(p.p) + '</td><td>' + dimTxt(p) + '</td><td>' + n0(p.q) + '</td></tr>'; }).join("") + '<tr class="t"><td>Total</td><td>' + (L.bun ? n0(L.bun) + " bundles" + (L.pb ? " × " + n0(L.pb) : "") : "") + '</td><td>' + n0(L.tot) + '</td></tr></table>' + dots(L) + '</div>'; }
-  function stepForm(id, k){ var L = lotById(id); if(!L) return toast("Lot nahi mila — thodi der baad");
-    var S = SK[k]; if(!S) return; if(L.s && L.s[k]) return toast(S.t + " pehle ho chuka — " + first(L.s[k].by));
+  function stepForm(id, k){ var L = lotById(id); if(!L) return toast("Lot not found — try again shortly");
+    var S = SK[k]; if(!S) return; if(L.s && L.s[k]) return toast(S.t + " already done — " + first(L.s[k].by));
     if(L.nx && L.nx.k !== k) return toast("Pehle: " + L.nx.t);
     var s = L.s || {}, b = "";
     if(k === "cq"){
-      b += '<div class="wqF"><label>Measure karke likhein (inch) — fark ho to badlein</label>' + (L.items || []).map(function(p, i){ return '<div class="wlPr m"><b>' + esc(p.p) + '</b><input data-ml="' + i + '" type="number" inputmode="decimal" value="' + (p.l || "") + '"><span>×</span><input data-mw="' + i + '" type="number" inputmode="decimal" value="' + (p.w || "") + '"><input data-mq="' + i + '" type="number" inputmode="numeric" value="' + (p.q || "") + '" class="q" title="Qty counted"><small>sent ' + r1(p.l) + '×' + r1(p.w) + ' in · ' + n0(p.q) + ' pcs</small></div>'; }).join("") + '</div>';
-      b += '<div class="wqF"><label>Checks — galat ho to tap karein</label><div class="wqChks">' + LCHK.map(function(c){ return '<button data-ck="' + c[0] + '" class="ok">✓ ' + c[1] + '</button>'; }).join("") + '</div></div>';
-      b += okSeg() + phField("ph", "Photo — zaroori (panel naap ke saath)") + noteF("Jaise: 2 bundle shade alag");
+      b += '<div class="wqF"><label>Measured size (inch) — change if different</label>' + (L.items || []).map(function(p, i){ return '<div class="wlPr m"><b>' + esc(p.p) + '</b><input data-ml="' + i + '" type="number" inputmode="decimal" value="' + (p.l || "") + '"><span>×</span><input data-mw="' + i + '" type="number" inputmode="decimal" value="' + (p.w || "") + '"><input data-mq="' + i + '" type="number" inputmode="numeric" value="' + (p.q || "") + '" class="q" title="Qty counted"><small>sent ' + r1(p.l) + '×' + r1(p.w) + ' in · ' + n0(p.q) + ' pcs</small></div>'; }).join("") + '</div>';
+      b += '<div class="wqF"><label>Checks — tap any that fail</label><div class="wqChks">' + LCHK.map(function(c){ return '<button data-ck="' + c[0] + '" class="ok">✓ ' + c[1] + '</button>'; }).join("") + '</div></div>';
+      b += okSeg() + phField("ph", "Photo — required (panel with measurement)") + noteF("Jaise: 2 bundle shade alag");
     } else if(k === "rv"){
-      b += '<div class="wqG2"><div class="wqF"><label>Pcs received</label><input data-k="q" type="number" inputmode="numeric" value="' + L.tot + '"></div><div class="wqF"><label>Bundles received</label><input data-k="bun" type="number" inputmode="numeric" value="' + (L.bun || "") + '"></div></div>' + okSeg() + phField("ph", "Photo (issue ho to zaroori)") + noteF("Ginti kam / geela / phata");
+      b += '<div class="wqG2"><div class="wqF"><label>Pcs received</label><input data-k="q" type="number" inputmode="numeric" value="' + L.tot + '"></div><div class="wqF"><label>Bundles received</label><input data-k="bun" type="number" inputmode="numeric" value="' + (L.bun || "") + '"></div></div>' + okSeg() + phField("ph", "Photo (required if there is an issue)") + noteF("Short count / wet / torn");
     } else if(k === "wq"){
       var rc = L.rcv != null ? L.rcv : L.tot;
       b += '<div class="wqG2"><div class="wqF"><label>Lot received</label><input readonly value="' + rc + '"></div><div class="wqF"><label>Checked (5%)</label><input data-k="n" type="number" inputmode="numeric" value="' + Math.max(1, Math.ceil(rc * .05)) + '"></div></div>';
-      b += '<div class="wqF"><label>Wash ke baad naap (inch) → shrinkage</label>' + (L.items || []).filter(function(p){ return p.l || p.w; }).map(function(p, i){ return '<div class="wlPr m"><b>' + esc(p.p) + '</b><input data-al="' + i + '" type="number" inputmode="decimal" placeholder="L"><span>×</span><input data-aw="' + i + '" type="number" inputmode="decimal" placeholder="W"><small data-sh="' + i + '">pehle ' + r1(p.l) + '×' + r1(p.w) + ' in</small></div>'; }).join("") + '</div>';
-      b += '<div class="wqF"><label>Checks — galat ho to tap karein</label><div class="wqChks">' + CHK.map(function(c){ return '<button data-ck="' + c[0] + '" class="ok">✓ ' + c[1] + '</button>'; }).join("") + '</div></div>';
-      b += '<div class="wqG2"><div class="wqF"><label>Defective pcs</label><input data-k="def" type="number" inputmode="numeric" value="0"></div><div class="wqF"><label>Result</label><div class="wqSeg" data-seg="ok"><button data-v="1" class="on">Pass</button><button data-v="0">Fail</button></div></div></div>' + phField("ph", "Photo — zaroori") + noteF("Hand feel, shade, remarks");
+      b += '<div class="wqF"><label>Size after wash (inch) → shrinkage</label>' + (L.items || []).filter(function(p){ return p.l || p.w; }).map(function(p, i){ return '<div class="wlPr m"><b>' + esc(p.p) + '</b><input data-al="' + i + '" type="number" inputmode="decimal" placeholder="L"><span>×</span><input data-aw="' + i + '" type="number" inputmode="decimal" placeholder="W"><small data-sh="' + i + '">pehle ' + r1(p.l) + '×' + r1(p.w) + ' in</small></div>'; }).join("") + '</div>';
+      b += '<div class="wqF"><label>Checks — tap any that fail</label><div class="wqChks">' + CHK.map(function(c){ return '<button data-ck="' + c[0] + '" class="ok">✓ ' + c[1] + '</button>'; }).join("") + '</div></div>';
+      b += '<div class="wqG2"><div class="wqF"><label>Defective pcs</label><input data-k="def" type="number" inputmode="numeric" value="0"></div><div class="wqF"><label>Result</label><div class="wqSeg" data-seg="ok"><button data-v="1" class="on">Pass</button><button data-v="0">Fail</button></div></div></div>' + phField("ph", "Photo — required") + noteF("Hand feel, shade, remarks");
     } else if(k === "rt"){
       var lf = L.rcv != null ? L.rcv : L.tot;
-      b += '<div class="wqG2"><div class="wqF"><label>Pcs wapas</label><input data-k="q" type="number" inputmode="numeric" value="' + lf + '"></div><div class="wqF"><label>Pallets</label><input data-k="pal" type="number" inputmode="numeric" value="1"></div></div><div class="wqF"><label>Packing</label><div class="wqSeg" data-seg="wrap"><button data-v="1" class="on">Pallet wrap ✓</button><button data-v="0">Wrap nahi</button></div></div>' + phField("ph", "Photo — wrapped pallet (zaroori)") + noteF("Jaise: 10 pcs QC sample rakhe");
+      b += '<div class="wqG2"><div class="wqF"><label>Pcs returned</label><input data-k="q" type="number" inputmode="numeric" value="' + lf + '"></div><div class="wqF"><label>Pallets</label><input data-k="pal" type="number" inputmode="numeric" value="1"></div></div><div class="wqF"><label>Packing</label><div class="wqSeg" data-seg="wrap"><button data-v="1" class="on">Pallet wrap ✓</button><button data-v="0">Not wrapped</button></div></div>' + phField("ph", "Photo — wrapped pallet (required)") + noteF("Jaise: 10 pcs QC sample rakhe");
     } else if(k === "fa"){
-      b += '<div class="wqF"><label>Pcs mile</label><input data-k="q" type="number" inputmode="numeric" value="' + (L.ret != null ? L.ret : L.tot) + '"></div>' + okSeg("Sab theek — requirement ke mutabiq", "Issue") + phField("ph", "Photo (issue ho to zaroori)") + noteF("Kuch kam / kharab ho to likhein");
+      b += '<div class="wqF"><label>Pcs received</label><input data-k="q" type="number" inputmode="numeric" value="' + (L.ret != null ? L.ret : L.tot) + '"></div>' + okSeg("All OK — as per requirement", "Issue") + phField("ph", "Photo (required if there is an issue)") + noteF("Note any shortage or damage");
     }
-    var o = ov('<div class="wqPg"><div class="wqHd" style="background:#10260F;color:#fff"><button data-x>‹</button><div><b>' + S.ic + ' ' + esc(S.t) + '</b><small>' + esc(S.role) + ' · ' + esc(S.hint) + '</small></div></div><div class="wqFm">' + lotHead(L) + b + '<div class="wqSt" data-st></div><button class="wqGo" data-go>Save · aage bhejo →</button></div></div>', "wls");
+    var o = ov('<div class="wqPg"><div class="wqHd" style="background:#10260F;color:#fff"><button data-x>‹</button><div><b>' + S.ic + ' ' + esc(S.t) + '</b><small>' + esc(S.role) + ' · ' + esc(S.hint) + '</small></div></div><div class="wqFm">' + lotHead(L) + b + '<div class="wqSt" data-st></div><button class="wqGo" data-go>Save · send ahead →</button></div></div>', "wls");
     var seg = {ok: "1", wrap: "1"};
     o.querySelectorAll("[data-seg]").forEach(function(sg){ sg.querySelectorAll("button").forEach(function(x){ x.onclick = function(){ sg.querySelectorAll("button").forEach(function(y){ y.classList.toggle("on", y === x); }); seg[sg.dataset.seg] = x.dataset.v; }; }); });
     o.querySelectorAll("[data-ck]").forEach(function(x){ x.onclick = function(){ var bad = x.classList.toggle("bad"); x.classList.toggle("ok", !bad); x.textContent = (bad ? "✗ " : "✓ ") + x.textContent.slice(2); var any = !!o.querySelector("[data-ck].bad"), sg = o.querySelector('[data-seg="ok"]'); if(sg){ sg.querySelectorAll("button").forEach(function(y){ y.classList.toggle("on", y.dataset.v === (any ? "0" : "1")); }); seg.ok = any ? "0" : "1"; } }; });
     var withSize = (L.items || []).filter(function(p){ return p.l || p.w; });
     o.querySelectorAll("[data-al],[data-aw]").forEach(function(x){ x.oninput = function(){ var i = +(x.dataset.al || x.dataset.aw), p = withSize[i], al = +o.querySelector('[data-al="' + i + '"]').value, aw = +o.querySelector('[data-aw="' + i + '"]').value, sm = o.querySelector('[data-sh="' + i + '"]');
-      var sl = al && p.l ? r1((p.l - al) / p.l * 100) : null, sw = aw && p.w ? r1((p.w - aw) / p.w * 100) : null; sm.innerHTML = "shrinkage " + (sl != null ? "L " + sl + "%" : "") + (sw != null ? " · W " + sw + "%" : "") + ((sl > 5 || sw > 5) ? ' <b class="bad">zyada</b>' : ""); }; });
+      var sl = al && p.l ? r1((p.l - al) / p.l * 100) : null, sw = aw && p.w ? r1((p.w - aw) / p.w * 100) : null; sm.innerHTML = "shrinkage " + (sl != null ? "L " + sl + "%" : "") + (sw != null ? " · W " + sw + "%" : "") + ((sl > 5 || sw > 5) ? ' <b class="bad">high shrinkage</b>' : ""); }; });
     var P = phPicker(o, "ph"), stE = o.querySelector("[data-st]"), st = function(x){ stE.textContent = x; }, go = o.querySelector("[data-go]");
     var Vk = function(q){ var e = o.querySelector('[data-k="' + q + '"]'); return e ? String(e.value).trim() : ""; };
     go.onclick = function(){ var d = {by: uid(), at: NOW(), ok: +seg.ok, note: Vk("note")}; if(navigator.onLine !== false && SAT()) d.sat = SAT();
-      if(k === "cq"){ d.meas = (L.items || []).map(function(p, i){ return {p: p.p, l: +o.querySelector('[data-ml="' + i + '"]').value || 0, w: +o.querySelector('[data-mw="' + i + '"]').value || 0, q: +o.querySelector('[data-mq="' + i + '"]').value || 0}; }); d.chk = {}; o.querySelectorAll("[data-ck]").forEach(function(x){ d.chk[x.dataset.ck] = x.classList.contains("bad") ? 0 : 1; }); d.q = d.meas.reduce(function(a, x){ return a + x.q; }, 0); if(!P.length) return st("Photo zaroori hai"); }
-      if(k === "rv" || k === "rt" || k === "fa"){ if(Vk("q") === "") return st("Ginti likhein"); d.q = +Vk("q"); }
-      if(k === "rv"){ d.bun = +Vk("bun") || 0; if(d.q !== L.tot && !d.note) return st("Ginti alag hai (" + n0(d.q - L.tot) + ") — note likhein"); }
-      if(k === "wq"){ d.n = +Vk("n") || 0; d.def = +Vk("def") || 0; d.chk = {}; o.querySelectorAll("[data-ck]").forEach(function(x){ d.chk[x.dataset.ck] = x.classList.contains("bad") ? 0 : 1; }); d.after = withSize.map(function(p, i){ return {p: p.p, l: +o.querySelector('[data-al="' + i + '"]').value || 0, w: +o.querySelector('[data-aw="' + i + '"]').value || 0}; }); if(!(d.n > 0)) return st("Kitne check kiye?"); if(!P.length) return st("Photo zaroori hai"); }
-      if(k === "rt"){ d.pal = +Vk("pal") || 0; d.wrap = +seg.wrap; if(!P.length) return st("Wrapped pallet ki photo zaroori hai"); }
-      if(k === "fa" && L.ret != null && d.q < L.ret && !d.note) return st("Kam mile (" + n0(L.ret - d.q) + ") — note likhein");
-      if(!d.ok && !d.note) return st("Issue kya hai — likhein"); if(!d.ok && !P.length && k !== "wq") return st("Issue ki photo lagayein");
-      go.disabled = true; go.textContent = "Save ho raha hai…";
+      if(k === "cq"){ d.meas = (L.items || []).map(function(p, i){ return {p: p.p, l: +o.querySelector('[data-ml="' + i + '"]').value || 0, w: +o.querySelector('[data-mw="' + i + '"]').value || 0, q: +o.querySelector('[data-mq="' + i + '"]').value || 0}; }); d.chk = {}; o.querySelectorAll("[data-ck]").forEach(function(x){ d.chk[x.dataset.ck] = x.classList.contains("bad") ? 0 : 1; }); d.q = d.meas.reduce(function(a, x){ return a + x.q; }, 0); if(!P.length) return st("Photo is required"); }
+      if(k === "rv" || k === "rt" || k === "fa"){ if(Vk("q") === "") return st("Enter the count"); d.q = +Vk("q"); }
+      if(k === "rv"){ d.bun = +Vk("bun") || 0; if(d.q !== L.tot && !d.note) return st("Count differs (" + n0(d.q - L.tot) + ") — add a note"); }
+      if(k === "wq"){ d.n = +Vk("n") || 0; d.def = +Vk("def") || 0; d.chk = {}; o.querySelectorAll("[data-ck]").forEach(function(x){ d.chk[x.dataset.ck] = x.classList.contains("bad") ? 0 : 1; }); d.after = withSize.map(function(p, i){ return {p: p.p, l: +o.querySelector('[data-al="' + i + '"]').value || 0, w: +o.querySelector('[data-aw="' + i + '"]').value || 0}; }); if(!(d.n > 0)) return st("How many checked?"); if(!P.length) return st("Photo is required"); }
+      if(k === "rt"){ d.pal = +Vk("pal") || 0; d.wrap = +seg.wrap; if(!P.length) return st("Wrapped pallet photo is required"); }
+      if(k === "fa" && L.ret != null && d.q < L.ret && !d.note) return st("Short received (" + n0(L.ret - d.q) + ") — add a note");
+      if(!d.ok && !d.note) return st("Describe the issue"); if(!d.ok && !P.length && k !== "wq") return st("Add a photo of the issue");
+      go.disabled = true; go.textContent = "Saving…";
       upPhotos(P, st).then(function(ph){ if(ph.length) d.ph = ph; var nx = STEPS[S.i + 1], up = {up: NOW()}; up["s." + k] = d; up.nx = nx ? nx.k : "done";
         var ref = fs().collection("chats").doc(GID).collection("m").doc(id);
         var txt = S.ic + " " + (L.no || "") + " · YTM " + L.ytm + " · " + S.t + (d.ok ? " ✓" : " ⚠ ISSUE") + (d.q != null ? " · " + n0(d.q) + " pcs" : "") + (nx ? " → " + nx.t : " · CLOSED");
         var w = navigator.onLine === false && window.yqSave ? yqSave(ref, up, true) : ref.update(up);
         return w.then(function(){ try{ fs().collection("chats").doc(GID).update({at: NOW(), last: {t: txt.slice(0, 120), by: uid(), at: NOW(), k: "text"}}); }catch(e){} }); })
-        .then(function(){ toast("Save ho gaya" + (STEPS[S.i + 1] ? " · ab " + STEPS[S.i + 1].role : " · lot CLOSED")); o.__close(); })
-        .catch(function(e){ go.disabled = false; go.textContent = "Dobara try karein"; st("Save nahi hua: " + (e.code || e.message)); });
+        .then(function(){ toast("Saved" + (STEPS[S.i + 1] ? " · ab " + STEPS[S.i + 1].role : " · lot CLOSED")); o.__close(); })
+        .catch(function(e){ go.disabled = false; go.textContent = "Please try again"; st("Not saved: " + (e.code || e.message)); });
     }; }
-  function okSeg(a, b){ return '<div class="wqF"><label>Result</label><div class="wqSeg" data-seg="ok"><button data-v="1" class="on">' + (a || "OK — sab theek") + '</button><button data-v="0">' + (b || "Issue") + '</button></div></div>'; }
+  function okSeg(a, b){ return '<div class="wqF"><label>Result</label><div class="wqSeg" data-seg="ok"><button data-v="1" class="on">' + (a || "OK — all good") + '</button><button data-v="0">' + (b || "Issue") + '</button></div></div>'; }
   function noteF(ph){ return '<div class="wqF"><label>Note</label><textarea data-k="note" rows="2" placeholder="' + esc(ph) + '"></textarea></div>'; }
 
   // ---------- lot view + printable report ----------
@@ -448,8 +448,8 @@
     if(d.after){ var sh = d.after.map(function(p, i){ var o0 = (L.items || []).filter(function(q){ return q.l || q.w; })[i] || {}; return p.l || p.w ? p.p + " " + (p.l && o0.l ? r1((o0.l - p.l) / o0.l * 100) + "%" : "–") + " × " + (p.w && o0.w ? r1((o0.w - p.w) / o0.w * 100) + "%" : "–") : ""; }).filter(Boolean); if(sh.length) a.push("Shrinkage L×W: " + sh.join(", ")); }
     if(d.meas){ var df = d.meas.filter(function(m, i){ var p = (L.items || [])[i] || {}; return Math.abs((m.l || 0) - (p.l || 0)) > .25 || Math.abs((m.w || 0) - (p.w || 0)) > .25 || m.q !== p.q; }); if(df.length) a.push("Measured: " + df.map(function(m){ return m.p + " " + r1(m.l) + "×" + r1(m.w) + " in, " + n0(m.q) + " pcs"; }).join("; ")); else a.push("Size & qty as sent ✓"); }
     if(d.note) a.push("“" + d.note + "”"); return a.join(" · "); }
-  function lotView(id){ var L = lotById(id); if(!L) return toast("Lot nahi mila");
-    var h = lotHead(L) + '<div class="wqSteps">' + stepRows(L).map(function(r){ var d = r.d, x = r.x; return '<div class="wqStep ' + (d ? (d.ok === 0 ? "bad" : "ok") : "wait") + '"><i>' + x.ic + '</i><div><b>' + esc(x.t) + '</b><small>' + (d ? esc(who(d.by)) + ' · ' + dt(d.at) : esc(x.role) + ' — baqi hai') + '</small>' + (d ? '<p>' + esc(stepDetail(x, d, L)) + '</p>' + thumbs(d.ph) : '') + '</div></div>'; }).join("") + '</div>';
+  function lotView(id){ var L = lotById(id); if(!L) return toast("Lot not found");
+    var h = lotHead(L) + '<div class="wqSteps">' + stepRows(L).map(function(r){ var d = r.d, x = r.x; return '<div class="wqStep ' + (d ? (d.ok === 0 ? "bad" : "ok") : "wait") + '"><i>' + x.ic + '</i><div><b>' + esc(x.t) + '</b><small>' + (d ? esc(who(d.by)) + ' · ' + dt(d.at) : esc(x.role) + ' — pending') + '</small>' + (d ? '<p>' + esc(stepDetail(x, d, L)) + '</p>' + thumbs(d.ph) : '') + '</div></div>'; }).join("") + '</div>';
     var o = ov('<div class="wqPg"><div class="wqHd"><button data-x>‹</button><div><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.cust, L.design, L.size].filter(Boolean).join(" · ")) + '</small></div>' + lchip(L) + '</div><div class="wqFm">' + h +
       '<div class="wqBtns pad">' + (L.nx ? '<button data-wq="step" data-id="' + L.id + '" data-k="' + L.nx.k + '">' + L.nx.ic + ' ' + esc(L.nx.t) + ' →</button>' : '') + '<button data-sl class="gh">🏷 QR slip</button><button data-pr class="gh">🖨 PDF report</button></div></div></div>', "wlv");
     o.querySelector("[data-pr]").onclick = function(){ printDoc(L.no + " Wash report", lotPrint(L)); };
@@ -459,7 +459,7 @@
     var h = '<div class="hd"><div><h1>Yunus Textile Mills Limited</h1><small>Wash lot · identification &amp; wash report · ' + esc(L.no) + '</small></div><div style="text-align:right">' + st + '<br><small>' + dt(L.at) + '</small></div></div>';
     h += '<div class="g">' + [["YTM", L.ytm], ["Customer", L.cust], ["Program", L.prog], ["PO", L.po], ["Design", L.design], ["Size", L.size], ["Article", L.art], ["Type", L.type === "art" ? "Stitched article" : "Precut panels"], ["Colour", L.color], ["Shade #", L.shade], ["Floor", L.floor], ["Washing", L.to], ["Bundles", L.bun ? n0(L.bun) + (L.pb ? " × " + n0(L.pb) + " pcs" : "") : ""], ["Order qty", L.oq ? n0(L.oq) : ""], ["Est. consumption", L.eta ? String(L.eta).replace("T", " ") : ""], ["Prepared by", who(L.by)]].map(function(x){ return '<div><small>' + x[0] + '</small><b>' + esc(x[1] || "—") + '</b></div>'; }).join("") + '</div>';
     h += '<h2>Panels / article</h2><table><tr><th>Part</th><th>Length × Width (inch)</th><th>Length × Width (cm)</th><th>Qty pcs</th></tr>' + (L.items || []).map(function(p){ return '<tr><td>' + esc(p.p) + '</td><td>' + (p.l || p.w ? r1(p.l) + " × " + r1(p.w) : "—") + '</td><td>' + (p.l || p.w ? cm(p.l) + " × " + cm(p.w) : "—") + '</td><td>' + n0(p.q) + '</td></tr>'; }).join("") + '<tr class="t"><td colspan="3">Total</td><td>' + n0(L.tot) + '</td></tr></table>';
-    h += '<h2>Chain — kis ne kya kiya</h2><table><tr><th>Step</th><th>Responsible</th><th>Done by</th><th>Date / time</th><th>Result</th><th>Detail</th></tr>' + stepRows(L).map(function(r){ var d = r.d; return '<tr><td>' + r.x.ic + ' ' + esc(r.x.t) + '</td><td>' + esc(r.x.role) + '</td><td>' + (d ? esc(who(d.by)) : "—") + '</td><td>' + (d ? dt(d.at) : "pending") + '</td><td>' + (d ? (d.ok === 0 ? '<span class="tag bad">Issue</span>' : '<span class="tag ok">OK</span>') : "") + '</td><td>' + (d ? esc(stepDetail(r.x, d, L)) : "") + '</td></tr>'; }).join("") + '</table>';
+    h += '<h2>Chain — who did what</h2><table><tr><th>Step</th><th>Responsible</th><th>Done by</th><th>Date / time</th><th>Result</th><th>Detail</th></tr>' + stepRows(L).map(function(r){ var d = r.d; return '<tr><td>' + r.x.ic + ' ' + esc(r.x.t) + '</td><td>' + esc(r.x.role) + '</td><td>' + (d ? esc(who(d.by)) : "—") + '</td><td>' + (d ? dt(d.at) : "pending") + '</td><td>' + (d ? (d.ok === 0 ? '<span class="tag bad">Issue</span>' : '<span class="tag ok">OK</span>') : "") + '</td><td>' + (d ? esc(stepDetail(r.x, d, L)) : "") + '</td></tr>'; }).join("") + '</table>';
     var ph = []; stepRows(L).forEach(function(r){ if(r.d && r.d.ph) r.d.ph.forEach(function(p){ if(p.th) ph.push('<img src="' + esc(p.th) + '" title="' + esc(r.x.t) + '">'); }); }); if(ph.length) h += '<h2>Photos</h2><div class="ph">' + ph.join("") + '</div>';
     h += '<div class="sg">' + ["Production / Cutting", "Cutting QC", "Washing", "Washing QC", "Floor QC"].map(function(x){ return '<div>' + x + '</div>'; }).join("") + '</div><div class="ft"><span>YQI · Wash lot ' + esc(L.no) + '</span><span>Printed ' + dt(Date.now()) + '</span></div>';
     return h; }
@@ -478,19 +478,19 @@
     if(window.yqAoaDl) return yqAoaDl("Wash_lots_" + ymd(new Date()), rows, "Wash lots"); }
 
   // ---------- find a lot: QR scan or type lot no / YTM ----------
-  var ROLES = [["all", "Sab steps", []], ["prod", "Production / Cutting", ["gp"]], ["cq", "Cutting QC", ["cq"]], ["wash", "Washing", ["rv", "rt"]], ["wq", "Washing QC", ["wq"]], ["floor", "Floor QC", ["fa"]]];
+  var ROLES = [["all", "All steps", []], ["prod", "Production / Cutting", ["gp"]], ["cq", "Cutting QC", ["cq"]], ["wash", "Washing", ["rv", "rt"]], ["wq", "Washing QC", ["wq"]], ["floor", "Floor QC", ["fa"]]];
   function myRole(){ try{ return localStorage.getItem("yqi_wrole") || ""; }catch(e){ return ""; } }
   function roleSteps(r){ var x = ROLES.filter(function(z){ return z[0] === r; })[0]; return x ? x[2] : []; }
   function qrText(L){ return "YQIWL:" + L.id + "|" + (L.no || ""); }
   function openLot(L){ if(!L) return; var mine = roleSteps(myRole()); if(L.nx && (!mine.length || mine.indexOf(L.nx.k) >= 0)) return stepForm(L.id, L.nx.k); lotView(L.id); }
   function findLots(t){ t = String(t || "").trim(); if(!t) return []; var m = /YQIWL:([A-Za-z0-9]+)/.exec(t); if(m){ var L = lotById(m[1]); return L ? [L] : []; }
     var q = t.toUpperCase(); return lots().filter(function(L){ return String(L.no || "").toUpperCase() === q || String(L.no || "").toUpperCase().slice(-q.length) === q || String(L.ytm || "").toUpperCase() === q; }).sort(function(a, b){ return (b.nx ? 1 : 0) - (a.nx ? 1 : 0) || b.at - a.at; }); }
-  function scanLot(){ if(!window.yqScanCode) return toast("Scanner load nahi hua — lot no likh dein");
-    yqScanCode("Lot ki QR slip scan karein").then(function(t){ if(!t) return; if(t === "__type__"){ var v = prompt("Lot no ya YTM"); if(v) gotoLot(v); return; } gotoLot(t); }); }
-  function gotoLot(t){ listen(); var go = function(){ var L = findLots(t); if(!L.length) return toast("“" + t + "” ka koi lot nahi mila"); if(L.length === 1) return openLot(L[0]); pickLot(L); }; if(!ROWS.length) setTimeout(go, 900); else go(); }
-  function pickLot(LL){ var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>' + LL.length + ' lots mile</b><small>Ek chunein</small></div></div><div class="wqFm">' + LL.map(function(L){ return '<button class="wlPick" data-p="' + L.id + '"><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.design, L.size, L.floor].filter(Boolean).join(" · ")) + ' · ' + dt(L.at) + '</small>' + lchip(L) + '</button>'; }).join("") + '</div></div>', "wlp");
+  function scanLot(){ if(!window.yqScanCode) return toast("Scanner did not load — type the lot no");
+    yqScanCode("Scan the lot QR slip").then(function(t){ if(!t) return; if(t === "__type__"){ var v = prompt("Lot no or YTM"); if(v) gotoLot(v); return; } gotoLot(t); }); }
+  function gotoLot(t){ listen(); var go = function(){ var L = findLots(t); if(!L.length) return toast("“" + t + "” — no lot found"); if(L.length === 1) return openLot(L[0]); pickLot(L); }; if(!ROWS.length) setTimeout(go, 900); else go(); }
+  function pickLot(LL){ var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>' + LL.length + ' lots found</b><small>Pick one</small></div></div><div class="wqFm">' + LL.map(function(L){ return '<button class="wlPick" data-p="' + L.id + '"><b>' + esc(L.no) + ' · YTM ' + esc(L.ytm) + '</b><small>' + esc([L.design, L.size, L.floor].filter(Boolean).join(" · ")) + ' · ' + dt(L.at) + '</small>' + lchip(L) + '</button>'; }).join("") + '</div></div>', "wlp");
     o.querySelectorAll("[data-p]").forEach(function(b){ b.onclick = function(){ o.__close(); setTimeout(function(){ openLot(lotById(b.dataset.p)); }, 300); }; }); }
-  function chooseRole(cb){ var cur = myRole(); var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>Aapka kaam kya hai?</b><small>Ek dafa chunein — app sirf aapke pending lots dikhayegi</small></div></div><div class="wqFm">' + ROLES.map(function(r){ return '<button class="wlPick' + (cur === r[0] ? " on" : "") + '" data-r="' + r[0] + '"><b>' + esc(r[1]) + '</b><small>' + (r[2].length ? r[2].map(function(k){ return SK[k].ic + " " + SK[k].t; }).join(" · ") : "Har step dekhna (manager)") + '</small></button>'; }).join("") + '</div></div>', "wlr");
+  function chooseRole(cb){ var cur = myRole(); var o = ov('<div class="wqPg"><div class="wlHd"><button data-x>‹</button><div class="wlHt"><b>What is your job?</b><small>Pick once — the app will show only your pending lots</small></div></div><div class="wqFm">' + ROLES.map(function(r){ return '<button class="wlPick' + (cur === r[0] ? " on" : "") + '" data-r="' + r[0] + '"><b>' + esc(r[1]) + '</b><small>' + (r[2].length ? r[2].map(function(k){ return SK[k].ic + " " + SK[k].t; }).join(" · ") : "See every step (manager)") + '</small></button>'; }).join("") + '</div></div>', "wlr");
     o.querySelectorAll("[data-r]").forEach(function(b){ b.onclick = function(){ try{ localStorage.setItem("yqi_wrole", b.dataset.r); }catch(e){} o.__close(); if(cb) setTimeout(cb, 250); }; }); }
   // ---------- QR slip (stick on the bundle / trolley) ----------
   function loadQr(){ if(window.QRCode) return Promise.resolve(); var L = window.yqLoadJs; if(L) return L("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"); return new Promise(function(ok, no){ var s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
@@ -499,7 +499,7 @@
     var row = function(a, b){ return '<tr><th>' + a + '</th><td>' + esc(b || "") + '</td></tr>'; };
     var one = '<div class="sl"><div class="slh"><div><b>Yunus Textile Mills Limited</b><br><small>Washing gate pass · identification</small></div><div class="no">' + esc(L.no) + '</div></div><div class="slb"><table>' + row("YTM", L.ytm) + row("Customer", L.cust) + row("Design", L.design) + row("Colour", L.color) + row("Size", L.size) + row("Article", L.art + (L.type === "art" ? " (stitched)" : " (precut)")) + row("Shade #", L.shade) + row("Floor", L.floor) +
       row("Qty", (L.items || []).map(function(p){ return p.p + " " + p.q; }).join(" · ") + " = " + L.tot) + row("Bundles", L.bun ? L.bun + (L.pb ? " × " + L.pb : "") : "") + row("Date", dt(L.at)) + row("Prepared by", who(L.by)) + '</table><div class="q">' + (q ? '<img src="' + q + '">' : '') + '<small>Scan in YQI → Washing</small></div></div></div>';
-    printDoc(L.no + " slip", '<style>@page{size:A4;margin:8mm}.sl{border:2px solid #000;border-radius:6px;padding:8px 10px;margin-bottom:8mm;page-break-inside:avoid;height:128mm;box-sizing:border-box}.slh{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:6px}.slh b{font-size:16px}.no{font:800 20px Arial;border:2px solid #000;padding:4px 10px;border-radius:6px}.slb{display:flex;gap:10px}.slb table{flex:1;margin:0}.slb th{width:90px;background:#f2f2f2;font-size:11px}.slb td{font-size:14px;font-weight:700}.q{text-align:center;width:230px}.q img{width:220px;height:220px}.q small{display:block;font-size:10px}</style>' + one + one); }).catch(function(){ toast("QR ban nahi saka — internet check karein"); }); }
+    printDoc(L.no + " slip", '<style>@page{size:A4;margin:8mm}.sl{border:2px solid #000;border-radius:6px;padding:8px 10px;margin-bottom:8mm;page-break-inside:avoid;height:128mm;box-sizing:border-box}.slh{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:6px}.slh b{font-size:16px}.no{font:800 20px Arial;border:2px solid #000;padding:4px 10px;border-radius:6px}.slb{display:flex;gap:10px}.slb table{flex:1;margin:0}.slb th{width:90px;background:#f2f2f2;font-size:11px}.slb td{font-size:14px;font-weight:700}.q{text-align:center;width:230px}.q img{width:220px;height:220px}.q small{display:block;font-size:10px}</style>' + one + one); }).catch(function(){ toast("Could not make QR — check internet"); }); }
   // ---------- board: everything open, by who has to do it ----------
   var BS = {tab: "todo", q: "", r: "30"};
   function board(){ listen(); try{ window.yqOlGet && yqOlGet(); }catch(e){}
@@ -513,14 +513,14 @@
     o.querySelector('[data-a="old"]').onclick = function(){ report(); };
     var typing = function(){ var a = document.activeElement; return a && o.contains(a) && /INPUT|TEXTAREA/.test(a.tagName); };
     RF = function(err, force){ if(!document.body.contains(o)){ RF = null; return; } if(!force && typing()){ o.__pend = 1; return; } o.__pend = 0;
-      var keep = {}; o.querySelectorAll("[data-fi],[data-q]").forEach(function(e){ keep[e.hasAttribute("data-fi") ? "fi" : "q"] = e.value; }); if(err){ B.innerHTML = '<div class="wqEmpty"><b>Pehle Wash QC group join karein</b><br><button class="wqGo sm" data-join>Group kholo</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
+      var keep = {}; o.querySelectorAll("[data-fi],[data-q]").forEach(function(e){ keep[e.hasAttribute("data-fi") ? "fi" : "q"] = e.value; }); if(err){ B.innerHTML = '<div class="wqEmpty"><b>Join the Wash QC group first</b><br><button class="wqGo sm" data-join>Open group</button></div>'; B.querySelector("[data-join]").onclick = function(){ o.__close(); setTimeout(openGroup, 400); }; return; }
       var y = B.scrollTop, LL = list(), open = LL.filter(function(L){ return L.nx; }), cnt = {}; open.forEach(function(L){ cnt[L.nx.k] = (cnt[L.nx.k] || 0) + 1; });
       var role = myRole(), mine = roleSteps(role), myN = open.filter(function(L){ return mine.indexOf(L.nx.k) >= 0; }).length;
-      var h = '<div class="wlHero"><button class="sc" data-scan><i>📷</i><b>Scan QR</b><small>Slip scan karein</small></button><form class="mn" data-find><input data-fi placeholder="Lot no ya YTM likhein" autocomplete="off"><button>Kholo →</button></form></div>' +
-        '<div class="wlMe"><span>Aapka kaam: <b>' + esc((ROLES.filter(function(r){ return r[0] === role; })[0] || ["", "chunein"])[1]) + '</b></span><button data-role>Badlein</button></div>';
+      var h = '<div class="wlHero"><button class="sc" data-scan><i>📷</i><b>Scan QR</b><small>Scan the slip</small></button><form class="mn" data-find><input data-fi placeholder="Type lot no or YTM" autocomplete="off"><button>Open →</button></form></div>' +
+        '<div class="wlMe"><span>Your job: <b>' + esc((ROLES.filter(function(r){ return r[0] === role; })[0] || ["", "chunein"])[1]) + '</b></span><button data-role>Change</button></div>';
       if(BS.tab === "todo" && mine.length && !BS.touched) BS.tab = "mine";
       h += '<div class="wlSr"><input class="wlQ" data-q placeholder="Search YTM, lot no, customer, floor" value="' + esc(BS.q) + '"><div class="wlRg">' + [["7", "7D"], ["30", "30D"], ["all", "All"]].map(function(r){ return '<button data-r="' + r[0] + '"' + (BS.r === r[0] ? ' class="on"' : '') + '>' + r[1] + '</button>'; }).join("") + '</div></div>';
-      var tb = (mine.length ? [["mine", "Mera kaam", myN]] : []).concat([["todo", "All open", open.length]]).concat(STEPS.slice(1).map(function(s){ return [s.k, s.t.replace(" verify", "").replace(" 5%", "").replace(" final OK", " OK").replace(" to floor", ""), cnt[s.k] || 0, s.role]; })).concat([["closed", "Closed", LL.length - open.length]]);
+      var tb = (mine.length ? [["mine", "My work", myN]] : []).concat([["todo", "All open", open.length]]).concat(STEPS.slice(1).map(function(s){ return [s.k, s.t.replace(" verify", "").replace(" 5%", "").replace(" final OK", " OK").replace(" to floor", ""), cnt[s.k] || 0, s.role]; })).concat([["closed", "Closed", LL.length - open.length]]);
       h += '<div class="wlTabs">' + tb.map(function(t){ return '<button data-st="' + t[0] + '"' + (BS.tab === t[0] ? ' class="on"' : '') + (t[3] ? ' title="' + esc(t[3]) + '"' : '') + '>' + esc(t[1]) + '<b>' + t[2] + '</b></button>'; }).join("") + '</div>';
       if(SK[BS.tab]) h += '<div class="wlWho">Responsible: <b>' + esc(SK[BS.tab].role) + '</b> · ' + esc(SK[BS.tab].hint) + '</div>';
       var show = LL.filter(function(L){ return BS.tab === "mine" ? L.nx && mine.indexOf(L.nx.k) >= 0 : BS.tab === "todo" ? !!L.nx : BS.tab === "closed" ? !L.nx : L.nx && L.nx.k === BS.tab; });
