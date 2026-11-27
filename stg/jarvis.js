@@ -300,7 +300,7 @@
       return p.then(function () { return fail ? null : next(); });
     };
     return next().then(function () {
-      var what = (PLAN_TEXT || "").replace(/\s*(karun|karoon|kar doon|kar dun)\s*\?\s*$/i, "").trim();
+      var what = (PLAN_TEXT || "").replace(/^(theek hai|ji|ok|acha|achha)[\s,—-]*/i, "").replace(/\s*(karun|karoon|kar doon|kar dun)\s*\?\s*$/i, "").trim();
       var msg = fail ? "“" + fail + "” nahi ho saka — main wahin ruk gaya." : "Ho gaya" + (DONE.length ? " — " + DONE.join("; ") : "") + ".";
       HISTORY.push({ role: fail ? "sys" : "model", text: msg });
       jobAdd((fail ? "✗ " : "") + (what ? what + " → " : "") + msg);

@@ -11,7 +11,7 @@
   var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.yqi-ytm7.workers.dev";
 
   var SETTINGS = { voiceURI: "", languageCode: "ur-PK", micLang: "ur-PK", speakingRate: 1, pitch: 0, autoSpeak: true, natural: true, gvoice: "Charon" };
-  var GREETED = false, VOICE_MODE = false, AUDIO = null, PENDING_DO = null;
+  var GREETED = false, VOICE_MODE = false, AUDIO = null, PENDING_DO = null, PLAN_TEXT = "", DONE = [];
   var HISTORY = [], OPEN = false, BUSY = false, SETTINGS_LOADED = false;
   var RECOG = null, LISTENING = false, SPEAKING = false;
   var ALERTS = [], PENDING = [];
@@ -92,7 +92,7 @@
   // ---------------------------------------------------------------- orb + panel
   function badgeCount() {
     var uid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
-    var unread = ALERTS.filter(function (a) { return !(a.read && uid && a.read[uid]); }).length + PENDING.length;
+    var unread = ALERTS.filter(function (a) { return !(a.read && uid && a.read[uid]); }).length + PENDING.length + jobsGet().filter(function (j) { return !j.seen; }).length;
     return unread;
   }
   function renderOrb() {
@@ -147,7 +147,7 @@
     renderOrb();
     greet();
   }
-  function closePanel() { OPEN = false; VOICE_MODE = false; try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } var p = $("jvPanel"); if (p) p.remove(); }
+  function closePanel() { setTimeout(wakeStart, 1500); OPEN = false; VOICE_MODE = false; try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } var p = $("jvPanel"); if (p) p.remove(); }
 
   function render() {
     renderVoice();
@@ -162,7 +162,7 @@
   function renderChat(body) {
     body.innerHTML = HISTORY.map(function (m) {
       if (m.role === "sys") return '<div class="jvMsg sys">' + esc(m.text) + "</div>";
-      if (m.role === "do") return PENDING_DO ? '<div class="jvCard"><b>Ye kaam karun?</b>' + PENDING_DO.steps.map(function (x) { return esc(x.t === "type" ? "✎ " + x.x + ": " + x.v : x.t === "tap" || !x.t ? "▸ " + x.x : x.t === "home" ? "▸ Home" : x.t === "back" ? "▸ Back" : ""); }).filter(Boolean).join("<br>") + '<div class="jvRow"><button class="ok" data-doyes>Haan, karo</button><button class="no" data-dono>Nahi</button></div></div>' : "";
+      if (m.role === "do") return PENDING_DO ? '<div class="jvCard"><b>Ye kaam karun?</b>' + PENDING_DO.steps.map(function (x) { return esc(x.t === "type" ? "✎ " + x.x + ": " + x.v : x.t === "tap" || !x.t ? "▸ " + x.x : x.t === "home" ? "▸ Home" : x.t === "back" ? "▸ Back" : x.t === "excel" ? "⬇ Excel: " + [x.what, x.customer, x.result, x.from && x.from + "→" + (x.to || "")].filter(Boolean).join(" · ") : ""); }).filter(Boolean).join("<br>") + '<div class="jvRow"><button class="ok" data-doyes>Haan, karo</button><button class="no" data-dono>Nahi</button></div></div>' : "";
       return '<div class="jvMsg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.text).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/^\* /gm, "• ") + "</div>";
     }).join("") + (BUSY ? '<div class="jvMsg ai"><span class="jvDot"></span><span class="jvDot"></span><span class="jvDot"></span></div>' : "");
     body.scrollTop = body.scrollHeight;
@@ -199,11 +199,16 @@
       var w = /\[\[WEB:\s*([^\]]+)\]\]/i.exec(t);
       if (w && !opt.webq) { HISTORY.push({ role: "sys", text: "🌐 Internet par dekh raha hoon…" }); render(); return ask(text, { webq: w[1].trim() }); }
       t = t.replace(/\[\[WEB:[^\]]*\]\]/gi, "").trim();
-      var steps = null, m = /\[\[DO:\s*([\s\S]*?)\]\]\s*$/.exec(t) || /\[\[DO:\s*(\[[\s\S]*\])\s*\]\]/.exec(t);
-      if (m) { try { steps = JSON.parse(m[1]); } catch (e) { steps = null; } t = t.replace(m[0], "").trim(); }
+      var steps = null, di = t.indexOf("[[DO:");
+      if (di >= 0) {
+        var raw = t.slice(di + 5), a1 = raw.indexOf("["), a2 = raw.lastIndexOf("]");
+        if (a1 >= 0 && a2 > a1) { for (var cut = a2; cut > a1 && !steps; cut = raw.lastIndexOf("]", cut - 1)) { try { steps = JSON.parse(raw.slice(a1, cut + 1)); if (!Array.isArray(steps)) steps = [steps]; } catch (e) { steps = null; } } }
+        t = t.slice(0, di).trim();
+      }
+      if (!steps) { var cb = /```(?:json)?\s*(\[[\s\S]*?\])\s*```/.exec(t) || /(\[\s*\{\s*"t"\s*:[\s\S]*\])\s*$/.exec(t); if (cb) { try { var st2 = JSON.parse(cb[1]); if (Array.isArray(st2) && st2.length && st2[0] && st2[0].t) { steps = st2; t = t.replace(cb[0], "").trim(); } } catch (e) { } } }
       BUSY = false;
       HISTORY.push({ role: "model", text: t || (steps ? "Ye kaam karun?" : "(jawab nahi mila)") });
-      if (steps && steps.length) { PENDING_DO = { steps: steps, text: t }; HISTORY.push({ role: "do" }); }
+      if (steps && steps.length) { PENDING_DO = { steps: steps, text: t }; PLAN_TEXT = t; HISTORY.push({ role: "do" }); }
       render();
       if (d.pendingActions && d.pendingActions.length) {
         HISTORY.push({ role: "sys", text: d.pendingActions.length + " kaam approval ke liye bheje — Approvals tab dekhein." });
@@ -235,6 +240,7 @@
     "Inspection Summary / Quality Intelligence screen: date buttons 'Day', 'Last 3 days', 'This month', 'All (since Oct 2026)', '📅 Pick dates'; customer chips; 'Upload file', 'Download template'; ⬇ Excel downloads.",
     "CAPA tracker: tabs Open/Overdue/Verification/Closed/All, filters, '+ New CAPA' → write problem in '✨ Auto drafts' box → '✨ Make drafts' → pick a method draft (8D, 5 Why, Fishbone, PDCA, A3, FMEA) → steps → Save draft → preview/PDF/sign. '⬇ Excel' exports.",
     "Settings: Edit page, Customize dashboard, Admin · customers, People & access, Yunus Textile people, offline copy, 20 languages, Install app, Link a computer (QR), Sign out. Login: email/password, Google, or QR from phone.",
+    "Recipe — new CAPA from a problem: tap 'CAPA tracker', wait, tap '+ New CAPA', wait, type into field 'e.g. Buyer found oil stains' the problem text, tap '✨ Make drafts'.",
     "Chat: company chat groups; '#INTERNAL' / '#EXTERNAL' formatted messages in inspection groups auto-feed the Inspection Summary (server checks every 5 min)."
   ].join("\n");
   function sysPrompt() {
@@ -246,7 +252,7 @@
       "DATA: The 'Live data from the YQI app' block is the truth for every number about inspections, CAPA, customers. Never invent or estimate app numbers. If something isn't in the data, say so in one line.",
       "TEXTILE EXPERT: You know the whole chain from fiber to container — cotton/poly/blends, fiber length & micronaire, yarn count (Ne), twist, spinning (ring/open-end), weaving (plain/percale/sateen, thread count, EPI/PPI), knitting, GSM, desizing/scouring/bleaching, dyeing (reactive/vat/disperse/pigment), printing (rotary/digital), shade matching (D65, Delta E, CMC), finishing (sanforizing, peach, anti-pilling), cutting, stitching (SPI, seam & stitch types 301/401/504), quilting & filling (fiber fill, down, GSM of filling), home-textile construction, QC (AQL 1.0/2.5/4.0, ISO 2859-1 sampling, inline/end-line/final, defect classification critical/major/minor, needle control, metal detection), lab testing (dimensional stability/shrinkage ISO 6330, colour fastness ISO 105, pilling ISO 12945, tensile/tear, seam slippage), packing & labelling (care labels, barcodes, carton marks, drop test), shipping (CBM, carton fill, 20ft/40ft/40HC loading, container inspection, Incoterms), and buyer standards (IKEA IWAY, Target, Walmart, JYSK, OEKO-TEX, BSCI, GOTS). Give practical, technical answers with real figures and standards — like an experienced QA manager, not textbook filler.",
       "INTERNET: If the answer needs current outside information you can't know (prices, market rates, news, exchange rates, weather, latest standard changes) reply with ONLY: [[WEB: short English search query]] — nothing else. When web results are given, use them and mention the source name briefly.",
-      "DOING THINGS IN THE APP: You can operate the app for the user. The SCREEN block lists buttons/fields visible right now; APP MAP below describes where things are. When the user asks you to open/show/go/filter/download/start something, reply with ONE short line in Urdu saying exactly what you will do and asking for a go-ahead (e.g. 'Theek hai — CAPA tracker khol ke naya CAPA shuru karta hoon. Karun?'), then on the same message add [[DO: [steps]]] — a JSON array of steps: {\"t\":\"tap\",\"x\":\"exact button text\"}, {\"t\":\"type\",\"x\":\"field placeholder or label\",\"v\":\"text\"}, {\"t\":\"home\"}, {\"t\":\"back\"}, {\"t\":\"wait\",\"ms\":800}. Use button texts exactly as in SCREEN/APP MAP; for buttons on the next screen chain taps with a wait. Never say it is already done — the app runs it after the user taps Yes. For pure questions don't add DO.",
+      "DOING THINGS IN THE APP: You can operate the app for the user. The SCREEN block lists buttons/fields visible right now; APP MAP below describes where things are. When the user asks you to open/show/go/filter/download/start something, reply with ONE short line in Urdu saying exactly what you will do and asking for a go-ahead (e.g. 'Theek hai — CAPA tracker khol ke naya CAPA shuru karta hoon. Karun?'), then on the same message add [[DO: [steps]]] — a JSON array of steps: {\"t\":\"tap\",\"x\":\"exact button text\"}, {\"t\":\"type\",\"x\":\"field placeholder or label\",\"v\":\"text\"}, {\"t\":\"home\"}, {\"t\":\"back\"}, {\"t\":\"wait\",\"ms\":800}, and {\"t\":\"excel\",\"what\":\"ext|int|capa\",\"customer\":\"name or empty\",\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\",\"result\":\"all|fail|pass|open|closed\",\"floor\":\"\"} which builds and downloads a styled Excel file directly from app data (use it for any 'Excel/list/report bana do' request — no taps needed). One command can contain several tasks: put ALL steps in one DO list so they run back-to-back after a single yes; the app then reports what was done in the Alerts tab and notifies the user. Use button texts exactly as in SCREEN/APP MAP; for buttons on the next screen chain taps with a wait. Write the marker literally as [[DO: [...]]] on the same message — never inside a code block, never JSON without the marker. Never say it is already done — the app runs it after the user taps Yes. For pure questions don't add DO.",
       "APP MAP:\n" + APP_MAP
     ].join("\n\n");
   }
@@ -280,7 +286,7 @@
   }
   function runSteps(steps) {
     closePanel(); closeVoice(true);
-    var i = 0, fail = "";
+    var i = 0, fail = ""; DONE = [];
     var next = function () {
       if (i >= steps.length) return Promise.resolve();
       var s = steps[i++] || {}, t = s.t || s.type;
@@ -288,14 +294,45 @@
       if (t === "home") { var h = findEl("‹ home") || findEl("home"); if (h) h.click(); p = sleep(900); }
       else if (t === "back") { try { if (window.YQBACK && YQBACK.back) YQBACK.back(); else history.back(); } catch (e) { history.back(); } p = sleep(700); }
       else if (t === "wait") p = sleep(Math.min(5000, +s.ms || 800));
+      else if (t === "excel") p = makeExcel(s).then(function (r) { DONE.push(r); }, function (e) { fail = "Excel (" + (e && e.message || e) + ")"; });
       else if (t === "type") { var f = findEl(s.x, 1); if (!f) { fail = s.x; return Promise.resolve(); } f.focus(); f.value = s.v || ""; f.dispatchEvent(new Event("input", { bubbles: true })); f.dispatchEvent(new Event("change", { bubbles: true })); p = sleep(400); }
       else { var tries = 0, go = function () { var el = findEl(s.x); if (el) { el.scrollIntoView({ block: "center" }); el.click(); return sleep(900); } if (tries++ < 6) return sleep(500).then(go); fail = s.x; return Promise.resolve(); }; p = go(); }
       return p.then(function () { return fail ? null : next(); });
     };
     return next().then(function () {
-      var msg = fail ? "“" + fail + "” screen par nahi mila — main yahin ruk gaya." : "Ho gaya.";
+      var what = (PLAN_TEXT || "").replace(/^(theek hai|ji|ok|acha|achha)[\s,—-]*/i, "").replace(/\s*(karun|karoon|kar doon|kar dun)\s*\?\s*$/i, "").trim();
+      var msg = fail ? "“" + fail + "” nahi ho saka — main wahin ruk gaya." : "Ho gaya" + (DONE.length ? " — " + DONE.join("; ") : "") + ".";
       HISTORY.push({ role: fail ? "sys" : "model", text: msg });
+      jobAdd((fail ? "✗ " : "") + (what ? what + " → " : "") + msg);
+      try { if (window.YQNATIVE && YQNATIVE.notify) YQNATIVE.notify({ title: "Jarvis", body: msg, tag: "jarvis" }); else if (window.Notification && Notification.permission === "granted" && document.hidden) new Notification("Jarvis", { body: msg }); } catch (e) { }
       if (SETTINGS.autoSpeak) speak(msg);
+    });
+  }
+
+  // ------------------------------------------------- Excel files made by Jarvis (from data already in the app)
+  function makeExcel(o) {
+    if (!window.YQJDATA || !window.yqAoaDl) return Promise.reject(new Error("app abhi tayyar nahi"));
+    return Promise.resolve(window.YQJDATA()).then(function (D) {
+      var what = String(o.what || "ext").toLowerCase(), cu = String(o.customer || "").toLowerCase().trim(), from = o.from || "", to = o.to || "9999", res = String(o.result || "all").toLowerCase(), fl = String(o.floor || "").toLowerCase();
+      var inRange = function (d) { d = String(d || ""); return (!from || d >= from) && d <= to; };
+      var okRes = function (r) { var p = /^pass/i.test(String(r.result || "")); return res === "all" || (res === "fail" ? !p : res === "pass" ? p : true); };
+      var rows, title, n;
+      if (/capa/.test(what)) {
+        var C = (D.capa || []).filter(function (x) { return (!cu || String(x.customer || "").toLowerCase().indexOf(cu) >= 0) && (res === "all" || (res === "open" ? x.status !== "Closed" : res === "closed" ? x.status === "Closed" : true)); });
+        rows = [["No", "Date", "Customer", "YTM", "Issue", "Method", "Owner", "Due", "Status"]].concat(C.map(function (x) { return [x.no || "", x.date || "", x.customer || "", x.ytm || "", x.issue || "", x.method || "", x.owner || "", x.due || "", x.status || ""]; }));
+        title = "CAPA"; n = C.length;
+      } else if (/int|floor/.test(what)) {
+        var I = (D.int || []).filter(function (r) { return inRange(r.date) && okRes(r) && (!fl || String(r.floor || r.unit || "").toLowerCase().indexOf(fl) >= 0) && (!cu || String(r.customer || r.product || "").toLowerCase().indexOf(cu) >= 0); }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+        rows = [["Date", "Floor", "Product", "YTM", "Qty", "Checked", "Defects", "Result", "Remarks"]].concat(I.map(function (r) { return [r.date || "", r.floor || r.unit || "", r.product || r.article || "", r.ytm || "", r.qty || "", r.sample || r.checked || "", r.defects || "", r.result || "", r.remarks || ""]; }));
+        title = "Internal inspections"; n = I.length;
+      } else {
+        var E = (D.ext || []).filter(function (r) { return inRange(r.date) && okRes(r) && (!cu || String(r.customer || "").toLowerCase().indexOf(cu) >= 0); }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+        rows = [["Date", "Customer", "YTM", "PO", "Article", "Unit", "Qty", "Sample", "Critical", "Major", "Minor", "OQL %", "Result", "Defects"]].concat(E.map(function (r) { return [r.date || "", r.customer || "", r.ytm || "", r.po || "", r.article || "", r.unit || r.bldg || "", +r.qty || "", +r.sample || "", +r.critical || 0, +r.major || 0, +r.minor || 0, r.sample ? Math.round(1000 * (+r.major || 0) / (+r.sample)) / 10 : "", r.result || "", r.defects || ""]; }));
+        title = "External inspections"; n = E.length;
+      }
+      if (!n) throw new Error("is filter mein koi record nahi");
+      var nm = [title, o.customer, res !== "all" ? res : "", from ? from + (o.to ? " to " + o.to : "") : ""].filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-");
+      return window.yqAoaDl(nm, rows, nm).then(function () { return nm + " (" + n + " rows) Excel download"; });
     });
   }
 
@@ -353,10 +390,23 @@
   }
 
   // ---------------------------------------------------------------- voice in (STT)
+  function micUi(on) { LISTENING = on; renderOrb(); renderVoice(); var b = document.querySelector("#jvInputRow .mic"); if (b) b.classList.toggle("on", on); }
+  var NATIVE_BAD = false; function nativeMic() { return !!(window.YQNATIVE && window.YQNATIVE.listen) && !NATIVE_BAD; }
   function toggleMic() {
-    if (LISTENING) { if (RECOG) RECOG.stop(); return; }
+    wakeStop();
+    if (LISTENING) { if (nativeMic()) { try { YQNATIVE.stopListen(); } catch (e) { } } if (RECOG) RECOG.stop(); return; }
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { HISTORY.push({ role: "sys", text: "Voice input isn't supported in this browser." }); render(); return; }
+    if (nativeMic()) {
+      stopSpeak(); micUi(true);
+      YQNATIVE.listen({ lang: SETTINGS.micLang || "ur-PK" }).then(function (r) {
+        micUi(false); var t = r && r.text ? String(r.text).trim() : "";
+        if (t) { VOICE_MODE = true; sendText(true, t); }
+      }).catch(function (e) {
+        micUi(false); if (/not implemented|unimplemented/i.test(String(e && e.message || e))) { NATIVE_BAD = true; if (!SR) { HISTORY.push({ role: "sys", text: "Mic ke liye YQI app update karein (Settings → app update)." }); render(); } else toggleMic(); }
+      });
+      return;
+    }
+    if (!SR) { HISTORY.push({ role: "sys", text: "Is browser mein mic nahi chalta — Chrome use karein ya YQI app update karein." }); render(); return; }
     RECOG = new SR();
     RECOG.lang = SETTINGS.micLang || "ur-PK"; stopSpeak();
     RECOG.interimResults = false;
@@ -397,7 +447,7 @@
   function speak(text) {
     text = cleanSpeech(text); if (!text) return;
     stopSpeak(); SPEAKING = true; renderOrb(); renderVoice();
-    var done = function () { SPEAKING = false; renderOrb(); renderVoice(); var live = function () { return (VOICE_MODE && OPEN) || VOPEN; }; if (live() && !LISTENING) setTimeout(function () { if (live() && !LISTENING && !BUSY && !PENDING_DO_WAIT()) toggleMic(); }, 350); };
+    var done = function () { SPEAKING = false; renderOrb(); renderVoice(); if (!VOPEN && !OPEN) setTimeout(wakeStart, 800); var live = function () { return (VOICE_MODE && OPEN) || VOPEN; }; if (live() && !LISTENING) setTimeout(function () { if (live() && !LISTENING && !BUSY && !PENDING_DO_WAIT()) toggleMic(); }, 350); };
     var browser = function () {
       window.__jvVoice = "browser"; if (!window.speechSynthesis) return done();
       var u = new SpeechSynthesisUtterance(text);
@@ -432,7 +482,17 @@
       });
     } catch (e) { /* collection may not exist yet, or rules not deployed */ }
   }
+  function jobsGet() { try { return JSON.parse(localStorage.getItem("yqi_jvjobs") || "[]"); } catch (e) { return []; } }
+  function jobAdd(text) { var L = jobsGet(); L.unshift({ at: Date.now(), text: text, seen: false }); try { localStorage.setItem("yqi_jvjobs", JSON.stringify(L.slice(0, 40))); } catch (e) { } renderOrb(); }
+  function jobsHtml() { var L = jobsGet(); if (!L.length) return ""; return '<div class="jvMsg sys" style="text-align:left">Jarvis ne ye kaam kiye</div>' + L.slice(0, 15).map(function (j) { return '<div class="jvCard jvAlert"><b>✓ ' + esc(new Date(j.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + "</b>" + esc(j.text) + "</div>"; }).join(""); }
   function renderAlerts(body) {
+    var J = jobsGet(); if (J.some(function (j) { return !j.seen; })) { J.forEach(function (j) { j.seen = true; }); try { localStorage.setItem("yqi_jvjobs", JSON.stringify(J)); } catch (e) { } renderOrb(); }
+    if (!ALERTS.length) { body.innerHTML = jobsHtml() + '<div class="jvMsg sys">Koi alert nahi — Jarvis roz OQL, overdue CAPA aur internal data ki kami check karta hai.</div>'; return; }
+    body.innerHTML = jobsHtml() + ALERTS.map(function (a) {
+      return '<div class="jvCard jvAlert ' + esc(a.severity || "info") + '"><b>' + esc(a.title || "") + "</b>" + esc(a.detail || "") + "</div>";
+    }).join("");
+  }
+  function renderAlertsOld(body) {
     if (!ALERTS.length) { body.innerHTML = '<div class="jvMsg sys">No alerts right now - Jarvis scans daily for OQL breaches, missing YTM numbers, overdue CAPA and gaps in internal inspection data.</div>'; return; }
     body.innerHTML = ALERTS.map(function (a) {
       return '<div class="jvCard jvAlert ' + esc(a.severity || "info") + '"><b>' + esc(a.title || "") + "</b>" + esc(a.detail || "") + "</div>";
@@ -497,6 +557,7 @@
       '<input id="jvPitch" type="range" min="-10" max="10" step="1" value="' + (SETTINGS.pitch || 0) + '">' +
       '<div class="lbl">Speak answers out loud</div>' +
       '<label style="display:flex;align-items:center;gap:8px"><input id="jvAuto" type="checkbox"' + (SETTINGS.autoSpeak ? " checked" : "") + "> Auto-speak Jarvis replies</label>" +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWake" type="checkbox"' + (wakeAllowed() ? " checked" : "") + '> "Jarvis" bolne se jaage (app khuli ho, computer/Chrome)</label>' +
       '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvNat" type="checkbox"' + (SETTINGS.natural !== false ? " checked" : "") + "> Natural voice (online, Urdu)</label>" +
       '<div class="lbl">Jarvis ki awaaz</div><select id="jvGv">' + [["Charon", "Charon — mard, saaf"], ["Orus", "Orus — mard, gehri"], ["Puck", "Puck — mard, josh wali"], ["Fenrir", "Fenrir — mard, tez"], ["Kore", "Kore — aurat, saaf"], ["Aoede", "Aoede — aurat, naram"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.gvoice || "Charon") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
       '<div class="lbl">Mic ki zabaan</div><select id="jvMl">' + [["ur-PK", "Urdu"], ["en-US", "English"], ["hi-IN", "Hindi"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.micLang || "ur-PK") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
@@ -506,6 +567,7 @@
     body.querySelector("#jvRate").oninput = function (e) { SETTINGS.speakingRate = +e.target.value; saveSettings(); };
     body.querySelector("#jvPitch").oninput = function (e) { SETTINGS.pitch = +e.target.value; saveSettings(); };
     body.querySelector("#jvAuto").onchange = function (e) { SETTINGS.autoSpeak = !!e.target.checked; saveSettings(); };
+    body.querySelector("#jvWake").onchange = function (e) { SETTINGS.wake = !!e.target.checked; saveSettings(); if (SETTINGS.wake) setTimeout(wakeStart, 300); else wakeStop(); };
     body.querySelector("#jvNat").onchange = function (e) { SETTINGS.natural = !!e.target.checked; saveSettings(); };
     body.querySelector("#jvGv").onchange = function (e) { SETTINGS.gvoice = e.target.value; saveSettings(); speak("Assalam-o-Alaikum, main Jarvis hoon. Ye meri nayi awaaz hai."); };
     body.querySelector("#jvMl").onchange = function (e) { SETTINGS.micLang = e.target.value; saveSettings(); };
@@ -544,6 +606,33 @@
     });
   }
 
+  // ---------------------------------------------------------------- "Hey Jarvis" wake word (browser only, while YQI is open)
+  var WAKE = null, WAKE_WANT = false;
+  var WAKE_RE = /(jarvis|jarwis|jervis|jarvi|jaarvis|جاروس|جارویس|جاروِس|جاروز|جاروِز|جارس|جاروی)/i;
+  function wakeAllowed() { return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && !window.YQNATIVE && (window.SpeechRecognition || window.webkitSpeechRecognition); }
+  function wakeStop() { WAKE_WANT = false; try { if (WAKE) WAKE.abort(); } catch (e) { } WAKE = null; }
+  function wakeStart() {
+    if (!wakeAllowed() || VOPEN || OPEN || LISTENING || SPEAKING || document.hidden || WAKE) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    try {
+      var w = new SR(); WAKE = w; WAKE_WANT = true;
+      w.lang = SETTINGS.micLang || "ur-PK"; w.continuous = true; w.interimResults = true;
+      w.onresult = function (e) {
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var t = e.results[i][0].transcript || "", m = WAKE_RE.exec(t);
+          if (!m) continue;
+          if (!e.results[i].isFinal) continue;
+          var rest = t.slice(m.index + m[0].length).replace(/^[\s,،.!?]+/, "").trim();
+          wakeStop(); openVoice({ wake: true, said: rest.split(/\s+/).length >= 2 ? rest : "" }); return;
+        }
+      };
+      w.onerror = function (e) { if (e && (e.error === "not-allowed" || e.error === "service-not-allowed")) { SETTINGS.wake = false; WAKE_WANT = false; } };
+      w.onend = function () { WAKE = null; if (WAKE_WANT || wakeAllowed()) setTimeout(wakeStart, 600); };
+      w.start();
+    } catch (e) { WAKE = null; }
+  }
+  document.addEventListener("visibilitychange", function () { if (document.hidden) wakeStop(); else setTimeout(wakeStart, 800); });
+
   // ---------------------------------------------------------------- full-screen voice mode
   var VOPEN = false, ANALYSER = null, VRAF = 0;
   function PENDING_DO_WAIT() { return false; }
@@ -559,8 +648,9 @@
     "#jvVoice .vbar button.mic.on{background:#c0392b;border-color:#e57364}" +
     "#jvVoice .vdo{margin-top:16px;display:flex;gap:10px}#jvVoice .vdo button{border:none;border-radius:22px;padding:10px 22px;font:700 14px Manrope;cursor:pointer}#jvVoice .vdo .ok{background:#4fb06c;color:#fff}#jvVoice .vdo .no{background:rgba(255,255,255,.12);color:#fff}" +
     "#jvVoice .vtop{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;color:#8fb59a;font:700 13px Manrope;letter-spacing:.12em}";
-  function openVoice() {
-    if (VOPEN) return; VOPEN = true; loadSettings();
+  function openVoice(opt) {
+    opt = opt || {};
+    if (VOPEN) return; VOPEN = true; loadSettings(); wakeStop();
     if (!$("jvVCss")) { var st = document.createElement("style"); st.id = "jvVCss"; st.textContent = VCSS; document.head.appendChild(st); }
     var v = document.createElement("div"); v.id = "jvVoice";
     v.innerHTML = '<div class="vtop"><span>✦ JARVIS</span><span></span></div><canvas width="760" height="760"></canvas><div class="vst"></div><div class="vme"></div><div class="vai"></div><div class="vdo"></div>' +
@@ -571,12 +661,15 @@
     v.querySelector("[data-vmic]").onclick = function () { if (SPEAKING) { stopSpeak(); } VOICE_MODE = true; toggleMic(); };
     VOICE_MODE = true;
     drawOrb(); renderVoice();
-    if (!GREETED) greet(); else if (!LISTENING && !SPEAKING && !BUSY) toggleMic();
+    if (opt.said) { GREETED = true; sendText(true, opt.said); }
+    else if (opt.wake) { GREETED = true; var fn = firstName(), t = "Ji" + (fn ? " " + fn + " bhai" : "") + "?"; HISTORY.push({ role: "model", text: t }); render(); speak(t); }
+    else if (!GREETED) greet(); else if (!LISTENING && !SPEAKING && !BUSY) toggleMic();
   }
   function closeVoice(keepTalk) {
     if (!VOPEN) return; VOPEN = false; cancelAnimationFrame(VRAF);
     if (!keepTalk) { VOICE_MODE = false; stopSpeak(); try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } }
     var v = $("jvVoice"); if (v) v.remove();
+    setTimeout(wakeStart, 1500);
   }
   function renderVoice() {
     var v = $("jvVoice"); if (!v) return;
@@ -625,7 +718,7 @@
   (function wait() {
     if (ready()) {
       if (!staffOK()) return; // guests / customers don't get Jarvis
-      injectCss(); buildOrb(); watchAlerts(); refreshPending();
+      injectCss(); buildOrb(); watchAlerts(); refreshPending(); loadSettings(); setTimeout(wakeStart, 4000);
       return;
     }
     if (tries++ > 600) return; // ~60s, then give up quietly
