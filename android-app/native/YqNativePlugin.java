@@ -324,7 +324,7 @@ public class YqNativePlugin extends Plugin {
     private boolean wakeOn = false, wakePaused = false;
     private String wakeLang = "ur-PK";
     private int savedMusic = -1, savedNotif = -1, savedSys = -1;
-    private static final java.util.regex.Pattern WAKE = java.util.regex.Pattern.compile("(jarvis|jarwis|jervis|jaarvis|\u062c\u0627\u0631\u0648\u0633|\u062c\u0627\u0631\u0648\u06cc\u0633|\u062c\u0627\u0631\u0648\u0632|\u062c\u0627\u0631\u0633|\u091c\u093e\u0930\u094d\u0935\u093f\u0938)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private java.util.regex.Pattern wakePat = java.util.regex.Pattern.compile("(jarvis|jarwis|jervis|jaarvis|\u062c\u0627\u0631\u0648\u0633|\u062c\u0627\u0631\u0648\u06cc\u0633|\u062c\u0627\u0631\u0648\u0632|\u062c\u0627\u0631\u0633|\u091c\u093e\u0930\u094d\u0935\u093f\u0938)", java.util.regex.Pattern.CASE_INSENSITIVE);
     private void hush(boolean on) {
         try {
             AudioManager a = am();
@@ -340,6 +340,8 @@ public class YqNativePlugin extends Plugin {
     @PluginMethod
     public void wakeStart(PluginCall call) {
         wakeLang = call.getString("lang", "ur-PK");
+        String w = call.getString("words", "");
+        if (w != null && !w.isEmpty()) { try { wakePat = java.util.regex.Pattern.compile("(" + w + ")", java.util.regex.Pattern.CASE_INSENSITIVE); } catch (Exception e) { } }
         if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissionForAlias("mic", call, "wakeCb"); return; }
         wakeOn = true; wakeLoop(); call.resolve();
     }
@@ -365,7 +367,7 @@ public class YqNativePlugin extends Plugin {
                         private boolean check(Bundle b, boolean fin) {
                             ArrayList<String> r = b == null ? null : b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                             if (r == null || r.isEmpty()) return false;
-                            String t = r.get(0); java.util.regex.Matcher m = WAKE.matcher(t);
+                            String t = r.get(0); java.util.regex.Matcher m = wakePat.matcher(t);
                             if (!m.find()) return false;
                             if (!fin) return true; // wait for the full sentence
                             String rest = t.substring(m.end()).replaceAll("^[\\s,.!?\u060c]+", "").trim();
