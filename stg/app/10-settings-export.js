@@ -296,3 +296,6 @@ async function custWipe(kind){ var X = HCUST; if(!X) return; if(!(OWNER || ISED)
     window.__yqBusy = 0; HMSG = '<span class="hok">✓ Removed ' + all.toLocaleString() + ' ' + nm + ' records of ' + esc(X) + '. Backup saved. Upload the correct file now.</span>'; HDATA = null; loadHomeTry(0); renderHome(); try{ if(window.yqDataPing) yqDataPing(kind === "ext" ? "is_ext" : "is_int", X + " " + nm + " data removed", ""); }catch(e){} }
   catch(e){ window.__yqBusy = 0; HMSG = ""; renderHome(); yqAsk(errTxt(e) + "\n" + done + " of " + all + " were removed. The backup file has everything.", {title: "Stopped", alert: 1}); } }
 
+
+// Jarvis reads the data already loaded in this browser (no extra Firebase reads)
+window.YQJDATA = function(){ var g = function(c){ try{ return isRows(c) || []; }catch(e){ return []; } }; return {ext: g("is_ext"), int: g("is_int"), wst: window.YQWST || null, capa: CAPA || []}; };

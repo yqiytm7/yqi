@@ -177,7 +177,7 @@
     var geminiHistory = HISTORY.filter(function (m) { return m.role === "user" || m.role === "model"; }).slice(-10).map(function (m) {
       return { role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] };
     });
-    call("/assistantChat", { text: text, history: geminiHistory.slice(0, -1), scope: { sessionId: SID } }).then(function (d) {
+    buildCtx(text).catch(function () { return ""; }).then(function (ctx) { return call("/assistantChat", { text: text, history: geminiHistory.slice(0, -1), scope: { sessionId: SID }, ctx: ctx }); }).then(function (d) {
       HISTORY.push({ role: "model", text: d.text || "(no answer)" });
       BUSY = false; render();
       if (d.pendingActions && d.pendingActions.length) {
@@ -189,6 +189,46 @@
       BUSY = false;
       HISTORY.push({ role: "sys", text: "Jarvis couldn't answer: " + (e && e.message || e) });
       render();
+    });
+  }
+
+  // ------------------------------------------------- live data context (from this browser)
+  // The app already has inspections / CAPA in memory, so Jarvis answers from that and the
+  // server does not read Firebase for each question (saves the free daily quota).
+  function pct(n, d) { return d ? Math.round(1000 * n / d) / 10 : 0; }
+  function isFail(r) { return !/^pass/i.test(String(r.result || "")); }
+  function buildCtx(question) {
+    if (!window.YQJDATA) return Promise.resolve("");
+    return Promise.resolve(window.YQJDATA()).then(function (D) {
+      var q = String(question || "").toLowerCase(), out = [], today = new Date().toISOString().slice(0, 10);
+      var ago = function (d) { var t = new Date(); t.setDate(t.getDate() - d); return t.toISOString().slice(0, 10); };
+      var E = (D.ext || []).filter(function (r) { return r && r.date; }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+      var I = (D.int || []).filter(function (r) { return r && r.date; }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+      out.push("Today: " + today + ". OQL = major defects / sample size (limit 2.5%).");
+      if (E.length) {
+        out.push("\n## External inspections: " + E.length + " records, " + E[E.length - 1].date + " to " + E[0].date);
+        var g = {}; E.forEach(function (r) { var k = String(r.date).slice(0, 7) + " | " + (r.customer || "?"), x = g[k] = g[k] || { n: 0, f: 0, s: 0, m: 0 }; x.n++; if (isFail(r)) x.f++; x.s += +r.sample || 0; x.m += +r.major || 0; });
+        out.push("Month | Customer | inspections | failed | pass% | OQL%");
+        Object.keys(g).sort().reverse().slice(0, 90).forEach(function (k) { var x = g[k]; out.push(k + " | " + x.n + " | " + x.f + " | " + pct(x.n - x.f, x.n) + "% | " + pct(x.m, x.s) + "%"); });
+        var dc = {}; E.filter(function (r) { return r.date >= ago(30); }).forEach(function (r) { (r.dlist || []).forEach(function (d) { var k = (r.customer || "?") + " · " + d.n; dc[k] = (dc[k] || 0) + (+d.q || 0); }); });
+        var top = Object.keys(dc).sort(function (a, b) { return dc[b] - dc[a]; }).slice(0, 25);
+        if (top.length) out.push("\nTop defects last 30 days (customer · defect = pcs): " + top.map(function (k) { return k + " = " + dc[k]; }).join("; "));
+        var row = function (r) { return [r.date, r.customer, "YTM " + (r.ytm || ""), "PO " + (r.po || ""), r.article || "", r.unit || r.bldg || "", r.result || "", "OQL " + pct(+r.major || 0, +r.sample || 0) + "%", String(r.defects || "").slice(0, 90)].join(" | "); };
+        out.push("\nFailed external inspections (last 120 days):");
+        E.filter(function (r) { return isFail(r) && r.date >= ago(120); }).slice(0, 80).forEach(function (r) { out.push(row(r)); });
+        var words = q.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
+        var hit = E.filter(function (r) { var t = (String(r.customer) + " " + r.ytm + " " + r.po + " " + r.article).toLowerCase(); return words.some(function (w) { return /\d/.test(w) ? t.indexOf(w) >= 0 : (" " + t + " ").indexOf(" " + w) >= 0 && !/^(the|and|ytm|how|many|kis|kya|aur|hui|hai)$/.test(w); }); });
+        if (hit.length) { out.push("\nRecords matching the question words:"); hit.slice(0, 60).forEach(function (r) { out.push(row(r)); }); }
+        out.push("\nLatest 30 external inspections:"); E.slice(0, 30).forEach(function (r) { out.push(row(r)); });
+      }
+      if (I.length) {
+        var fl = {}; I.filter(function (r) { return r.date >= ago(30); }).forEach(function (r) { var k = r.floor || r.unit || "?", x = fl[k] = fl[k] || { n: 0, f: 0 }; x.n++; if (isFail(r)) x.f++; });
+        out.push("\n## Internal inspections: " + I.length + " records. Last 30 days by floor (inspections | failed): " + Object.keys(fl).map(function (k) { return k + " " + fl[k].n + "|" + fl[k].f; }).join("; "));
+        out.push("Failed internal (last 30 days):"); I.filter(function (r) { return isFail(r) && r.date >= ago(30); }).slice(0, 40).forEach(function (r) { out.push([r.date, r.floor || "", r.product || "", "YTM " + (r.ytm || ""), r.result || "", String(r.defects || "").slice(0, 80)].join(" | ")); });
+      }
+      var C = (D.capa || []).filter(function (x) { return x && x.status !== "Closed"; });
+      if (C.length) { out.push("\n## Open CAPA (" + C.length + "):"); C.slice(0, 30).forEach(function (x) { out.push([x.no || "", x.customer || "", x.status || "", "due " + (x.due || ""), String(x.issue || "").slice(0, 100)].join(" | ")); }); }
+      var s = out.join("\n"); return s.length > 16000 ? s.slice(0, 16000) : s;
     });
   }
 

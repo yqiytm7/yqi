@@ -673,14 +673,14 @@ async function handleChat(request, env) {
   try { staffOk = await roles.isStaffUser(fsToken, projectId, email); } catch (e) { staffOk = roles.isCoEmail(email) || email === roles.OWNER_EMAIL; }
   if (!staffOk) return json({ error: "Jarvis is available to Yunus Textile staff accounts only." }, 403);
 
-  const { text, history, scope } = await request.json();
+  const { text, history, scope, ctx } = await request.json();
   if (!text || !String(text).trim()) return json({ error: "text is required." }, 400);
 
   let dataDown = false;
   let canWrite = false;
   try { canWrite = await roles.canAll(fsToken, projectId, email); } catch (e) { dataDown = true; }
   let context = "";
-  try { context = await rag.buildContext(fsToken, projectId, text, scope || {}); } catch (e) { dataDown = true; context = "(YQI database is temporarily unavailable - daily free quota reached. Answer from general knowledge, and tell the user live data will be back after the quota resets.)"; }
+  try { context = ctx ? "Live data from the YQI app (already loaded on the user's screen - use it, it is complete and current):\n" + String(ctx).slice(0, 16000) : await rag.buildContext(fsToken, projectId, text, scope || {}); } catch (e) { dataDown = true; context = "(YQI database is temporarily unavailable - daily free quota reached. Answer from general knowledge, and tell the user live data will be back after the quota resets.)"; }
   if (dataDown) canWrite = false;
   const contents = [
     ...(Array.isArray(history) ? history.slice(-12) : []),
