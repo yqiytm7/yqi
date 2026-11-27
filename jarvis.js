@@ -11,6 +11,9 @@
   var WORKER_URL = window.JARVIS_WORKER_URL || "https://yqi-jarvis.yqi-ytm7.workers.dev";
 
   var SETTINGS = { voiceURI: "", languageCode: "ur-PK", micLang: "ur-PK", speakingRate: 1, pitch: 0, autoSpeak: true, natural: true, gvoice: "Charon" };
+  var AN = "Jarvis"; // assistant name (also the wake word)
+  var WAKE_NAMES = { jarvis: "jarvis|jarwis|jervis|jaarvis|جاروس|جارویس|جاروِس|جاروز|جارس", ultron: "ultron|altron|alton|ultran|ultra on|الٹرون|آلٹرون|اولٹرون|الٹران|الٹرن" };
+  function wakeRe() { var k = AN.toLowerCase(); return new RegExp("(" + (WAKE_NAMES[k] || k) + ")", "i"); }
   var GREETED = false, VOICE_MODE = false, AUDIO = null, PENDING_DO = null, PLAN_TEXT = "", DONE = [];
   var HISTORY = [], OPEN = false, BUSY = false, SETTINGS_LOADED = false;
   var RECOG = null, LISTENING = false, SPEAKING = false;
@@ -110,7 +113,7 @@
   function buildOrb() {
     if ($("jvOrb")) return;
     var b = document.createElement("button");
-    b.id = "jvOrb"; b.title = "Jarvis - YQI assistant"; b.innerHTML = "✦";
+    b.id = "jvOrb"; b.title = AN + " - YQI assistant"; b.innerHTML = "✦";
     b.onclick = function () { if (VOPEN) closeVoice(); else if (OPEN) closePanel(); else openVoice(); };
     document.body.appendChild(b);
   }
@@ -123,7 +126,7 @@
     var o = document.createElement("div"); o.id = "jvPanel";
     o.innerHTML =
       '<div class="jvBox">' +
-      '<div class="jvHead"><span style="font-size:20px">✦</span><b>Jarvis</b><button data-vo title="Voice mode">🎙</button><button data-x title="Close">✕</button></div>' +
+      '<div class="jvHead"><span style="font-size:20px">✦</span><b>' + AN + '</b><button data-vo title="Voice mode">🎙</button><button data-x title="Close">✕</button></div>' +
       '<div id="jvTabs">' +
       '<button data-t="chat" class="on">Chat</button>' +
       '<button data-t="alerts">Alerts</button>' +
@@ -131,7 +134,7 @@
       '<button data-t="settings">Voice &amp; settings</button>' +
       "</div>" +
       '<div id="jvBody"></div>' +
-      '<div id="jvInputRow"><button class="mic" data-mic title="Speak">🎤</button><input id="jvInput" placeholder="Jarvis se poochein ya kaam bolein…"><button data-send title="Send">➤</button></div>' +
+      '<div id="jvInputRow"><button class="mic" data-mic title="Speak">🎤</button><input id="jvInput" placeholder="' + AN + ' se poochein ya kaam bolein…"><button data-send title="Send">➤</button></div>' +
       "</div>";
     document.body.appendChild(o);
     o.addEventListener("click", function (e) { if (e.target === o) closePanel(); });
@@ -162,7 +165,7 @@
   function renderChat(body) {
     body.innerHTML = HISTORY.map(function (m) {
       if (m.role === "sys") return '<div class="jvMsg sys">' + esc(m.text) + "</div>";
-      if (m.role === "do") return PENDING_DO ? '<div class="jvCard"><b>Ye kaam karun?</b>' + PENDING_DO.steps.map(function (x) { return esc(x.t === "type" ? "✎ " + x.x + ": " + x.v : x.t === "tap" || !x.t ? "▸ " + x.x : x.t === "home" ? "▸ Home" : x.t === "back" ? "▸ Back" : x.t === "excel" ? "⬇ Excel: " + [x.what, x.customer, x.result, x.from && x.from + "→" + (x.to || "")].filter(Boolean).join(" · ") : ""); }).filter(Boolean).join("<br>") + '<div class="jvRow"><button class="ok" data-doyes>Haan, karo</button><button class="no" data-dono>Nahi</button></div></div>' : "";
+      if (m.role === "do") return PENDING_DO ? '<div class="jvCard"><b>Ye kaam karun?</b>' + PENDING_DO.steps.map(function (x) { return esc(x.t === "type" ? "✎ " + x.x + ": " + x.v : x.t === "tap" || !x.t ? "▸ " + x.x : x.t === "home" ? "▸ Home" : x.t === "back" ? "▸ Back" : x.t === "report" ? "📊 Report: " + [x.period, x.customer, x.from && x.from + "→" + (x.to || "")].filter(Boolean).join(" · ") : x.t === "msg" ? "✉ " + x.to + ": " + x.text : x.t === "remember" ? "🧠 Yaad: " + (x.text || "") : x.t === "brief" ? "☀ Briefing" : x.t === "excel" ? "⬇ Excel: " + [x.what, x.customer, x.result, x.from && x.from + "→" + (x.to || "")].filter(Boolean).join(" · ") : ""); }).filter(Boolean).join("<br>") + '<div class="jvRow"><button class="ok" data-doyes>Haan, karo</button><button class="no" data-dono>Nahi</button></div></div>' : "";
       return '<div class="jvMsg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.text).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/^\* /gm, "• ") + "</div>";
     }).join("") + (BUSY ? '<div class="jvMsg ai"><span class="jvDot"></span><span class="jvDot"></span><span class="jvDot"></span></div>' : "");
     body.scrollTop = body.scrollHeight;
@@ -217,7 +220,7 @@
       if (SETTINGS.autoSpeak && t) speak(t);
     }).catch(function (e) {
       BUSY = false;
-      HISTORY.push({ role: "sys", text: "Jarvis jawab nahi de saka: " + (e && e.message || e) });
+      HISTORY.push({ role: "sys", text: AN + " jawab nahi de saka: " + (e && e.message || e) });
       render();
     });
   }
@@ -246,13 +249,15 @@
   function sysPrompt() {
     var now = new Date(), lv = window.YQLV || "", nm = meName(), fn = firstName();
     return [
-      "You are Jarvis — the built-in assistant inside YQI, Yunus Textile Mills' quality app. You are talking to " + (nm || "a staff member") + (lv === "auth" ? " (app owner, full access)" : "") + ". Now: " + now.toLocaleString("en-GB", { timeZone: "Asia/Karachi" }) + " Pakistan time.",
+      "You are " + AN + " — the built-in assistant inside YQI, Yunus Textile Mills' quality app. You are talking to " + (nm || "a staff member") + (lv === "auth" ? " (app owner, full access)" : "") + ". Now: " + now.toLocaleString("en-GB", { timeZone: "Asia/Karachi" }) + " Pakistan time.",
       "VOICE & STYLE: Talk like a sharp, friendly senior colleague in a Pakistani textile office — natural spoken Urdu written in Roman script, the way people really speak (keep English trade words as they are: OQL, AQL, shade, GSM, YTM, PO, inline, final). Warm, confident, human. Never robotic, never 'As an AI', no filler, no emojis. Call the user '" + (fn ? fn + " bhai" : "aap") + "' only now and then, not every message. If the user writes English, reply in English.",
       "LENGTH: Answer exactly what was asked — usually 1-3 short sentences. Use a short list only when giving several items or numbers. No intro, no repeating the question, no 'aur kuch?' endings. Your text is also read aloud, so keep it speakable (no tables, no markdown headings).",
       "DATA: The 'Live data from the YQI app' block is the truth for every number about inspections, CAPA, customers. Never invent or estimate app numbers. If something isn't in the data, say so in one line.",
       "TEXTILE EXPERT: You know the whole chain from fiber to container — cotton/poly/blends, fiber length & micronaire, yarn count (Ne), twist, spinning (ring/open-end), weaving (plain/percale/sateen, thread count, EPI/PPI), knitting, GSM, desizing/scouring/bleaching, dyeing (reactive/vat/disperse/pigment), printing (rotary/digital), shade matching (D65, Delta E, CMC), finishing (sanforizing, peach, anti-pilling), cutting, stitching (SPI, seam & stitch types 301/401/504), quilting & filling (fiber fill, down, GSM of filling), home-textile construction, QC (AQL 1.0/2.5/4.0, ISO 2859-1 sampling, inline/end-line/final, defect classification critical/major/minor, needle control, metal detection), lab testing (dimensional stability/shrinkage ISO 6330, colour fastness ISO 105, pilling ISO 12945, tensile/tear, seam slippage), packing & labelling (care labels, barcodes, carton marks, drop test), shipping (CBM, carton fill, 20ft/40ft/40HC loading, container inspection, Incoterms), and buyer standards (IKEA IWAY, Target, Walmart, JYSK, OEKO-TEX, BSCI, GOTS). Give practical, technical answers with real figures and standards — like an experienced QA manager, not textbook filler.",
       "INTERNET: If the answer needs current outside information you can't know (prices, market rates, news, exchange rates, weather, latest standard changes) reply with ONLY: [[WEB: short English search query]] — nothing else. When web results are given, use them and mention the source name briefly.",
-      "DOING THINGS IN THE APP: You can operate the app for the user. The SCREEN block lists buttons/fields visible right now; APP MAP below describes where things are. When the user asks you to open/show/go/filter/download/start something, reply with ONE short line in Urdu saying exactly what you will do and asking for a go-ahead (e.g. 'Theek hai — CAPA tracker khol ke naya CAPA shuru karta hoon. Karun?'), then on the same message add [[DO: [steps]]] — a JSON array of steps: {\"t\":\"tap\",\"x\":\"exact button text\"}, {\"t\":\"type\",\"x\":\"field placeholder or label\",\"v\":\"text\"}, {\"t\":\"home\"}, {\"t\":\"back\"}, {\"t\":\"wait\",\"ms\":800}, and {\"t\":\"excel\",\"what\":\"ext|int|capa\",\"customer\":\"name or empty\",\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\",\"result\":\"all|fail|pass|open|closed\",\"floor\":\"\"} which builds and downloads a styled Excel file directly from app data (use it for any 'Excel/list/report bana do' request — no taps needed). One command can contain several tasks: put ALL steps in one DO list so they run back-to-back after a single yes; the app then reports what was done in the Alerts tab and notifies the user. Use button texts exactly as in SCREEN/APP MAP; for buttons on the next screen chain taps with a wait. Write the marker literally as [[DO: [...]]] on the same message — never inside a code block, never JSON without the marker. Never say it is already done — the app runs it after the user taps Yes. For pure questions don't add DO.",
+      "DOING THINGS IN THE APP: You can operate the app for the user. The SCREEN block lists buttons/fields visible right now; APP MAP below describes where things are. When the user asks you to open/show/go/filter/download/start something, reply with ONE short line in Urdu saying exactly what you will do and asking for a go-ahead (e.g. 'Theek hai — CAPA tracker khol ke naya CAPA shuru karta hoon. Karun?'), then on the same message add [[DO: [steps]]] — a JSON array of steps: {\"t\":\"tap\",\"x\":\"exact button text\"}, {\"t\":\"type\",\"x\":\"field placeholder or label\",\"v\":\"text\"}, {\"t\":\"home\"}, {\"t\":\"back\"}, {\"t\":\"wait\",\"ms\":800}, and {\"t\":\"excel\",\"what\":\"ext|int|capa\",\"customer\":\"name or empty\",\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\",\"result\":\"all|fail|pass|open|closed\",\"floor\":\"\"} which builds and downloads a styled Excel file directly from app data (use it for any 'Excel/list/report bana do' request — no taps needed). {\"t\":\"report\",\"period\":\"today|yesterday|week|month|last month\",\"customer\":\"\",\"from\":\"\",\"to\":\"\"} builds a full multi-sheet quality report Excel (summary by customer, failed list, top defects, all inspections, internal by floor, open CAPA); {\"t\":\"msg\",\"to\":\"person name or email\",\"text\":\"message\"} sends a YQI chat message to a colleague (write the message text yourself in clear Roman Urdu, from the user); {\"t\":\"remember\",\"text\":\"fact\"} saves something the user asks you to remember; {\"t\":\"brief\"} reads today's briefing. One command can contain several tasks: put ALL steps in one DO list so they run back-to-back after a single yes; the app then reports what was done in the Alerts tab and notifies the user. Use button texts exactly as in SCREEN/APP MAP; for buttons on the next screen chain taps with a wait. Write the marker literally as [[DO: [...]]] on the same message — never inside a code block, never JSON without the marker. Never say it is already done — the app runs it after the user taps Yes. For pure questions don't add DO.",
+      "MORNING BRIEFING / 'kya haal hai' / 'aaj ka status': answer from the data block in 3-4 short spoken sentences (yesterday, this month, OQL over limit, overdue CAPA).",
+      memoryText(),
       "APP MAP:\n" + APP_MAP
     ].join("\n\n");
   }
@@ -295,6 +300,10 @@
       else if (t === "back") { try { if (window.YQBACK && YQBACK.back) YQBACK.back(); else history.back(); } catch (e) { history.back(); } p = sleep(700); }
       else if (t === "wait") p = sleep(Math.min(5000, +s.ms || 800));
       else if (t === "excel") p = makeExcel(s).then(function (r) { DONE.push(r); }, function (e) { fail = "Excel (" + (e && e.message || e) + ")"; });
+      else if (t === "report") p = makeReport(s).then(function (r) { DONE.push(r); }, function (e) { fail = "Report (" + (e && e.message || e) + ")"; });
+      else if (t === "msg") p = sendMsg(s).then(function (r) { DONE.push(r); }, function (e) { fail = "Message (" + (e && e.message || e) + ")"; });
+      else if (t === "remember") { remember(s.text || s.v || ""); DONE.push("yaad rakh liya"); p = Promise.resolve(); }
+      else if (t === "brief") p = briefing().then(function (b) { DONE.push("briefing"); HISTORY.push({ role: "model", text: b }); });
       else if (t === "type") { var f = findEl(s.x, 1); if (!f) { fail = s.x; return Promise.resolve(); } f.focus(); f.value = s.v || ""; f.dispatchEvent(new Event("input", { bubbles: true })); f.dispatchEvent(new Event("change", { bubbles: true })); p = sleep(400); }
       else { var tries = 0, go = function () { var el = findEl(s.x); if (el) { el.scrollIntoView({ block: "center" }); el.click(); return sleep(900); } if (tries++ < 6) return sleep(500).then(go); fail = s.x; return Promise.resolve(); }; p = go(); }
       return p.then(function () { return fail ? null : next(); });
@@ -304,7 +313,7 @@
       var msg = fail ? "“" + fail + "” nahi ho saka — main wahin ruk gaya." : "Ho gaya" + (DONE.length ? " — " + DONE.join("; ") : "") + ".";
       HISTORY.push({ role: fail ? "sys" : "model", text: msg });
       jobAdd((fail ? "✗ " : "") + (what ? what + " → " : "") + msg);
-      try { if (window.YQNATIVE && YQNATIVE.notify) YQNATIVE.notify({ title: "Jarvis", body: msg, tag: "jarvis" }); else if (window.Notification && Notification.permission === "granted" && document.hidden) new Notification("Jarvis", { body: msg }); } catch (e) { }
+      try { if (window.YQNATIVE && YQNATIVE.notify) YQNATIVE.notify({ title: AN, body: msg, tag: "jarvis" }); else if (window.Notification && Notification.permission === "granted" && document.hidden) new Notification(AN, { body: msg }); } catch (e) { }
       if (SETTINGS.autoSpeak) speak(msg);
     });
   }
@@ -334,6 +343,81 @@
       var nm = [title, o.customer, res !== "all" ? res : "", from ? from + (o.to ? " to " + o.to : "") : ""].filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-");
       return window.yqAoaDl(nm, rows, nm).then(function () { return nm + " (" + n + " rows) Excel download"; });
     });
+  }
+
+  // ------------------------------------------------- full report (several sheets in one Excel)
+  function periodRange(o) {
+    var d = new Date(), iso = function (x) { return x.toISOString().slice(0, 10); }, to = o.to || iso(d), from = o.from;
+    if (!from) { var p = String(o.period || "week").toLowerCase(), f = new Date(d);
+      if (/today|aaj/.test(p)) from = iso(d); else if (/yesterday|kal/.test(p)) { f.setDate(f.getDate() - 1); from = to = iso(f); } else if (/month|mahin/.test(p)) from = iso(d).slice(0, 7) + "-01"; else if (/last ?month|pichl/.test(p)) { f.setDate(0); to = iso(f); from = to.slice(0, 7) + "-01"; } else { f.setDate(f.getDate() - 6); from = iso(f); } }
+    return { from: from, to: to };
+  }
+  function makeReport(o) {
+    if (!window.YQJDATA || !window.yqStyledXlsx || !window.yqSaveBlob) return Promise.reject(new Error("app abhi tayyar nahi"));
+    var R = periodRange(o), cu = String(o.customer || "").toLowerCase();
+    return Promise.resolve(window.YQJDATA()).then(function (D) {
+      var inR = function (r) { return r.date >= R.from && r.date <= R.to; }, isF = function (r) { return !/^pass/i.test(String(r.result || "")); };
+      var E = (D.ext || []).filter(function (r) { return inR(r) && (!cu || String(r.customer || "").toLowerCase().indexOf(cu) >= 0); });
+      var I = (D.int || []).filter(inR);
+      var g = {}; E.forEach(function (r) { var k = r.customer || "?", x = g[k] = g[k] || { n: 0, f: 0, s: 0, m: 0, q: 0 }; x.n++; if (isF(r)) x.f++; x.s += +r.sample || 0; x.m += +r.major || 0; x.q += +r.qty || 0; });
+      var sum = Object.keys(g).sort(function (a, b) { return g[b].n - g[a].n; }).map(function (k) { var x = g[k]; return { Customer: k, Inspections: x.n, Failed: x.f, "Pass %": x.n ? Math.round(1000 * (x.n - x.f) / x.n) / 10 : 0, "OQL %": x.s ? Math.round(1000 * x.m / x.s) / 10 : 0, "Qty inspected": x.q }; });
+      var tot = E.length, tf = E.filter(isF).length; sum.push({ Customer: "TOTAL", Inspections: tot, Failed: tf, "Pass %": tot ? Math.round(1000 * (tot - tf) / tot) / 10 : 0, "OQL %": "", "Qty inspected": E.reduce(function (a, r) { return a + (+r.qty || 0); }, 0) });
+      var row = function (r) { return { Date: r.date, Customer: r.customer || "", YTM: r.ytm || "", PO: r.po || "", Article: r.article || "", Unit: r.unit || r.bldg || "", Qty: +r.qty || "", Sample: +r.sample || "", Major: +r.major || 0, "OQL %": r.sample ? Math.round(1000 * (+r.major || 0) / (+r.sample)) / 10 : "", Result: r.result || "", Defects: r.defects || "" }; };
+      var fl = {}; I.forEach(function (r) { var k = r.floor || r.unit || "?", x = fl[k] = fl[k] || { n: 0, f: 0 }; x.n++; if (isF(r)) x.f++; });
+      var dc = {}; E.forEach(function (r) { (r.dlist || []).forEach(function (d) { dc[d.n] = (dc[d.n] || 0) + (+d.q || 0); }); });
+      var sheets = [["Summary", sum], ["Failed", E.filter(isF).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).map(row)], ["Top defects", Object.keys(dc).sort(function (a, b) { return dc[b] - dc[a]; }).slice(0, 30).map(function (k) { return { Defect: k, Pieces: dc[k] }; })], ["All external", E.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).map(row)], ["Internal by floor", Object.keys(fl).map(function (k) { return { Floor: k, Inspections: fl[k].n, Failed: fl[k].f, "Pass %": Math.round(1000 * (fl[k].n - fl[k].f) / fl[k].n) / 10 }; })], ["Open CAPA", (D.capa || []).filter(function (x) { return x.status !== "Closed"; }).map(function (x) { return { No: x.no || "", Customer: x.customer || "", Issue: x.issue || "", Owner: x.owner || "", Due: x.due || "", Status: x.status || "" }; })]].filter(function (x) { return x[1].length; });
+      if (!tot && !I.length) throw new Error("is muddat mein data nahi");
+      var nm = ("Quality report " + (o.customer ? o.customer + " " : "") + R.from + (R.to !== R.from ? " to " + R.to : "")).replace(/[\\/:*?"<>|]/g, "-");
+      return window.yqStyledXlsx(sheets, nm).then(function (blob) { window.yqSaveBlob(nm + ".xlsx", blob); return nm + " — " + tot + " inspections, " + tf + " fail (" + sheets.length + " sheets) download"; });
+    });
+  }
+  // ------------------------------------------------- message a colleague in YQI chat
+  function sendMsg(o) {
+    var C = window.YQCHAT; if (!C || !C.dmSend || !C.people) return Promise.reject(new Error("chat abhi load nahi"));
+    var P = C.people() || {}, q = String(o.to || "").toLowerCase().trim(), best = null;
+    Object.keys(P).forEach(function (k) { var p = P[k] || {}, n = String(p.name || "").toLowerCase(), e = String(p.email || "").toLowerCase(); var sc = e === q ? 3 : n === q ? 3 : n.split(/\s+/)[0] === q ? 2 : (n.indexOf(q) >= 0 || e.indexOf(q) >= 0) ? 1 : 0; if (sc && (!best || sc > best.sc)) best = { sc: sc, k: k, n: p.name || p.email }; });
+    if (!best) return Promise.reject(new Error("“" + o.to + "” chat mein nahi mila"));
+    return Promise.resolve(C.dmSend(best.k, String(o.text || ""))).then(function (ok) { if (ok === false) throw new Error("bheja nahi ja saka"); return best.n + " ko message bhej diya"; });
+  }
+  // ------------------------------------------------- memory (things the user asked to remember)
+  function remember(t) { t = String(t || "").trim(); if (!t) return; SETTINGS.notes = (SETTINGS.notes || []).filter(function (x) { return x !== t; }).concat([t]).slice(-40); saveSettings(); }
+  function memoryText() { var n = SETTINGS.notes || [], J = jobsGet().slice(0, 8); return (n.length ? "Things the user asked you to remember:\n- " + n.join("\n- ") : "") + (J.length ? "\n\nRecent things you did for the user (newest first):\n- " + J.map(function (j) { return new Date(j.at).toISOString().slice(0, 16).replace("T", " ") + " " + j.text; }).join("\n- ") : ""); }
+  // ------------------------------------------------- morning briefing + watching the data
+  function briefing() {
+    return Promise.resolve(window.YQJDATA ? window.YQJDATA() : null).then(function (D) {
+      D = D || {}; var d = new Date(), iso = function (x) { return x.toISOString().slice(0, 10); }, y = new Date(d); y.setDate(y.getDate() - 1); var Y = iso(y), T = iso(d), m0 = T.slice(0, 7);
+      var isF = function (r) { return !/^pass/i.test(String(r.result || "")); }, E = D.ext || [];
+      var ey = E.filter(function (r) { return r.date === Y; }), fy = ey.filter(isF), em = E.filter(function (r) { return String(r.date || "").slice(0, 7) === m0; }), fm = em.filter(isF);
+      var g = {}; em.forEach(function (r) { var k = r.customer || "?", x = g[k] = g[k] || { s: 0, m: 0 }; x.s += +r.sample || 0; x.m += +r.major || 0; });
+      var over = Object.keys(g).filter(function (k) { return g[k].s >= 200 && 100 * g[k].m / g[k].s > 2.5; });
+      var cap = (D.capa || []).filter(function (x) { return x.status !== "Closed" && x.due && x.due < T; });
+      var out = ["Kal " + (ey.length ? ey.length + " external inspections hui, " + (fy.length ? fy.length + " fail (" + fy.map(function (r) { return r.customer; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(", ") + ")." : "sab pass.") : "koi external inspection nahi hui.")];
+      out.push("Is mahine ab tak " + em.length + " inspections, " + fm.length + " fail.");
+      if (over.length) out.push("OQL limit se upar: " + over.join(", ") + ".");
+      if (cap.length) out.push(cap.length + " CAPA overdue hai.");
+      return out.join(" ");
+    });
+  }
+  function watchKey(k) { var S; try { S = JSON.parse(localStorage.getItem("yqi_jvseen") || "{}"); } catch (e) { S = {}; } if (S[k]) return false; S[k] = Date.now(); var ks = Object.keys(S); if (ks.length > 600) ks.sort(function (a, b) { return S[a] - S[b]; }).slice(0, 200).forEach(function (x) { delete S[x]; }); try { localStorage.setItem("yqi_jvseen", JSON.stringify(S)); } catch (e) { } return true; }
+  function tell(text, speakIt) {
+    jobAdd("👁 " + text);
+    try { if (window.YQNATIVE && YQNATIVE.notify) YQNATIVE.notify({ title: AN, body: text, tag: "jv-watch" }); else if (window.Notification && Notification.permission === "granted") new Notification(AN, { body: text }); } catch (e) { }
+    if (speakIt && SETTINGS.speakAlerts !== false && !document.hidden && !LISTENING && !SPEAKING && !BUSY) speak(text);
+  }
+  var WATCH_FIRST = true;
+  function watchData() {
+    if (!window.YQJDATA || SETTINGS.watch === false) return;
+    Promise.resolve(window.YQJDATA()).then(function (D) {
+      if (!D) return; var d = new Date(), T = d.toISOString().slice(0, 10), ago = new Date(d); ago.setDate(ago.getDate() - 2); var A = ago.toISOString().slice(0, 10);
+      var first = WATCH_FIRST && !localStorage.getItem("yqi_jvseen"); WATCH_FIRST = false;
+      var news = [];
+      (D.ext || []).filter(function (r) { return r.date >= A && !/^pass/i.test(String(r.result || "")); }).forEach(function (r) { var k = "f|" + (r._id || r.date + r.customer + r.ytm + r.po); if (watchKey(k) && !first) news.push(r.customer + (r.ytm ? " YTM " + r.ytm : "") + " ki inspection FAIL hui" + (r.sample ? " (OQL " + Math.round(1000 * (+r.major || 0) / (+r.sample)) / 10 + "%)" : "")); });
+      (D.capa || []).filter(function (x) { return x.status !== "Closed" && x.due && x.due < T; }).forEach(function (x) { if (watchKey("c|" + (x._id || x.no) + "|" + T) && !first) news.push("CAPA " + (x.no || "") + " (" + (x.customer || "") + ") overdue hai"); });
+      if (news.length) tell(news.slice(0, 3).join(". ") + (news.length > 3 ? " — aur " + (news.length - 3) + " aur." : "."), true);
+      // briefing once a day (first time the app is open after 7am)
+      var hr = +d.toLocaleString("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", hour12: false });
+      if (hr >= 7 && SETTINGS.brief !== false && watchKey("brief|" + T)) briefing().then(function (b) { tell("Aaj ki briefing: " + b, false); });
+    }).catch(function () { });
   }
 
   // ------------------------------------------------- welcome
@@ -435,7 +519,7 @@
     return voices[0];
   }
   function cleanSpeech(t) { return String(t || "").replace(/\*\*|__|`|#+ /g, "").replace(/\[\[[^\]]*\]\]/g, "").replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, "").replace(/\s+/g, " ").trim().slice(0, 900); }
-  function stopSpeak() { try { if (AUDIO) { AUDIO.pause(); AUDIO = null; } if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { } SPEAKING = false; renderOrb(); }
+  function stopSpeak() { try { if (AUDIO && AUDIO.pause) AUDIO.pause(); } catch (e) { } AUDIO = null; try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { } SPEAKING = false; renderOrb(); }
   function wavFromPcm(b64, rate) {
     var bin = atob(b64), n = bin.length, buf = new ArrayBuffer(44 + n), v = new DataView(buf), u8 = new Uint8Array(buf, 44), i;
     var w = function (o, s) { for (var k = 0; k < s.length; k++) v.setUint8(o + k, s.charCodeAt(k)); };
@@ -459,18 +543,24 @@
       speechSynthesis.speak(u);
     };
     if (SETTINGS.natural === false || TTS_FAIL > 2) return browser();
-    var model = TTS_MODELS[0], my = {};
-    AUDIO = my;
-    call("/tts", { model: model, voice: SETTINGS.gvoice || "Charon", text: "Read this aloud naturally, like a warm, friendly Pakistani colleague speaking Urdu in a calm conversational tone (not robotic, not too fast). English textile words stay English. Text: " + text })
-      .catch(function () { TTS_MODELS.push(TTS_MODELS.shift()); return call("/tts", { model: TTS_MODELS[0], voice: SETTINGS.gvoice || "Charon", text: "Say naturally in friendly Pakistani Urdu: " + text }); })
-      .then(function (d) {
-        if (AUDIO !== my) return; // interrupted
+    var my = {}; AUDIO = my;
+    var cut = text.search(/[.!?۔]\s/), parts = cut > 25 && cut < text.length - 20 ? [text.slice(0, cut + 1), text.slice(cut + 2)] : [text];
+    var req = function (t) { var body = function (m) { return { model: m, voice: SETTINGS.gvoice || "Charon", text: "Read this aloud naturally, like a warm, friendly Pakistani colleague speaking Urdu in a calm conversational tone (not robotic, not too fast). English textile words stay English. Text: " + t }; }; return call("/tts", body(TTS_MODELS[0])).catch(function () { TTS_MODELS.push(TTS_MODELS.shift()); return call("/tts", body(TTS_MODELS[0])); }); };
+    var reqs = parts.map(req), i = 0;
+    var playNext = function () {
+      if (AUDIO !== my && !(AUDIO && AUDIO.__jv === my)) return;
+      if (i >= reqs.length) { AUDIO = null; ANALYSER = null; return done(); }
+      var k = i++;
+      reqs[k].then(function (d) {
+        if (AUDIO !== my && !(AUDIO && AUDIO.__jv === my)) return;
         var rate = +((/rate=(\d+)/i.exec(d.mime || "") || [])[1] || 24000);
-        var a = new Audio(wavFromPcm(d.audio, rate)); AUDIO = a; TTS_FAIL = 0; window.__jvVoice = "natural";
+        var a = new Audio(wavFromPcm(d.audio, rate)); a.__jv = my; AUDIO = a; TTS_FAIL = 0; window.__jvVoice = "natural";
         try { if (!window.__jvAC) window.__jvAC = new (window.AudioContext || window.webkitAudioContext)(); var src = __jvAC.createMediaElementSource(a), an = __jvAC.createAnalyser(); an.fftSize = 256; src.connect(an); an.connect(__jvAC.destination); ANALYSER = an; if (__jvAC.state === "suspended") __jvAC.resume(); } catch (e) { ANALYSER = null; }
-        a.onended = function () { AUDIO = null; ANALYSER = null; done(); }; a.onerror = function () { AUDIO = null; browser(); };
+        a.onended = playNext; a.onerror = function () { AUDIO = null; browser(); };
         return a.play().catch(function () { AUDIO = null; browser(); });
-      }).catch(function () { TTS_FAIL++; if (AUDIO === my) { AUDIO = null; browser(); } });
+      }).catch(function () { TTS_FAIL++; if (k === 0) { AUDIO = null; browser(); } else { AUDIO = null; done(); } });
+    };
+    playNext();
   }
 
   // ---------------------------------------------------------------- alerts
@@ -484,10 +574,10 @@
   }
   function jobsGet() { try { return JSON.parse(localStorage.getItem("yqi_jvjobs") || "[]"); } catch (e) { return []; } }
   function jobAdd(text) { var L = jobsGet(); L.unshift({ at: Date.now(), text: text, seen: false }); try { localStorage.setItem("yqi_jvjobs", JSON.stringify(L.slice(0, 40))); } catch (e) { } renderOrb(); }
-  function jobsHtml() { var L = jobsGet(); if (!L.length) return ""; return '<div class="jvMsg sys" style="text-align:left">Jarvis ne ye kaam kiye</div>' + L.slice(0, 15).map(function (j) { return '<div class="jvCard jvAlert"><b>✓ ' + esc(new Date(j.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + "</b>" + esc(j.text) + "</div>"; }).join(""); }
+  function jobsHtml() { var L = jobsGet(); if (!L.length) return ""; return '<div class="jvMsg sys" style="text-align:left">' + AN + ' ne ye kaam kiye / dekha</div>' + L.slice(0, 15).map(function (j) { return '<div class="jvCard jvAlert"><b>✓ ' + esc(new Date(j.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + "</b>" + esc(j.text) + "</div>"; }).join(""); }
   function renderAlerts(body) {
     var J = jobsGet(); if (J.some(function (j) { return !j.seen; })) { J.forEach(function (j) { j.seen = true; }); try { localStorage.setItem("yqi_jvjobs", JSON.stringify(J)); } catch (e) { } renderOrb(); }
-    if (!ALERTS.length) { body.innerHTML = jobsHtml() + '<div class="jvMsg sys">Koi alert nahi — Jarvis roz OQL, overdue CAPA aur internal data ki kami check karta hai.</div>'; return; }
+    if (!ALERTS.length) { body.innerHTML = jobsHtml() + '<div class="jvMsg sys">Koi alert nahi — ' + AN + ' roz OQL, overdue CAPA aur internal data ki kami check karta hai.</div>'; return; }
     body.innerHTML = jobsHtml() + ALERTS.map(function (a) {
       return '<div class="jvCard jvAlert ' + esc(a.severity || "info") + '"><b>' + esc(a.title || "") + "</b>" + esc(a.detail || "") + "</div>";
     }).join("");
@@ -557,9 +647,11 @@
       '<input id="jvPitch" type="range" min="-10" max="10" step="1" value="' + (SETTINGS.pitch || 0) + '">' +
       '<div class="lbl">Speak answers out loud</div>' +
       '<label style="display:flex;align-items:center;gap:8px"><input id="jvAuto" type="checkbox"' + (SETTINGS.autoSpeak ? " checked" : "") + "> Auto-speak Jarvis replies</label>" +
-      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWake" type="checkbox"' + (wakeAllowed() ? " checked" : "") + '> "Jarvis" bolne se jaage (jab YQI khuli ho)</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWake" type="checkbox"' + (wakeAllowed() ? " checked" : "") + '> "' + AN + '" bolne se jaage (jab YQI khuli ho)</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvWatch" type="checkbox"' + (SETTINGS.watch !== false ? " checked" : "") + '> Fail / overdue khud batao (notification + awaaz)</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvBrief" type="checkbox"' + (SETTINGS.brief !== false ? " checked" : "") + '> Roz subah ki briefing (Alerts mein)</label>' +
       '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="jvNat" type="checkbox"' + (SETTINGS.natural !== false ? " checked" : "") + "> Natural voice (online, Urdu)</label>" +
-      '<div class="lbl">Jarvis ki awaaz</div><select id="jvGv">' + [["Charon", "Charon — mard, saaf"], ["Orus", "Orus — mard, gehri"], ["Puck", "Puck — mard, josh wali"], ["Fenrir", "Fenrir — mard, tez"], ["Kore", "Kore — aurat, saaf"], ["Aoede", "Aoede — aurat, naram"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.gvoice || "Charon") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
+      '<div class="lbl">' + AN + ' ki awaaz</div><select id="jvGv">' + [["Charon", "Charon — mard, saaf"], ["Orus", "Orus — mard, gehri"], ["Puck", "Puck — mard, josh wali"], ["Fenrir", "Fenrir — mard, tez"], ["Kore", "Kore — aurat, saaf"], ["Aoede", "Aoede — aurat, naram"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.gvoice || "Charon") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
       '<div class="lbl">Mic ki zabaan</div><select id="jvMl">' + [["ur-PK", "Urdu"], ["en-US", "English"], ["hi-IN", "Hindi"]].map(function (v) { return '<option value="' + v[0] + '"' + ((SETTINGS.micLang || "ur-PK") === v[0] ? " selected" : "") + ">" + v[1] + "</option>"; }).join("") + "</select>" +
       '<div class="jvMsg sys" style="margin-top:14px;text-align:left">Voices listed here are your device\'s own free built-in voices (no card, no cloud cost) - the set varies by phone/browser. Urdu/Hindi voices, where installed, read Roman Urdu text phonetically rather than natively.</div>';
 
@@ -568,8 +660,10 @@
     body.querySelector("#jvPitch").oninput = function (e) { SETTINGS.pitch = +e.target.value; saveSettings(); };
     body.querySelector("#jvAuto").onchange = function (e) { SETTINGS.autoSpeak = !!e.target.checked; saveSettings(); };
     body.querySelector("#jvWake").onchange = function (e) { SETTINGS.wake = !!e.target.checked; saveSettings(); if (SETTINGS.wake) setTimeout(wakeStart, 300); else wakeStop(); };
+    body.querySelector("#jvWatch").onchange = function (e) { SETTINGS.watch = !!e.target.checked; saveSettings(); };
+    body.querySelector("#jvBrief").onchange = function (e) { SETTINGS.brief = !!e.target.checked; saveSettings(); };
     body.querySelector("#jvNat").onchange = function (e) { SETTINGS.natural = !!e.target.checked; saveSettings(); };
-    body.querySelector("#jvGv").onchange = function (e) { SETTINGS.gvoice = e.target.value; saveSettings(); speak("Assalam-o-Alaikum, main Jarvis hoon. Ye meri nayi awaaz hai."); };
+    body.querySelector("#jvGv").onchange = function (e) { SETTINGS.gvoice = e.target.value; saveSettings(); speak("Assalam-o-Alaikum, main " + AN + " hoon. Ye meri nayi awaaz hai."); };
     body.querySelector("#jvMl").onchange = function (e) { SETTINGS.micLang = e.target.value; saveSettings(); };
     loadVoices();
   }
@@ -608,7 +702,6 @@
 
   // ---------------------------------------------------------------- "Hey Jarvis" wake word (browser only, while YQI is open)
   var WAKE = null, WAKE_WANT = false;
-  var WAKE_RE = /(jarvis|jarwis|jervis|jarvi|jaarvis|جاروس|جارویس|جاروِس|جاروز|جاروِز|جارس|جاروی)/i;
   var NWAKE = false, NWAKE_L = null;
   function wakeAllowed() { return SETTINGS.wake !== false && (SETTINGS.wake === true || window.YQLV === "auth") && (window.YQNATIVE ? !!window.YQNATIVE.wakeStart : !!(window.SpeechRecognition || window.webkitSpeechRecognition)); }
   function wakeStop() { WAKE_WANT = false; try { if (WAKE) WAKE.abort(); } catch (e) { } WAKE = null; if (NWAKE) { NWAKE = false; try { YQNATIVE.wakeStop(); } catch (e) { } } }
@@ -618,7 +711,7 @@
       try {
         if (!NWAKE_L) NWAKE_L = YQNATIVE.addListener("wake", function (d) { NWAKE = false; var said = String(d && d.said || "").trim(); openVoice({ wake: true, said: said.split(/\s+/).length >= 2 ? said : "" }); });
         NWAKE = true;
-        YQNATIVE.wakeStart({ lang: SETTINGS.micLang || "ur-PK" }).catch(function () { NWAKE = false; SETTINGS.wake = false; });
+        YQNATIVE.wakeStart({ lang: SETTINGS.micLang || "ur-PK", words: WAKE_NAMES[AN.toLowerCase()] || AN.toLowerCase() }).catch(function () { NWAKE = false; SETTINGS.wake = false; });
       } catch (e) { NWAKE = false; }
       return;
     }
@@ -628,7 +721,7 @@
       w.lang = SETTINGS.micLang || "ur-PK"; w.continuous = true; w.interimResults = true;
       w.onresult = function (e) {
         for (var i = e.resultIndex; i < e.results.length; i++) {
-          var t = e.results[i][0].transcript || "", m = WAKE_RE.exec(t);
+          var t = e.results[i][0].transcript || "", m = wakeRe().exec(t);
           if (!m) continue;
           if (!e.results[i].isFinal) continue;
           var rest = t.slice(m.index + m[0].length).replace(/^[\s,،.!?]+/, "").trim();
@@ -662,7 +755,7 @@
     if (VOPEN) return; VOPEN = true; loadSettings(); wakeStop();
     if (!$("jvVCss")) { var st = document.createElement("style"); st.id = "jvVCss"; st.textContent = VCSS; document.head.appendChild(st); }
     var v = document.createElement("div"); v.id = "jvVoice";
-    v.innerHTML = '<div class="vtop"><span>✦ JARVIS</span><span></span></div><canvas width="760" height="760"></canvas><div class="vst"></div><div class="vme"></div><div class="vai"></div><div class="vdo"></div>' +
+    v.innerHTML = '<div class="vtop"><span>✦ ' + AN.toUpperCase() + '</span><span></span></div><canvas width="760" height="760"></canvas><div class="vst"></div><div class="vme"></div><div class="vai"></div><div class="vdo"></div>' +
       '<div class="vbar"><button data-vchat title="Chat / likh kar">💬</button><button class="mic" data-vmic title="Boliye">🎤</button><button data-vx title="Band">✕</button></div>';
     document.body.appendChild(v);
     v.querySelector("[data-vx]").onclick = function () { closeVoice(); };
@@ -727,7 +820,7 @@
   (function wait() {
     if (ready()) {
       if (!staffOK()) return; // guests / customers don't get Jarvis
-      injectCss(); buildOrb(); watchAlerts(); refreshPending(); loadSettings(); setTimeout(wakeStart, 4000);
+      injectCss(); buildOrb(); watchAlerts(); refreshPending(); loadSettings(); setTimeout(wakeStart, 4000); setTimeout(watchData, 9000); setInterval(watchData, 5 * 60 * 1000); try { if (window.YQNATIVE && YQNATIVE.askNotify) YQNATIVE.askNotify(); else if (window.Notification && Notification.permission === "default") setTimeout(function () { Notification.requestPermission().catch(function () { }); }, 15000); } catch (e) { }
       return;
     }
     if (tries++ > 600) return; // ~60s, then give up quietly
