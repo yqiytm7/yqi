@@ -291,6 +291,7 @@
   }
   function runSteps(steps) {
     closePanel(); closeVoice(true);
+    if (LIVE) LIVE.tool = true;
     var i = 0, fail = ""; DONE = [];
     var next = function () {
       if (i >= steps.length) return Promise.resolve();
@@ -314,7 +315,9 @@
       HISTORY.push({ role: fail ? "sys" : "model", text: msg });
       jobAdd((fail ? "✗ " : "") + (what ? what + " → " : "") + msg);
       try { if (window.YQNATIVE && YQNATIVE.notify) YQNATIVE.notify({ title: AN, body: msg, tag: "jarvis" }); else if (window.Notification && Notification.permission === "granted" && document.hidden) new Notification(AN, { body: msg }); } catch (e) { }
+      if (LIVE) { LIVE.tool = false; return msg; }
       if (SETTINGS.autoSpeak) speak(msg);
+      return msg;
     });
   }
 
@@ -735,6 +738,126 @@
   }
   document.addEventListener("visibilitychange", function () { if (document.hidden) wakeStop(); else setTimeout(wakeStart, 800); });
 
+  // ---------------------------------------------------------------- real-time voice (Gemini Live): listens all the time, answers instantly, can be interrupted
+  var LIVE = null;
+  window.__altronLive = function (t) { if (LIVE && LIVE.ws && LIVE.ready) LIVE.ws.send(JSON.stringify({ realtimeInput: { text: t } })); return !!LIVE; };
+  var LIVE_MODEL = "models/gemini-3.1-flash-live-preview";
+  function liveOk() { return SETTINGS.live !== false && window.WebSocket && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext); }
+  function b64FromI16(i16) { var u8 = new Uint8Array(i16.buffer), s = "", CH = 0x8000; for (var i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH)); return btoa(s); }
+  var LIVE_TOOLS = [{ functionDeclarations: [
+    { name: "app_action", description: "Do things inside the YQI app for the user: open screens, tap buttons, type, make Excel files, full reports, send chat messages, remember facts, read the briefing. Call ONLY after the user has agreed.", parameters: { type: "OBJECT", properties: { steps_json: { type: "STRING", description: "JSON array of steps, e.g. [{\"t\":\"tap\",\"x\":\"CAPA tracker\"}]. Step types: tap{x}, type{x,v}, home, back, wait{ms}, excel{what:ext|int|capa,customer,from,to,result:all|fail|pass|open|closed,floor}, report{period:today|yesterday|week|month|last month,customer,from,to}, msg{to,text}, remember{text}, brief." }, summary: { type: "STRING", description: "one short line: what will be done" } }, required: ["steps_json"] } },
+    { name: "web_search", description: "Search the internet for current outside information (prices, rates, news, standards).", parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "short English search query" } }, required: ["query"] } },
+    { name: "screen_info", description: "List the buttons and fields visible on the app screen right now (use after opening a new screen).", parameters: { type: "OBJECT", properties: {} } }
+  ] }];
+  function livePrompt(ctx) {
+    return sysPrompt().replace(/INTERNET:[\s\S]*?(?=\n\nDOING THINGS IN THE APP)/, "").replace("then on the same message add [[DO: [steps]]] — a JSON array of steps:", "then STOP and wait. Only after the user agrees, call the app_action tool with steps_json = a JSON array of steps (never speak the steps or any JSON):").replace(/put ALL steps in one DO list/g, "put ALL steps in one app_action call").replace(/Write the marker literally[^.]*\.[^.]*\./, "").replace("For pure questions don't add DO.", "") + "\n\nLIVE MODE OVERRIDE: never write [[DO: ...]] or [[WEB: ...]] markers — the step list above is passed as steps_json to the app_action tool, and web lookups use the web_search tool." +
+      "\n\nYOU ARE SPEAKING LIVE (voice call). Speak natural Pakistani Urdu like a real person on a call — short, warm, quick. Never read lists or numbers like a robot; round and summarise. Answer only what was asked, then stop and listen. If the user interrupts, stop and listen." +
+      "\n\nTOOLS: To do anything in the app, first say in ONE short line what you will do and ask 'Karun?'; when the user agrees (haan/ji/kar do), call app_action with all steps at once, then tell the result in one line. For current outside facts call web_search. If you need to know what is on screen, call screen_info." +
+      "\n\n" + (ctx || "") + "\n\n" + screenCtx();
+  }
+  function liveStart(opt) {
+    var L = LIVE = { ready: false, muted: false, playing: false, tool: false, u: "", a: "", heard: false, srcs: [], next: 0, lvl: 0 };
+    renderVoice();
+    var fail = function (why) {
+      if (LIVE !== L) return; liveStop(); HISTORY.push({ role: "sys", text: "Live awaaz shuru nahi hui (" + why + ") — purane tareeqe se chal raha hoon." }); render();
+      if (!GREETED) greet(); else toggleMic();
+    };
+    Promise.all([
+      call("/live-token", {}),
+      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }),
+      buildCtx("").catch(function () { return ""; })
+    ]).then(function (r) {
+      if (LIVE !== L) { r[1].getTracks().forEach(function (t) { t.stop(); }); return; }
+      L.stream = r[1];
+      var AC = window.AudioContext || window.webkitAudioContext;
+      L.out = new AC({ sampleRate: 24000 }); L.an = L.out.createAnalyser(); L.an.fftSize = 256; L.an.connect(L.out.destination);
+      try { L.inp = new AC({ sampleRate: 16000 }); } catch (e) { L.inp = new AC(); }
+      var ws = L.ws = new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage." + (r[0].api || "v1beta") + ".GenerativeService.BidiGenerateContentConstrained?access_token=" + encodeURIComponent(r[0].token));
+      ws.onopen = function () {
+        ws.send(JSON.stringify({ setup: {
+          model: LIVE_MODEL,
+          generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: SETTINGS.gvoice || "Charon" } } } },
+          systemInstruction: { parts: [{ text: livePrompt(r[2]) }] },
+          tools: LIVE_TOOLS,
+          inputAudioTranscription: {}, outputAudioTranscription: {}
+        } }));
+      };
+      ws.onmessage = function (e) { (typeof e.data === "string" ? Promise.resolve(e.data) : e.data.text()).then(function (t) { liveMsg(L, JSON.parse(t), opt); }).catch(function () { }); };
+      ws.onclose = function (e) { if (LIVE === L) { if (!L.ready) fail("band: " + e.code); else { liveStop(); if (VOPEN) { HISTORY.push({ role: "sys", text: "Baat-cheet ka waqt khatam — mic dabakar dobara shuru karein." }); render(); } } } };
+      ws.onerror = function () { };
+      // microphone → 16 kHz PCM → Gemini
+      var src = L.inp.createMediaStreamSource(L.stream), proc = L.inp.createScriptProcessor(2048, 1, 1), ratio = L.inp.sampleRate / 16000;
+      src.connect(proc); proc.connect(L.inp.destination); L.proc = proc;
+      proc.onaudioprocess = function (ev) {
+        if (!L.ready || L.muted || !L.ws || L.ws.readyState !== 1) return;
+        var f = ev.inputBuffer.getChannelData(0), n = Math.floor(f.length / ratio), i16 = new Int16Array(n), pk = 0;
+        for (var i = 0; i < n; i++) { var x = f[Math.floor(i * ratio)]; if (x > 1) x = 1; else if (x < -1) x = -1; i16[i] = x < 0 ? x * 0x8000 : x * 0x7fff; var ax = x < 0 ? -x : x; if (ax > pk) pk = ax; }
+        L.lvl = L.lvl * 0.7 + pk * 0.3;
+        L.ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64FromI16(i16), mimeType: "audio/pcm;rate=16000" } } }));
+      };
+    }).catch(function (e) { fail(String(e && e.message || e).slice(0, 80)); });
+  }
+  function livePlay(L, b64) {
+    var bin = atob(b64), n = bin.length >> 1, buf = L.out.createBuffer(1, n, 24000), ch = buf.getChannelData(0), dv = new DataView(new ArrayBuffer(bin.length));
+    for (var i = 0; i < bin.length; i++) dv.setUint8(i, bin.charCodeAt(i));
+    for (var j = 0; j < n; j++) ch[j] = dv.getInt16(j * 2, true) / 32768;
+    var s = L.out.createBufferSource(); s.buffer = buf; s.connect(L.an);
+    var now = L.out.currentTime; if (L.next < now + 0.04) L.next = now + 0.04;
+    s.start(L.next); L.next += buf.duration; L.srcs.push(s); L.playing = true;
+    s.onended = function () { L.srcs = L.srcs.filter(function (x) { return x !== s; }); if (!L.srcs.length) { L.playing = false; renderVoice(); } };
+  }
+  function liveFlush(L) { L.srcs.forEach(function (s) { try { s.stop(); } catch (e) { } }); L.srcs = []; L.next = 0; L.playing = false; }
+  function liveMsg(L, m, opt) {
+    if (LIVE !== L) return;
+    if (m.setupComplete) {
+      L.ready = true; renderVoice(); if (L.out.state === "suspended") L.out.resume();
+      var fn = firstName(), hi;
+      if (opt && opt.said) { hi = opt.said; HISTORY.push({ role: "user", text: hi }); }
+      else if (opt && opt.wake) hi = "(Session started by the wake word. Reply with only: 'Ji" + (fn ? " " + fn + " bhai" : "") + "?')";
+      else hi = "(Session started. Greet with only: 'Assalam-o-Alaikum" + (fn ? " " + fn + " bhai" : "") + "! Bataiye, kya karna hai?')";
+      GREETED = true;
+      L.ws.send(JSON.stringify({ realtimeInput: { text: hi } }));
+      return;
+    }
+    var sc = m.serverContent;
+    if (sc) {
+      if (sc.interrupted) { liveFlush(L); }
+      if (sc.inputTranscription && sc.inputTranscription.text) { if (L.uDone) { L.u = ""; L.uDone = false; } L.u += sc.inputTranscription.text; L.heard = true; }
+      if (sc.outputTranscription && sc.outputTranscription.text) { if (L.aDone) { L.a = ""; L.aDone = false; } L.a += sc.outputTranscription.text; }
+      if (sc.modelTurn && sc.modelTurn.parts) sc.modelTurn.parts.forEach(function (p) { if (p.inlineData && /audio/.test(p.inlineData.mimeType || "")) livePlay(L, p.inlineData.data); });
+      if (sc.turnComplete || sc.generationComplete) {
+        if (L.u && !L.uDone) { HISTORY.push({ role: "user", text: L.u.trim() }); L.uDone = true; }
+        if (L.a && !L.aDone) { HISTORY.push({ role: "model", text: L.a.trim() }); L.aDone = true; }
+        L.heard = false;
+      }
+      renderVoice(); if (OPEN) render();
+    }
+    if (m.toolCall && m.toolCall.functionCalls) {
+      m.toolCall.functionCalls.forEach(function (fc) {
+        var reply = function (res) { if (LIVE === L && L.ws.readyState === 1) L.ws.send(JSON.stringify({ toolResponse: { functionResponses: [{ id: fc.id, name: fc.name, response: { result: String(res).slice(0, 6000) } }] } })); };
+        var a = fc.args || {};
+        if (fc.name === "screen_info") return reply(screenCtx());
+        if (fc.name === "web_search") { L.tool = true; renderVoice(); return call("/assistantChat", { text: a.query || "", webq: a.query || "", web: true, history: [], scope: { sessionId: SID }, ctx: "(none)", sys: "Answer from the web search results: 2-3 factual sentences in English with numbers and the source name." }).then(function (d) { L.tool = false; reply(d.text || "no result"); }).catch(function (e) { L.tool = false; reply("search failed: " + (e && e.message || e)); }); }
+        if (fc.name === "app_action") {
+          var steps = null; try { steps = JSON.parse(a.steps_json || "[]"); if (!Array.isArray(steps)) steps = [steps]; } catch (e) { return reply("steps_json was not valid JSON"); }
+          PLAN_TEXT = a.summary || ""; renderVoice();
+          return runSteps(steps).then(function (msg) { reply(msg || "done"); }).catch(function (e) { reply("failed: " + (e && e.message || e)); });
+        }
+        reply("unknown tool");
+      });
+    }
+    if (m.goAway) { /* server will close soon; nothing to do */ }
+  }
+  function liveStop() {
+    var L = LIVE; if (!L) return; LIVE = null;
+    try { if (L.proc) L.proc.disconnect(); } catch (e) { }
+    try { if (L.stream) L.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { }
+    try { if (L.ws) L.ws.close(); } catch (e) { }
+    try { liveFlush(L); } catch (e) { }
+    try { if (L.inp) L.inp.close(); } catch (e) { }
+    try { if (L.out) L.out.close(); } catch (e) { }
+  }
+
   // ---------------------------------------------------------------- full-screen voice mode
   var VOPEN = false, ANALYSER = null, VRAF = 0;
   function PENDING_DO_WAIT() { return false; }
@@ -749,6 +872,7 @@
     "#jvVoice .vbar button.mic{width:72px;height:72px;font-size:28px;background:#2f7d4a;border-color:#4fb06c}" +
     "#jvVoice .vbar button.mic.on{background:#c0392b;border-color:#e57364}" +
     "#jvVoice .vdo{margin-top:16px;display:flex;gap:10px}#jvVoice .vdo button{border:none;border-radius:22px;padding:10px 22px;font:700 14px Manrope;cursor:pointer}#jvVoice .vdo .ok{background:#4fb06c;color:#fff}#jvVoice .vdo .no{background:rgba(255,255,255,.12);color:#fff}" +
+    "#jvVoice.mini{inset:auto;right:14px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:120px;height:120px;border-radius:50%;padding:0;background:radial-gradient(circle,#13301f,#07120c);box-shadow:0 8px 30px rgba(0,0,0,.45)}#jvVoice.mini>*:not(canvas){display:none!important}#jvVoice.mini canvas{width:120px;height:120px;cursor:pointer}" +
     "#jvVoice .vtop{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;color:#8fb59a;font:700 13px Manrope;letter-spacing:.12em}";
   function openVoice(opt) {
     opt = opt || {};
@@ -760,14 +884,18 @@
     document.body.appendChild(v);
     v.querySelector("[data-vx]").onclick = function () { closeVoice(); };
     v.querySelector("[data-vchat]").onclick = function () { closeVoice(); openPanel(); };
-    v.querySelector("[data-vmic]").onclick = function () { if (SPEAKING) { stopSpeak(); } VOICE_MODE = true; toggleMic(); };
+    v.querySelector("[data-vmic]").onclick = function () { if (LIVE) { LIVE.muted = !LIVE.muted; renderVoice(); return; } if (SPEAKING) { stopSpeak(); } VOICE_MODE = true; toggleMic(); };
+    v.querySelector("canvas").onclick = function () { if (v.classList.contains("mini")) v.classList.remove("mini"); };
     VOICE_MODE = true;
     drawOrb(); renderVoice();
+    if (liveOk()) { liveStart(opt); return; }
     if (opt.said) { GREETED = true; sendText(true, opt.said); }
     else if (opt.wake) { GREETED = true; var fn = firstName(), t = "Ji" + (fn ? " " + fn + " bhai" : "") + "?"; HISTORY.push({ role: "model", text: t }); render(); speak(t); }
     else if (!GREETED) greet(); else if (!LISTENING && !SPEAKING && !BUSY) toggleMic();
   }
   function closeVoice(keepTalk) {
+    if (LIVE && keepTalk === true) { var vv = $("jvVoice"); if (vv) vv.classList.add("mini"); return; }
+    liveStop();
     if (!VOPEN) return; VOPEN = false; cancelAnimationFrame(VRAF);
     if (!keepTalk) { VOICE_MODE = false; stopSpeak(); try { if (RECOG && LISTENING) RECOG.stop(); } catch (e) { } }
     var v = $("jvVoice"); if (v) v.remove();
@@ -776,11 +904,13 @@
   function renderVoice() {
     var v = $("jvVoice"); if (!v) return;
     var st = BUSY ? "Soch raha hoon…" : SPEAKING ? "Bol raha hoon" : LISTENING ? "Sun raha hoon…" : "Mic dabakar boliye";
+    if (LIVE) st = !LIVE.ready ? "Jud raha hoon…" : LIVE.muted ? "Mic band hai — 🎤 dabayein" : LIVE.playing ? "Bol raha hoon" : LIVE.tool ? "Kaam kar raha hoon…" : LIVE.heard ? "Sun raha hoon…" : "Boliye, main sun raha hoon";
     v.querySelector(".vst").textContent = st;
     var lastU = null, lastA = null; for (var i = HISTORY.length - 1; i >= 0; i--) { var m = HISTORY[i]; if (!lastA && (m.role === "model" || m.role === "sys")) lastA = m; if (!lastU && m.role === "user") lastU = m; if (lastA && lastU) break; }
-    v.querySelector(".vme").textContent = lastU ? "“" + lastU.text + "”" : "";
-    v.querySelector(".vai").innerHTML = lastA ? esc(lastA.text).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>") : "";
-    var mic = v.querySelector("[data-vmic]"); if (mic) mic.classList.toggle("on", LISTENING);
+    var uT = LIVE && LIVE.u ? LIVE.u : lastU ? lastU.text : "", aT = LIVE && LIVE.a ? LIVE.a : lastA ? lastA.text : "";
+    v.querySelector(".vme").textContent = uT ? "“" + uT + "”" : "";
+    v.querySelector(".vai").innerHTML = aT ? esc(aT).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>") : "";
+    var mic = v.querySelector("[data-vmic]"); if (mic) { mic.classList.toggle("on", LIVE ? !LIVE.muted : LISTENING); mic.textContent = LIVE && LIVE.muted ? "🔇" : "🎤"; }
     var d = v.querySelector(".vdo");
     if (PENDING_DO) {
       d.innerHTML = '<button class="ok" data-vy>Haan, karo</button><button class="no" data-vn>Nahi</button>';
@@ -793,7 +923,9 @@
     var v = $("jvVoice"); if (!v) return; var c = v.querySelector("canvas"), g = c.getContext("2d"), W = c.width, H = c.height, t0 = performance.now(), buf = new Uint8Array(128), lvl = 0;
     var frame = function (now) {
       if (!VOPEN) return; var t = (now - t0) / 1000, amp = 0;
-      if (SPEAKING) { if (ANALYSER) { ANALYSER.getByteFrequencyData(buf); var sum = 0; for (var i = 2; i < 60; i++) sum += buf[i]; amp = Math.min(1, sum / (58 * 150)); } else amp = 0.35 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1)); }
+      if (LIVE && LIVE.playing && LIVE.an) { LIVE.an.getByteFrequencyData(buf); var s2 = 0; for (var i2 = 2; i2 < 60; i2++) s2 += buf[i2]; amp = Math.min(1, s2 / (58 * 140)); }
+      else if (LIVE) amp = LIVE.tool ? 0.14 : 0.06 + Math.min(0.35, (LIVE.lvl || 0) * 3) + 0.03 * Math.sin(t * 2);
+      else if (SPEAKING) { if (ANALYSER) { ANALYSER.getByteFrequencyData(buf); var sum = 0; for (var i = 2; i < 60; i++) sum += buf[i]; amp = Math.min(1, sum / (58 * 150)); } else amp = 0.35 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1)); }
       else if (LISTENING) amp = 0.18 + 0.12 * Math.sin(t * 4);
       else if (BUSY) amp = 0.12;
       else amp = 0.06 + 0.04 * Math.sin(t * 1.6);
