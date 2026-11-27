@@ -4670,6 +4670,7 @@ async function custWipe(kind){ var X = HCUST; if(!X) return; if(!(OWNER || ISED)
 window.YQJDATA = function(){ var g = function(c){ try{ return isRows(c) || []; }catch(e){ return []; } }, D = {ext: g("is_ext"), int: g("is_int"), wst: window.YQWST || null, capa: CAPA || []}; if(CAPA || !FS) return Promise.resolve(D); return Promise.race([capaLoad().then(function(L){ D.capa = L || []; return D; }), new Promise(function(r){ setTimeout(function(){ r(D); }, 2500); })]).catch(function(){ return D; }); };
 window.YQMENAME = function(){ try{ return frName(); }catch(e){ return ""; } };
 window.yqSaveBlob = saveBlob;
+window.yqScanCode = yqScanCode; window.yqLoadJs = loadJs;
 // ---------- Offline: what you save without internet stays on this phone and uploads by itself ----------
 var OBK = "yqi_outbox", OBRUN = 0;
 function obGet(){ try{ return JSON.parse(localStorage.getItem(OBK) || "[]") || []; }catch(e){ return []; } }
@@ -5107,7 +5108,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261127-144307", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261127-145856", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
