@@ -1,3 +1,4 @@
+// NOTE: deployed via the Cloudflare dashboard editor from this file (dist_bundle.js is the live source; src/ is older).
 // Bundled single-file version of the YQI Jarvis Cloudflare Worker.
 // Generated from cf-worker/src/*.js for pasting into the Cloudflare dashboard's
 // Quick Edit (which only runs a single module), so no wrangler/npm install is needed.
@@ -282,11 +283,11 @@ async function isOwnerOrEditor(token, projectId, email) {
 // account / card needed for the free tier).
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-async function generate({ apiKey, model, systemInstruction, contents, tools }) {
+async function generate(o) { if (o.web) { try { return await generate0(o); } catch (e) {} } return generate0(Object.assign({}, o, { web: false })); } async function generate0({ apiKey, model, systemInstruction, contents, tools, web }) {
   const body = {
     systemInstruction: systemInstruction ? { role: "system", parts: [{ text: systemInstruction }] } : undefined,
     contents,
-    tools: tools && tools.length ? [{ functionDeclarations: tools }] : undefined,
+    tools: web ? [{ googleSearch: {} }].concat(tools && tools.length ? [{ functionDeclarations: tools }] : []) : (tools && tools.length ? [{ functionDeclarations: tools }] : undefined), toolConfig: web && tools && tools.length ? { includeServerSideToolInvocations: true } : undefined,
     generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
   };
   const res = await fetch(`${API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
@@ -665,7 +666,7 @@ async function authEmail(request, env) {
   return email;
 }
 
-async function handleChat(request, env) {
+async function handleTts(request, env) { await authEmail(request, env); const b = await request.json(); const model = /^[a-z0-9.-]*tts[a-z0-9.-]*$/.test(String(b.model || "")) ? b.model : "gemini-3.1-flash-tts-preview"; const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: String(b.text || "").slice(0, 3000) }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: String(b.voice || "Charon") } } } } }) }); const d = await r.json().catch(() => ({})); const parts = (d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts) || []; const p = parts.find((x) => x.inlineData); if (!p) return json({ error: (d.error && d.error.message) || ("no audio " + r.status) }, 502); return json({ audio: p.inlineData.data, mime: p.inlineData.mimeType }); } async function handleChat(request, env) {
   const email = await authEmail(request, env);
   const fsToken = await getAccessToken(env.GOOGLE_SERVICE_ACCOUNT_JSON);
   const projectId = env.FIREBASE_PROJECT_ID;
@@ -673,7 +674,7 @@ async function handleChat(request, env) {
   try { staffOk = await roles.isStaffUser(fsToken, projectId, email); } catch (e) { staffOk = roles.isCoEmail(email) || email === roles.OWNER_EMAIL; }
   if (!staffOk) return json({ error: "Jarvis is available to Yunus Textile staff accounts only." }, 403);
 
-  const { text, history, scope, ctx } = await request.json();
+  const { text, history, scope, ctx, sys, web } = await request.json();
   if (!text || !String(text).trim()) return json({ error: "text is required." }, 400);
 
   let dataDown = false;
@@ -693,12 +694,12 @@ async function handleChat(request, env) {
   let finalText = "";
 
   for (let turn = 0; turn < 4; turn++) {
-    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.5-flash-lite", systemInstruction: SYSTEM_PROMPT, contents, tools: availableTools });
+    const raw = await gemini.generate({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.5-flash-lite", systemInstruction: (typeof sys === "string" && sys.length > 50 ? sys.slice(0, 40000) : SYSTEM_PROMPT), contents, tools: availableTools, web: !!web });
     const { text: modelText, calls } = gemini.parseResponse(raw);
     if (modelText) finalText = modelText;
     if (!calls.length) break;
 
-    contents.push({ role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) });
+    contents.push((raw && raw.candidates && raw.candidates[0] && raw.candidates[0].content && raw.candidates[0].content.parts) ? raw.candidates[0].content : { role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) });
     const functionResponses = [];
     for (const call of calls) {
       usedTools.push(call.name);
@@ -761,7 +762,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
     try {
       const url = new URL(request.url);
-      if (request.method === "POST" && url.pathname === "/assistantChat") return await handleChat(request, env);
+      if (request.method === "POST" && url.pathname === "/tts") return await handleTts(request, env); if (request.method === "POST" && url.pathname === "/assistantChat") return await handleChat(request, env);
       if (request.method === "POST" && url.pathname === "/assistantApprove") return await handleApprove(request, env);
       if (request.method === "POST" && url.pathname === "/assistantReject") return await handleReject(request, env);
       return json({ error: "Not found" }, 404);
