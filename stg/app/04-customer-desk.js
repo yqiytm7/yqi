@@ -228,13 +228,15 @@ function cdBlobFetch(wid, id){ var ref = FS.collection("ws").doc(wid); return re
   return Promise.all(ps).then(function(a){ return new Blob([b64ToBytes(a.map(function(x){ return x.exists ? x.data().d : ""; }).join(""))], {type: m.ct || "application/octet-stream"}); }); }); }
 function cdBlobUrl(wid, id){ var k = wid + "/" + id; return CDSPU[k] ? Promise.resolve(CDSPU[k]) : cdBlobFetch(wid, id).then(function(b){ return CDSPU[k] || (CDSPU[k] = URL.createObjectURL(b)); }); }
 function cdBlobDel(wid, id){ var ref = FS.collection("ws").doc(wid); return ref.collection("blob").doc(id).get().then(function(d){ var n = d.exists ? (d.data().n || 1) : 0, ps = []; for(var i = 0; i < n; i++) ps.push(ref.collection("blobc").doc(id + "_" + i).delete()); return Promise.all(ps).then(function(){ return ref.collection("blob").doc(id).delete(); }); }).catch(function(){}); }
+var XLRP = null;
+function xlrLoad(){ if(window.YQXL) return Promise.resolve(); if(!XLRP){ var sc = document.querySelector('script[src*="app.js"]'); XLRP = loadJs(sc ? sc.src.replace(/app\.js/, "xlr.js") : "xlr.js").catch(function(e){ XLRP = null; throw e; }); } return XLRP; }
 function cdFileOpen(wid, f){ var t = cdFtype(f), urlP = f.aid ? cdBlobUrl(wid, f.aid) : Promise.resolve(f.url);
   if(t[0] === "XLS"){ var o = yqSheet("Excel — " + (f.name || "spec"), '<div id="yqSpXl">Opening…</div>', 1);
     Promise.all([urlP, needXlsx()]).then(function(a){ return fetch(a[0]).then(function(r){ return r.arrayBuffer(); }).then(function(buf){ var X = a[1], wb = X.read(buf, {type: "array", cellDates: true}), names = wb.SheetNames;
       var show = function(n){ var ws = wb.Sheets[n], html = X.utils.sheet_to_html(ws, {editable: false}), m = /<table[\s\S]*<\/table>/i.exec(html);
         o.querySelector("#yqSpXl").innerHTML = (names.length > 1 ? '<div class="fl" style="margin-bottom:8px">' + names.map(function(nm){ return '<button class="cb np' + (nm === n ? " on" : "") + '" data-xlsheet="' + esc(nm) + '">' + esc(nm) + '</button>'; }).join("") + '</div>' : '') + '<div style="overflow:auto;max-height:65vh">' + (m ? m[0] : '<div class="em">Empty sheet</div>') + '</div>';
         o.querySelectorAll("[data-xlsheet]").forEach(function(b){ b.onclick = function(){ show(b.dataset.xlsheet); }; }); };
-      show(names[0]); }); }).catch(function(e){ var el = o.querySelector("#yqSpXl"); if(el) el.textContent = "Could not open: " + (e && e.message || e); });
+      xlrLoad().then(function(){ var el = o.querySelector("#yqSpXl"); el.innerHTML = ""; return window.YQXL.open(el, buf, X); }).catch(function(){ show(names[0]); }); }); }).catch(function(e){ var el = o.querySelector("#yqSpXl"); if(el) el.textContent = "Could not open: " + (e && e.message || e); });
     return; }
   urlP.then(function(u){ window.open(u, "_blank", "noopener"); }).catch(function(e){ yqAsk("Could not open this file: " + (e && e.message || e), {title: "Not available", alert: 1}); }); }
 function cdSpDel(wid, list, after){ list = (list || []).filter(Boolean); if(!list.length) return;
