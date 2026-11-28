@@ -1305,7 +1305,7 @@ function rqNavBind2(o, B, home){ B.querySelectorAll("[data-nv]").forEach(functio
 rqNavBind = function(o, B){ rqNavBind2(o, B, function(){ qiList(o); }); };
 
 // chat panel sits under the inspections sheet, so close the sheet first and then open chat
-function yqOpenChat(o, cid){ var x = o && o.querySelector(".ycpX"); if(x) x.click(); setTimeout(function(){ try{ if(window.YQCHAT) YQCHAT.openChat(cid); }catch(e){} }, 150); }
+function yqOpenChat(o, cid){ var p = document.getElementById("ycP"); if(p) p.style.zIndex = "2147483500"; try{ if(window.YQCHAT) YQCHAT.openChat(cid); }catch(e){} }
 // owner / authorised: preview the QC and SOMOS screens
 function canPreview(){ try{ return OWNER || ISED || LV === "auth"; }catch(e){ return false; } }
 function rolePv(o, role){ window.__yqRole = role || ""; if(!role) try{ delete window.__yqRole; }catch(e){ window.__yqRole = undefined; } qiList(o); }

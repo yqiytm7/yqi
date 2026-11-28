@@ -5164,7 +5164,7 @@ function rqNavBind2(o, B, home){ B.querySelectorAll("[data-nv]").forEach(functio
 rqNavBind = function(o, B){ rqNavBind2(o, B, function(){ qiList(o); }); };
 
 // chat panel sits under the inspections sheet, so close the sheet first and then open chat
-function yqOpenChat(o, cid){ var x = o && o.querySelector(".ycpX"); if(x) x.click(); setTimeout(function(){ try{ if(window.YQCHAT) YQCHAT.openChat(cid); }catch(e){} }, 150); }
+function yqOpenChat(o, cid){ var p = document.getElementById("ycP"); if(p) p.style.zIndex = "2147483500"; try{ if(window.YQCHAT) YQCHAT.openChat(cid); }catch(e){} }
 // owner / authorised: preview the QC and SOMOS screens
 function canPreview(){ try{ return OWNER || ISED || LV === "auth"; }catch(e){ return false; } }
 function rolePv(o, role){ window.__yqRole = role || ""; if(!role) try{ delete window.__yqRole; }catch(e){ window.__yqRole = undefined; } qiList(o); }
@@ -5799,7 +5799,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261128-095450", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261128-095649", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}
