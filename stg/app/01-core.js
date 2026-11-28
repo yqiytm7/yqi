@@ -354,7 +354,11 @@ var LEVELS = {m: {}, mg: [], cu: {}, rj: {}, cw: {}, du: {}, rl: {}, hx: {}}, LV
 function lvOf(e){ e = String(e || "").toLowerCase(); if(!e) return "guest"; if(e === OWNER_EMAIL) return "auth"; if(EDITORS.indexOf(e) >= 0) return "auth"; var v = LEVELS.m[e]; if(v) return v; if(LOCKS.indexOf(e) >= 0) return "qa"; if(isCoEmail(e)) return "qc"; return "guest"; }
 window.yqLvOf = function(e){ return lvOf(e); };
 // role titles on top of the access level (same rights as QA: whole app, no changes)
-var ROLEN = {am: "Assistant Manager", head: "Head"};
+var ROLEN = {am: "Assistant Manager", dm: "Deputy Manager", mgr: "Manager", srm: "Sr Manager", dgm: "DGM", gm: "GM", sgm: "SGM", head: "Head"};
+var RANK = {am: 1, dm: 2, mgr: 3, head: 3, srm: 4, dgm: 5, gm: 6, sgm: 7}, DESIG = ["guest", "qc", "qa", "am", "dm", "mgr", "srm", "dgm", "gm", "sgm", "auth"];
+function rankOf(e){ e = String(e || EMAIL).toLowerCase(); if(e === OWNER_EMAIL || lvOf(e) === "auth") return 9; return RANK[roleOf(e)] || 0; }
+function isMgrUp(e){ return rankOf(e) >= 3; }
+function isSrMgrUp(e){ return rankOf(e) >= 4; }
 function roleOf(e){ e = String(e || "").toLowerCase(); return (LEVELS.rl || {})[e] || ""; }
 function lvName(e){ e = String(e || EMAIL).toLowerCase(); if(e === OWNER_EMAIL) return "Owner · full access"; var r = roleOf(e), l = lvOf(e); return (r ? ROLEN[r] : LVN[l] || l) + (l === "auth" ? " · can change data" : l === "qa" ? " · view only" : ""); }
 // modules the owner switched off for one person (People & access → Custom)
@@ -741,7 +745,7 @@ function boot(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 setTimeout(function(){ try{ needXlsx().catch(function(){}); }catch(e){} }, 3000);
 // a newer YQI was published: every open screen checks version.json and shows an alert with a Refresh button
-(function(){ var V = "20261128-012631", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
+(function(){ var V = "20261128-085650", base = location.pathname.replace(/[^\/]*$/, ""), shown = "", snooze = 0; window.YQI_VER = V;
   try{ if(/[?&]nc=/.test(location.search)) history.replaceState(history.state, "", location.pathname + location.hash); }catch(e){}
   function refresh(nv){ var go = function(){ location.replace(base + "?nc=" + encodeURIComponent(nv || Date.now())); };
     var jobs = []; try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^yqi-page-/.test(k); }).map(function(k){ return caches.delete(k); })); })); }catch(e){}

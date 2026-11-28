@@ -200,7 +200,9 @@ function saveBlob(name, data){
 
 //@yqi-piece 0011
 // ---------- People & access (owner): approvals, levels, management, customers, inspection groups ----------
-var LVN = {guest: "Guest", qc: "QC", qa: "QA", am: "Assistant Manager", head: "Head", auth: "Authorised"};
+var LVN = {guest: "Guest", qc: "QC", qa: "QA", am: "Assistant Manager", dm: "Deputy Manager", mgr: "Manager", srm: "Sr Manager", dgm: "DGM", gm: "GM", sgm: "SGM", head: "Head", auth: "Authorised"};
+window.yqIsMgr = function(){ try{ return OWNER || ISED || isMgrUp(EMAIL); }catch(e){ return true; } };
+window.yqRank = function(){ try{ return rankOf(EMAIL); }catch(e){ return 0; } };
 //@yqi-piece 0028
 // ---------- link a computer: QR on the computer, phone approves (like WhatsApp Web) ----------
 var PUSHSRV = "https://yqi-push.yqi-ytm7.workers.dev";

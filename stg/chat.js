@@ -365,7 +365,7 @@ function chatsList(){
   var list = visibleChats(false).filter(function(c){ if(FILTER === "unread" && !unreadOf(c)) return false; if(FILTER === "groups" && c.type !== "group") return false;
     return !q || (chatTitle(c) + " " + (c.last && c.last.t || "")).toLowerCase().indexOf(q) >= 0; });
   h += list.map(chatRow).join("");
-  if(q){ var ppl = Object.keys(PEOPLE).filter(function(u){ var p = PEOPLE[u]; return u !== MY && (p.name + " @" + p.uname + " " + (p.dept || "")).toLowerCase().indexOf(q) >= 0; });
+  if(q){ var ppl = Object.keys(PEOPLE).filter(function(u){ var p = PEOPLE[u]; return u !== MY && (canBrowse() ? (p.name + " @" + p.uname + " " + (p.dept || "")).toLowerCase().indexOf(q) >= 0 : exactP(p, q)); });
     if(ppl.length) h += '<div class="ycSec">People</div>' + ppl.map(personRow).join("");
     var hits = q.length >= 2 ? msgSearch(q) : []; if(hits.length) h += '<div class="ycSec">Messages and files</div>' + hits.map(msgHitRow).join(""); }
   if(!list.length && !q) h += '<div class="ycEmpty">' + (FILTER === "all" ? '<b>Start chatting</b><span>Tap the green button to message a colleague, make a group or start a meeting.</span>' : '<span>Nothing here.</span>') + '</div>';
@@ -447,12 +447,15 @@ function callsList(){
   return h + (rows || '<div class="ycEmpty sm"><span>Your calls and meetings will show here.</span></div>');
 }
 
+// people search: managers and above find people by any part of a name; others must type the full @username or email
+function canBrowse(){ try{ return window.yqIsMgr ? !!window.yqIsMgr() : true; }catch(e){ return true; } }
+function exactP(p, q){ q = String(q || "").toLowerCase().trim().replace(/^@/, ""); return !!q && (String(p.uname || "").toLowerCase() === q || String(p.email || "").toLowerCase() === q); }
 // ---------- pickers ----------
 function pickView(w){ if(PARAM.mode === "chat") setTimeout(function(){ var l = w.querySelector(".ycScroll"); if(l && !l.querySelector(".ycCg")){ var d = document.createElement("div"); d.className = "ycCg"; d.innerHTML = custGroupsHtml(); l.appendChild(d); bind(d); } }, 0);
   var mode = PARAM.mode, sel = PARAM.sel || (PARAM.sel = {}), q = PARAM.q || "", multi = mode === "group" || mode === "meet" || mode === "add" || mode === "fwd" || mode === "meetsel";
   var title = {chat: "New chat", group: "New group", meet: "Meeting people", add: "Add members", call: "Call someone", fwd: "Forward to"}[mode] || "Select";
   var n = Object.keys(sel).length;
-  var h = bar(BACKB(), '<b>' + title + '</b>', multi ? n + " selected" : Object.keys(PEOPLE).filter(function(u){ return u !== MY; }).length + " people") + '<div class="ycSearch"><input id="ycPq" placeholder="Search name, @username, department" value="' + esc(q) + '"></div><div class="ycScroll" id="ycPick">';
+  var h = bar(BACKB(), '<b>' + title + '</b>', multi ? n + " selected" : Object.keys(PEOPLE).filter(function(u){ return u !== MY; }).length + " people") + '<div class="ycSearch"><input id="ycPq" placeholder="' + (canBrowse() ? "Search name, @username, department" : "Type the full @username or email") + '" value="' + esc(q) + '"></div><div class="ycScroll" id="ycPick">';
   h += pickRows();
   h += '</div>' + (multi ? '<div class="ycFoot"><button class="ycPb" data-c="pickdone"' + (n ? "" : " disabled") + '>' + ({group: "Next", meet: "Start meeting", add: "Add", fwd: "Send"}[mode]) + '</button></div>' : '');
   w.innerHTML = h; bind(w);
@@ -464,7 +467,8 @@ function pickRows(){
   if(mode === "fwd"){ var cs = visibleChats(false).filter(function(c){ return !q || chatTitle(c).toLowerCase().indexOf(q) >= 0; }); h += '<div class="ycSec">Recent chats</div>' + cs.map(function(c){ return '<button class="ycRow ycSel' + (sel["c:" + c.id] ? " on" : "") + '" data-c="psel" data-k="c:' + c.id + '">' + avC(c, 44) + '<div class="ycRm"><div class="ycR1"><b>' + esc(chatTitle(c)) + '</b></div></div><i class="ycCkb">' + (sel["c:" + c.id] ? "✓" : "") + '</i></button>'; }).join("") + '<div class="ycSec">People</div>'; }
   var ex = mode === "add" && OPEN && CHATS[OPEN] ? CHATS[OPEN].members || [] : [];
   var known = {}; if(custOf(MY)) Object.keys(CHATS).forEach(function(k){ (CHATS[k].members || []).forEach(function(x){ known[x] = 1; }); });
-  var ids = Object.keys(PEOPLE).filter(function(u){ return u !== MY && ex.indexOf(u) < 0 && (!custOf(MY) || known[u]); }).filter(function(u){ var p = PEOPLE[u]; return !q || (p.name + " @" + p.uname + " " + (p.dept || "") + " " + (p.email || "")).toLowerCase().indexOf(q) >= 0; })
+  var mine = {}; if(!canBrowse()) Object.keys(CHATS).forEach(function(k){ (CHATS[k].members || []).forEach(function(x){ mine[x] = 1; }); });
+  var ids = Object.keys(PEOPLE).filter(function(u){ return u !== MY && ex.indexOf(u) < 0 && (!custOf(MY) || known[u]); }).filter(function(u){ var p = PEOPLE[u]; if(!canBrowse()) return q ? exactP(p, q) : !!mine[u]; return !q || (p.name + " @" + p.uname + " " + (p.dept || "") + " " + (p.email || "")).toLowerCase().indexOf(q) >= 0; })
     .sort(function(a, b){ return (isOn(PEOPLE[b]) - isOn(PEOPLE[a])) || String(PEOPLE[a].name).localeCompare(PEOPLE[b].name); });
   h += ids.map(function(u){ var p = PEOPLE[u], k = "u:" + u; if(!multi) return '<button class="ycRow" data-c="' + (mode === "call" ? "pcall" : "dm") + '" data-u="' + u + '">' + avU(u, 44, true) + '<div class="ycRm"><div class="ycR1"><b>' + nmT(u, p.name) + '</b><time>' + (isOn(p) ? "<em>online</em>" : "") + '</time></div><div class="ycR2"><span>' + esc(p.about || "@" + p.uname + (p.dept ? " · " + p.dept : "")) + '</span>' + (mode === "call" ? '<i class="ycCk">' + IC.call + '</i>' : '') + '</div></div></button>';
     return '<button class="ycRow ycSel' + (sel[k] ? " on" : "") + '" data-c="psel" data-k="' + k + '">' + avU(u, 44, true) + '<div class="ycRm"><div class="ycR1"><b>' + nmT(u, p.name) + '</b></div><div class="ycR2"><span>@' + esc(p.uname) + (p.dept ? " · " + esc(p.dept) : "") + '</span></div></div><i class="ycCkb">' + (sel[k] ? "✓" : "") + '</i></button>'; }).join("");
